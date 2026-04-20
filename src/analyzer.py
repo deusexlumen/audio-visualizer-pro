@@ -77,10 +77,19 @@ class AudioAnalyzer:
             self._progress("Lade aus Cache...", 1, 1, progress_callback)
             data = np.load(cache_path, allow_pickle=True)
             loaded_data = {}
+            # Skalare Felder die aus 0-dim numpy Arrays zurueckkonvertiert werden muessen
+            scalar_fields = {'duration', 'sample_rate', 'fps', 'frame_count', 'tempo', 'key', 'mode'}
             for k in data.files:
                 val = data[k]
-                if isinstance(val, np.ndarray) and val.dtype.kind == 'U':
-                    loaded_data[k] = str(val.item())
+                if isinstance(val, np.ndarray):
+                    if val.dtype.kind == 'U':
+                        # Unicode-String
+                        loaded_data[k] = str(val.item())
+                    elif k in scalar_fields or val.size == 1:
+                        # Skalare Werte (None, float, int, bool) aus 0-dim Array extrahieren
+                        loaded_data[k] = val.item() if val.size > 0 else None
+                    else:
+                        loaded_data[k] = val
                 else:
                     loaded_data[k] = val
             return AudioFeatures(**loaded_data)

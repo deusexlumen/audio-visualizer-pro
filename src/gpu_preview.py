@@ -3,6 +3,9 @@ GPU-Live-Preview fuer schnelles Einzel-Frame-Rendering.
 
 Rendert ein einzelnes Frame mit dem GPU-Renderer und gibt es als
 PIL-Image zurueck fuer die Streamlit-Vorschau.
+
+NEU: Renderer und Visualizer werden gecacht, um Shader-Neukompilierung
+bei jedem Slider-Zug zu vermeiden.
 """
 
 import numpy as np
@@ -12,6 +15,54 @@ from .analyzer import AudioAnalyzer
 from .gpu_renderer import GPUPreviewRenderer
 from .gpu_visualizers import get_visualizer
 from .quote_overlay import QuoteOverlayConfig
+
+
+# === Modul-Level Cache fuer Preview-Renderer ===
+# Das verhindert, dass bei jedem Auto-Preview-Slider-Zug der komplette
+# GPU-Context + Shader neu aufgebaut werden.
+_PREVIEW_CACHE = {
+    "key": None,           # (visualizer_type, width, height, fps)
+    "renderer": None,      # GPUPreviewRenderer Instanz
+    "viz": None,           # Visualizer Instanz
+}
+
+
+def _get_cached_renderer(visualizer_type: str, width: int, height: int, fps: int):
+    """Holt oder erstellt einen gecachten Renderer + Visualizer."""
+    global _PREVIEW_CACHE
+
+    cache_key = (visualizer_type, width, height, fps)
+
+    # Cache invalidieren wenn sich Visualizer oder Aufloesung aendert
+    if _PREVIEW_CACHE["key"] != cache_key:
+        _release_preview_cache()
+        _PREVIEW_CACHE["key"] = cache_key
+
+    # Renderer erstellen falls noetig
+    if _PREVIEW_CACHE["renderer"] is None:
+        _PREVIEW_CACHE["renderer"] = GPUPreviewRenderer(width=width, height=height, fps=fps)
+
+    # Visualizer erstellen falls noetig
+    if _PREVIEW_CACHE["viz"] is None or _PREVIEW_CACHE["viz_type"] != visualizer_type:
+        viz_cls = get_visualizer(visualizer_type)
+        _PREVIEW_CACHE["viz"] = viz_cls(_PREVIEW_CACHE["renderer"].ctx, width, height)
+        _PREVIEW_CACHE["viz_type"] = visualizer_type
+
+    return _PREVIEW_CACHE["renderer"], _PREVIEW_CACHE["viz"]
+
+
+def _release_preview_cache():
+    """Gibt den gecachten Renderer ordentlich frei."""
+    global _PREVIEW_CACHE
+    if _PREVIEW_CACHE["renderer"] is not None:
+        try:
+            _PREVIEW_CACHE["renderer"].release()
+        except Exception:
+            pass
+        _PREVIEW_CACHE["renderer"] = None
+    _PREVIEW_CACHE["viz"] = None
+    _PREVIEW_CACHE["viz_type"] = None
+    _PREVIEW_CACHE["key"] = None
 
 
 def render_gpu_preview(
@@ -50,16 +101,14 @@ def render_gpu_preview(
         PIL.Image oder None bei Fehler
     """
     try:
-        # Audio analysieren
+        # Audio analysieren (gecached)
         analyzer = AudioAnalyzer()
         features = analyzer.analyze(audio_path, fps=fps)
 
-        # Renderer erstellen
-        renderer = GPUPreviewRenderer(width=width, height=height, fps=fps)
+        # Renderer und Visualizer aus Cache holen (NICHT jedes Mal neu erstellen)
+        renderer, viz = _get_cached_renderer(visualizer_type, width, height, fps)
 
-        # Visualizer erstellen
-        viz_cls = get_visualizer(visualizer_type)
-        viz = viz_cls(renderer.ctx, width, height)
+        # Parameter aktualisieren (billig, kein Neuerstellen noetig)
         if params:
             viz.set_params(params)
 
@@ -118,9 +167,6 @@ def render_gpu_preview(
         # Flip vertically (OpenGL hat Ursprung unten links)
         img_array = np.flipud(img_array)
         img = Image.fromarray(img_array, mode='RGB')
-
-        # Ressourcen freigeben
-        renderer.__del__()
 
         return img
 

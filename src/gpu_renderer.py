@@ -276,7 +276,8 @@ class GPUBatchRenderer:
         img = Image.open(image_path).convert('RGB')
         img = img.resize((self.width, self.height), Image.LANCZOS)
         
-        if blur > 0:
+        # Blur nur anwenden wenn wirklich > 0 (robuster gegen Float-Rauschen)
+        if blur > 0.01:
             img = img.filter(ImageFilter.GaussianBlur(radius=blur))
         
         data = np.array(img, dtype=np.uint8)
@@ -284,20 +285,25 @@ class GPUBatchRenderer:
         return texture
     
     def _build_ffmpeg_cmd(self, output_path: str, codec: str, quality: str):
-        """Baut den FFmpeg-Befehl basierend auf Codec und Qualitaet auf."""
+        """Baut den FFmpeg-Befehl basierend auf Codec und Qualitaet auf.
+        
+        NEU: 'high' und 'lossless' verwenden yuv444p (kein Chroma-Subsampling)
+        fuer scharfe Kanten und knallige Farben. 'medium'/'low' bleiben bei
+        yuv420p fuer bessere Kompatibilitaet.
+        """
         
         quality_profiles = {
-            "low": {"preset": "ultrafast", "crf": "28", "bitrate": "4M"},
-            "medium": {"preset": "fast", "crf": "23", "bitrate": "8M"},
-            "high": {"preset": "medium", "crf": "18", "bitrate": "16M"},
-            "lossless": {"preset": "veryslow", "crf": "0", "bitrate": "50M"},
+            "low": {"preset": "ultrafast", "crf": "28", "bitrate": "4M", "pix_fmt": "yuv420p"},
+            "medium": {"preset": "fast", "crf": "23", "bitrate": "8M", "pix_fmt": "yuv420p"},
+            "high": {"preset": "medium", "crf": "18", "bitrate": "16M", "pix_fmt": "yuv444p"},
+            "lossless": {"preset": "veryslow", "crf": "0", "bitrate": "50M", "pix_fmt": "yuv444p"},
         }
         
         q = quality_profiles.get(quality, quality_profiles["high"])
         
         if codec == "hevc" or codec == "h265":
             video_codec = "libx265"
-            pix_fmt = "yuv420p"
+            pix_fmt = q.get("pix_fmt", "yuv420p")
             extra_args = ["-tag:v", "hvc1"]
         elif codec == "prores":
             video_codec = "prores_ks"
@@ -305,7 +311,7 @@ class GPUBatchRenderer:
             extra_args = ["-profile:v", "3"]
         else:
             video_codec = "libx264"
-            pix_fmt = "yuv420p"
+            pix_fmt = q.get("pix_fmt", "yuv420p")
             extra_args = ["-movflags", "+faststart"]
         
         cmd = [
@@ -891,15 +897,36 @@ class GPUBatchRenderer:
                 f"Audio-Muxing fehlgeschlagen: {result.stderr}"
             )
 
-    def __del__(self):
-        """Gibt GPU-Ressourcen beim Zerstoeren der Instanz frei."""
+    def release(self):
+        """Gibt GPU-Ressourcen explizit frei."""
         try:
-            if hasattr(self, "fbo"):
+            if hasattr(self, "post_fbo") and self.post_fbo:
+                self.post_fbo.release()
+                self.post_fbo = None
+            if hasattr(self, "fbo") and self.fbo:
                 self.fbo.release()
-            if hasattr(self, "ctx"):
+                self.fbo = None
+            if hasattr(self, "quad_vao") and self.quad_vao:
+                self.quad_vao.release()
+                self.quad_vao = None
+            if hasattr(self, "quad_vbo") and self.quad_vbo:
+                self.quad_vbo.release()
+                self.quad_vbo = None
+            if hasattr(self, "bg_texture") and self.bg_texture:
+                self.bg_texture.release()
+                self.bg_texture = None
+            if hasattr(self, "text_renderer") and self.text_renderer:
+                self.text_renderer.release()
+                self.text_renderer = None
+            if hasattr(self, "ctx") and self.ctx:
                 self.ctx.release()
+                self.ctx = None
         except Exception:
             pass
+
+    def __del__(self):
+        """Gibt GPU-Ressourcen beim Zerstoeren der Instanz frei."""
+        self.release()
 
 
 class GPUPreviewRenderer(GPUBatchRenderer):

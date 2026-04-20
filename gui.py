@@ -591,53 +591,6 @@ def composite_with_background(frame: np.ndarray, bg_image, opacity: float = 0.3)
     return np.array(blended)
 
 
-def render_live_frame(audio_path: str, visualizer_type: str, params: dict,
-                      resolution: str = "480x270", fps: int = 30,
-                      background_image: str = None, background_blur: float = 0.0,
-                      background_vignette: float = 0.0, background_opacity: float = 0.3) -> np.ndarray:
-    """Rendert ein einzelnes Frame fuer die Live-Preview."""
-    try:
-        analyzer = AudioAnalyzer()
-        features = analyzer.analyze(audio_path, fps=fps)
-        
-        vclass = get_visualizer(visualizer_type)
-        
-        width, height = map(int, resolution.split('x'))
-        config = VisualConfig(
-            type=visualizer_type,
-            resolution=(width, height),
-            fps=fps,
-            colors={"primary": "#FF0055", "secondary": "#00CCFF", "background": "#0A0A0A"},
-            params=params
-        )
-        
-        visualizer = vclass(config, features)
-        visualizer.setup()
-        
-        # Render frame at 30% of audio where action is usually good
-        frame_idx = min(int(features.frame_count * 0.3), features.frame_count - 1)
-        frame = visualizer.render_frame(frame_idx)
-        
-        # Apply light post-processing
-        post = PostProcessor({
-            'contrast': 1.1,
-            'saturation': 1.2,
-            'bloom': 0.3,
-            'vignette': 0.2
-        })
-        frame = post.apply(frame)
-        
-        # Hintergrundbild kompositieren
-        if background_image and os.path.exists(background_image):
-            bg = prepare_background(background_image, width, height, background_blur, background_vignette)
-            frame = composite_with_background(frame, bg, background_opacity)
-        
-        return frame
-    except Exception as e:
-        st.error(f"Live-Preview Fehler: {e}")
-        return None
-
-
 def save_ai_config(ai_recommendation, resolution: str = "1920x1080", fps: int = 60):
     """Speichert eine AIRecommendation als temporäre JSON-Config."""
     config_obj = ai_recommendation.to_visual_config(
@@ -741,9 +694,16 @@ def save_render_config(audio_path: str, output_path: str, visualizer: str,
 
 
 def hex_to_rgb(hex_str):
-    """Konvertiert Hex-Farbe zu RGB-Tuple."""
-    hex_str = hex_str.lstrip('#')
-    return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+    """Konvertiert Hex-Farbe zu RGB-Tuple. Fallback auf Weiss bei Fehler."""
+    try:
+        hex_str = str(hex_str).lstrip('#')
+        if len(hex_str) == 3:
+            hex_str = ''.join([c * 2 for c in hex_str])
+        if len(hex_str) != 6:
+            return (255, 255, 255)
+        return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+    except Exception:
+        return (255, 255, 255)
 
 
 def apply_look(look_key, uploaded_file):
@@ -877,29 +837,45 @@ def main():
         if uploaded_file:
             st.audio(uploaded_file, format=f'audio/{uploaded_file.name.split(".")[-1]}')
 
-            temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=f'.{uploaded_file.name.split(".")[-1]}')
-            temp_audio.write(uploaded_file.getvalue())
-            temp_audio.close()
+            # Eindeutige ID fuer diese Datei
+            file_id = f"{uploaded_file.name}_{getattr(uploaded_file, 'size', 0)}"
+            temp_audio_key = f"temp_audio_{file_id}"
+            features_key = f"features_{file_id}"
 
-            analyzer = AudioAnalyzer()
+            # Temporaere Datei nur einmal erstellen und im Session-State cachen
+            if temp_audio_key not in st.session_state:
+                temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=f'.{uploaded_file.name.split(".")[-1]}')
+                temp_audio.write(uploaded_file.getvalue())
+                temp_audio.close()
+                st.session_state[temp_audio_key] = temp_audio.name
 
-            with st.status("⏳ Audio wird analysiert...", expanded=True) as status:
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+            temp_audio_path = st.session_state[temp_audio_key]
 
-                def update_progress(msg, step, total):
-                    pct = min(1.0, step / total)
-                    progress_bar.progress(pct, text=msg)
-                    status_text.text(f"Schritt {step} von {total}: {msg}")
+            # Features nur einmal analysieren und cachen
+            if features_key not in st.session_state:
+                analyzer = AudioAnalyzer()
 
-                features = analyzer.analyze(
-                    temp_audio.name,
-                    fps=30,
-                    progress_callback=update_progress
-                )
+                with st.status("⏳ Audio wird analysiert...", expanded=True) as status:
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
 
-                progress_bar.progress(1.0, text="Fertig!")
-                status.update(label="✅ Analyse abgeschlossen", state="complete", expanded=False)
+                    def update_progress(msg, step, total):
+                        pct = min(1.0, step / total)
+                        progress_bar.progress(pct, text=msg)
+                        status_text.text(f"Schritt {step} von {total}: {msg}")
+
+                    features = analyzer.analyze(
+                        temp_audio_path,
+                        fps=30,
+                        progress_callback=update_progress
+                    )
+
+                    progress_bar.progress(1.0, text="Fertig!")
+                    status.update(label="✅ Analyse abgeschlossen", state="complete", expanded=False)
+
+                st.session_state[features_key] = features
+            else:
+                features = st.session_state[features_key]
 
             if features:
                 st.markdown(f"""
@@ -911,7 +887,6 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
 
-                file_id = f"{uploaded_file.name}_{getattr(uploaded_file, 'size', 0)}"
                 auto_look_key = f"auto_look_{file_id}"
 
                 if auto_look_key not in st.session_state:
@@ -1035,10 +1010,11 @@ def main():
                     st.session_state[f"{prefix}_trigger_optimize"] = False
                     with st.spinner("🤖 KI analysiert Audio und optimiert ALLE Einstellungen..."):
                         try:
-                            temp_dir = tempfile.mkdtemp()
-                            audio_path = os.path.join(temp_dir, uploaded_file.name)
-                            with open(audio_path, 'wb') as f:
-                                f.write(uploaded_file.getvalue())
+                            # Gecachten Audio-Pfad verwenden
+                            audio_path = st.session_state.get(temp_audio_key)
+                            if not audio_path:
+                                st.error("Audio-Pfad nicht gefunden. Bitte Datei neu hochladen.")
+                                return
 
                             analyzer = AudioAnalyzer()
                             features_opt = analyzer.analyze(audio_path, fps=30)
@@ -1048,12 +1024,17 @@ def main():
                                 'tempo': features_opt.tempo,
                                 'mode': features_opt.mode,
                                 'rms_mean': float(features_opt.rms.mean()),
+                                'rms_std': float(features_opt.rms.std()),
                                 'onset_mean': float(features_opt.onset.mean()),
+                                'onset_std': float(features_opt.onset.std()),
                                 'spectral_mean': float(features_opt.spectral_centroid.mean()),
+                                'transient_mean': float(features_opt.transient.mean()) if hasattr(features_opt, 'transient') else 0.0,
+                                'voice_clarity_mean': float(features_opt.voice_clarity.mean()) if hasattr(features_opt, 'voice_clarity') else 0.0,
                             }
 
                             viz_cls = get_visualizer(gpu_viz)
                             fallback_params = {k: v[0] for k, v in viz_cls.PARAMS.items()}
+                            param_specs = viz_cls.PARAMS
 
                             current_params = {}
                             for k in fallback_params:
@@ -1069,7 +1050,8 @@ def main():
 
                             gemini = GeminiIntegration()
                             optimized = gemini.optimize_all_settings(
-                                gpu_viz, current_params, feature_summary, current_colors, user_prompt=user_prompt
+                                gpu_viz, current_params, feature_summary, current_colors,
+                                param_specs=param_specs, user_prompt=user_prompt
                             )
 
                             for key, value in optimized.get("params", {}).items():
@@ -1146,12 +1128,14 @@ def main():
                 if st.button("🔮 Key-Zitate extrahieren", key="extract_quotes_btn"):
                     with st.spinner("Gemini analysiert dein Audio..."):
                         try:
-                            temp_audio_q = tempfile.NamedTemporaryFile(delete=False, suffix=f'.{uploaded_file.name.split(".")[-1]}')
-                            temp_audio_q.write(uploaded_file.getvalue())
-                            temp_audio_q.close()
+                            # Gecachten Audio-Pfad verwenden
+                            audio_path = st.session_state.get(temp_audio_key)
+                            if not audio_path:
+                                st.error("Audio-Pfad nicht gefunden. Bitte Datei neu hochladen.")
+                                return
 
                             gemini = GeminiIntegration()
-                            quotes = gemini.extract_quotes(temp_audio_q.name, max_quotes=5)
+                            quotes = gemini.extract_quotes(audio_path, audio_duration=features.duration)
 
                             if features is not None:
                                 audio_duration = features.duration
@@ -1344,89 +1328,94 @@ def main():
                 last_hash = st.session_state.get("last_preview_hash", None)
                 if last_hash != preview_params_hash:
                     preview_needs_update = True
-                    st.session_state["last_preview_hash"] = preview_params_hash
 
             preview_container = st.empty()
 
             manual_preview = st.button("🔄 Preview aktualisieren", key="manual_preview_btn")
+            render_error = False
             if manual_preview or preview_needs_update:
                 with st.spinner("Rendere GPU-Frame...") if not preview_needs_update else st.empty():
                     try:
-                        temp_dir = tempfile.mkdtemp()
-                        audio_path = os.path.join(temp_dir, uploaded_file.name)
-                        with open(audio_path, 'wb') as f:
-                            f.write(uploaded_file.getvalue())
+                        # Gecachten Audio-Pfad verwenden
+                        audio_path = st.session_state.get(temp_audio_key)
+                        if not audio_path:
+                            st.error("Audio-Pfad nicht gefunden. Bitte Datei neu hochladen.")
+                            render_error = True
+                        else:
+                            pp_cfg = None
+                            if pp_contrast != 1.0 or pp_saturation != 1.0 or pp_brightness != 0.0 or pp_warmth != 0.0 or pp_grain > 0.0:
+                                pp_cfg = {
+                                    "contrast": pp_contrast,
+                                    "saturation": pp_saturation,
+                                    "brightness": pp_brightness,
+                                    "warmth": pp_warmth,
+                                    "film_grain": pp_grain,
+                                }
 
-                        pp_cfg = None
-                        if pp_contrast != 1.0 or pp_saturation != 1.0 or pp_brightness != 0.0 or pp_warmth != 0.0 or pp_grain > 0.0:
-                            pp_cfg = {
-                                "contrast": pp_contrast,
-                                "saturation": pp_saturation,
-                                "brightness": pp_brightness,
-                                "warmth": pp_warmth,
-                                "film_grain": pp_grain,
-                            }
+                            preview_quote_cfg = None
+                            preview_quotes = None
+                            qck_preview = f"quotes_{uploaded_file.name}_{getattr(uploaded_file, 'size', 0)}"
+                            edited_raw = st.session_state.get(f"render_quotes_{qck_preview}", [])
+                            if edited_raw:
+                                preview_quotes = [Quote(**q) for q in edited_raw]
+                                preview_quote_cfg = QuoteOverlayConfig(
+                                    enabled=True,
+                                    font_size=st.session_state.get(f"quote_font_size_{qck_preview}", 52),
+                                    font_color=hex_to_rgb(st.session_state.get(f"quote_font_color_{qck_preview}", "#FFFFFF")),
+                                    box_color=hex_to_rgb(st.session_state.get(f"quote_box_color_{qck_preview}", "#1a1a2e")) + (200,),
+                                    box_padding=st.session_state.get(f"quote_box_padding_{qck_preview}", 32),
+                                    box_radius=st.session_state.get(f"quote_box_radius_{qck_preview}", 16),
+                                    box_margin_bottom=st.session_state.get(f"quote_box_margin_{qck_preview}", 100),
+                                    max_width_ratio=st.session_state.get(f"quote_max_width_{qck_preview}", 0.75),
+                                    fade_duration=st.session_state.get(f"quote_fade_duration_{qck_preview}", 0.6),
+                                    line_spacing=st.session_state.get(f"quote_line_spacing_{qck_preview}", 1.35),
+                                    max_chars_per_line=st.session_state.get(f"quote_max_chars_{qck_preview}", 40),
+                                    position=st.session_state.get(f"quote_pos_{qck_preview}", "bottom"),
+                                    text_align=st.session_state.get(f"quote_align_{qck_preview}", "center"),
+                                    display_duration=st.session_state.get(f"quote_duration_{qck_preview}", 8.0),
+                                    auto_scale_font=st.session_state.get(f"quote_autoscale_{qck_preview}", True),
+                                    min_font_size=st.session_state.get(f"quote_min_font_{qck_preview}", 16),
+                                    max_font_size=st.session_state.get(f"quote_max_font_{qck_preview}", 72),
+                                    slide_animation=st.session_state.get(f"quote_slide_{qck_preview}", "none"),
+                                    slide_distance=st.session_state.get(f"quote_slide_dist_{qck_preview}", 100),
+                                    slide_out_animation=st.session_state.get(f"quote_slide_out_{qck_preview}", "none"),
+                                    slide_out_distance=st.session_state.get(f"quote_slide_out_dist_{qck_preview}", 100),
+                                    scale_in=st.session_state.get(f"quote_scale_in_{qck_preview}", False),
+                                    typewriter=st.session_state.get(f"quote_typewriter_{qck_preview}", False),
+                                    typewriter_speed=st.session_state.get(f"quote_tw_speed_{qck_preview}", 15.0),
+                                    typewriter_mode=st.session_state.get(f"quote_tw_mode_{qck_preview}", "char"),
+                                    glow_pulse=st.session_state.get(f"quote_glow_pulse_{qck_preview}", False),
+                                    glow_pulse_intensity=st.session_state.get(f"quote_glow_pulse_int_{qck_preview}", 0.5),
+                                )
 
-                        preview_quote_cfg = None
-                        preview_quotes = None
-                        qck_preview = f"quotes_{uploaded_file.name}_{getattr(uploaded_file, 'size', 0)}"
-                        edited_raw = st.session_state.get(f"render_quotes_{qck_preview}", [])
-                        if edited_raw:
-                            preview_quotes = [Quote(**q) for q in edited_raw]
-                            preview_quote_cfg = QuoteOverlayConfig(
-                                enabled=True,
-                                font_size=st.session_state.get(f"quote_font_size_{qck_preview}", 52),
-                                font_color=hex_to_rgb(st.session_state.get(f"quote_font_color_{qck_preview}", "#FFFFFF")),
-                                box_color=hex_to_rgb(st.session_state.get(f"quote_box_color_{qck_preview}", "#1a1a2e")) + (200,),
-                                box_padding=st.session_state.get(f"quote_box_padding_{qck_preview}", 32),
-                                box_radius=st.session_state.get(f"quote_box_radius_{qck_preview}", 16),
-                                box_margin_bottom=st.session_state.get(f"quote_box_margin_{qck_preview}", 100),
-                                max_width_ratio=st.session_state.get(f"quote_max_width_{qck_preview}", 0.75),
-                                fade_duration=st.session_state.get(f"quote_fade_duration_{qck_preview}", 0.6),
-                                line_spacing=st.session_state.get(f"quote_line_spacing_{qck_preview}", 1.35),
-                                max_chars_per_line=st.session_state.get(f"quote_max_chars_{qck_preview}", 40),
-                                position=st.session_state.get(f"quote_pos_{qck_preview}", "bottom"),
-                                text_align=st.session_state.get(f"quote_align_{qck_preview}", "center"),
-                                display_duration=st.session_state.get(f"quote_duration_{qck_preview}", 8.0),
-                                auto_scale_font=st.session_state.get(f"quote_autoscale_{qck_preview}", True),
-                                min_font_size=st.session_state.get(f"quote_min_font_{qck_preview}", 16),
-                                max_font_size=st.session_state.get(f"quote_max_font_{qck_preview}", 72),
-                                slide_animation=st.session_state.get(f"quote_slide_{qck_preview}", "none"),
-                                slide_distance=st.session_state.get(f"quote_slide_dist_{qck_preview}", 100),
-                                slide_out_animation=st.session_state.get(f"quote_slide_out_{qck_preview}", "none"),
-                                slide_out_distance=st.session_state.get(f"quote_slide_out_dist_{qck_preview}", 100),
-                                scale_in=st.session_state.get(f"quote_scale_in_{qck_preview}", False),
-                                typewriter=st.session_state.get(f"quote_typewriter_{qck_preview}", False),
-                                typewriter_speed=st.session_state.get(f"quote_tw_speed_{qck_preview}", 15.0),
-                                typewriter_mode=st.session_state.get(f"quote_tw_mode_{qck_preview}", "char"),
-                                glow_pulse=st.session_state.get(f"quote_glow_pulse_{qck_preview}", False),
-                                glow_pulse_intensity=st.session_state.get(f"quote_glow_pulse_int_{qck_preview}", 0.5),
+                            preview_img = render_gpu_preview(
+                                audio_path=audio_path,
+                                visualizer_type=gpu_viz,
+                                params=gpu_params,
+                                width=480,
+                                height=270,
+                                background_image=bg_image_path,
+                                background_blur=bg_blur,
+                                background_vignette=bg_vignette,
+                                background_opacity=bg_opacity,
+                                postprocess=pp_cfg,
+                                quotes=preview_quotes,
+                                quote_config=preview_quote_cfg,
                             )
 
-                        preview_img = render_gpu_preview(
-                            audio_path=audio_path,
-                            visualizer_type=gpu_viz,
-                            params=gpu_params,
-                            width=480,
-                            height=270,
-                            background_image=bg_image_path,
-                            background_blur=bg_blur,
-                            background_vignette=bg_vignette,
-                            background_opacity=bg_opacity,
-                            postprocess=pp_cfg,
-                            quotes=preview_quotes,
-                            quote_config=preview_quote_cfg,
-                        )
-
-                        if preview_img is not None:
-                            st.session_state["last_preview_img"] = preview_img
-                            preview_container.image(preview_img, caption=f"👁️ Live-Preview: {gpu_viz}", use_container_width=True)
-                        else:
-                            preview_container.error("GPU-Preview konnte nicht gerendert werden.")
+                            if preview_img is not None:
+                                # Hash erst nach erfolgreichem Render speichern
+                                st.session_state["last_preview_hash"] = preview_params_hash
+                                st.session_state["last_preview_img"] = preview_img
+                                preview_container.image(preview_img, caption=f"👁️ Live-Preview: {gpu_viz}", use_container_width=True)
+                            else:
+                                render_error = True
+                                preview_container.error("GPU-Preview konnte nicht gerendert werden.")
                     except Exception as e:
+                        render_error = True
                         preview_container.error(f"GPU-Live-Preview Fehler: {e}")
 
-            if not preview_needs_update and "last_preview_img" in st.session_state:
+            if not render_error and not preview_needs_update and "last_preview_img" in st.session_state:
                 preview_container.image(st.session_state["last_preview_img"], caption=f"👁️ Live-Preview: {gpu_viz}", use_container_width=True)
 
             if preview_clicked or render_clicked:
@@ -1434,11 +1423,13 @@ def main():
                 status_text = st.empty()
 
                 try:
-                    temp_dir = tempfile.mkdtemp()
-                    audio_path = os.path.join(temp_dir, uploaded_file.name)
-                    with open(audio_path, 'wb') as f:
-                        f.write(uploaded_file.getvalue())
+                    # Gecachten Audio-Pfad verwenden
+                    audio_path = st.session_state.get(temp_audio_key)
+                    if not audio_path:
+                        st.error("Audio-Pfad nicht gefunden. Bitte Datei neu hochladen.")
+                        return
 
+                    temp_dir = tempfile.mkdtemp()
                     output_filename = f"visualization_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
                     output_path = os.path.join(temp_dir, output_filename)
 
