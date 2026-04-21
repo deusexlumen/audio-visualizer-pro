@@ -1538,7 +1538,10 @@ def main():
                             mime="video/mp4",
                         )
 
-                        shutil.rmtree(temp_dir, ignore_errors=True)
+                        # Temporaere Dateien nicht sofort loeschen — Streamlit
+                        # serviert Videos asynchron und braucht die Datei
+                        # noch fuer den Browser. Windows raeumt sowieso auf.
+                        # shutil.rmtree(temp_dir, ignore_errors=True)
                     else:
                         st.error("Rendering fehlgeschlagen: Output-Datei nicht gefunden.")
 
