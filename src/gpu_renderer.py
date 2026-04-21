@@ -190,33 +190,27 @@ class GPUBatchRenderer:
             if quotes and quote_config and quote_config.enabled:
                 self._init_text_renderer()
 
-            # Haupt-Render-Loop
+            # Haupt-Render-Loop — IDENTISCH zur Preview (direktes Rendering)
+            # Kein Composite-Shader, keine separaten FBOs.
+            # Das eliminiert ALLE Unterschiede zwischen Preview und Final Render.
             for i in range(frame_count):
                 time = i / self.fps
                 
-                # --- PASS 1: Visualizer in temporaeres FBO rendern (mit Alpha) ---
-                self.viz_fbo.use()
-                self.ctx.clear(0.0, 0.0, 0.0, 0.0)
-                viz.render(features_dict, time)
-                
-                # --- PASS 2: Hintergrundbild vorbereiten ---
-                if bg_texture is not None:
-                    self.bg_fbo.use()
-                    self.ctx.clear(0.05, 0.05, 0.05)
-                    self._render_background(bg_texture, background_opacity, background_vignette)
-                    bg_tex = self.bg_fbo.color_attachments[0]
-                else:
-                    bg_tex = None
-                
-                # --- PASS 3: Alles in finalen FBO compositen ---
+                # --- Einzel-Pass: Direkt in finalen FBO rendern ---
                 self.fbo.use()
                 self.ctx.clear(0.05, 0.05, 0.05)
-                self._composite_viz_over_bg(bg_tex, self.viz_fbo.color_attachments[0])
-
+                
+                # Hintergrundbild (falls vorhanden)
+                if bg_texture is not None:
+                    self._render_background(bg_texture, background_opacity, background_vignette)
+                
+                # Visualizer direkt drueber rendern (genau wie Preview)
+                viz.render(features_dict, time)
+                
                 # Quote-Overlays auf GPU rendern
                 if quotes and quote_config and quote_config.enabled:
                     self._render_quotes_gpu(time, quotes, quote_config)
-
+                
                 # Post-Process (Color-Grading) anwenden falls konfiguriert
                 if postprocess:
                     self._apply_postprocess(
