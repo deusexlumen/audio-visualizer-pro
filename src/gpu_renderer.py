@@ -225,6 +225,18 @@ class GPUBatchRenderer:
                     pixels = self.post_fbo.read(components=3)
                 else:
                     pixels = self.fbo.read(components=3)
+                
+                # DEBUG: Speichere Frame 0 als PNG fuer Diagnose
+                if i == 0:
+                    try:
+                        from PIL import Image
+                        img_array = np.frombuffer(pixels, dtype=np.uint8).reshape((self.height, self.width, 3))
+                        img_array = np.flipud(img_array)  # OpenGL Origin unten links
+                        Image.fromarray(img_array, mode='RGB').save("debug_frame_0.png")
+                        print(f"[GPU] DEBUG: Frame 0 gespeichert als debug_frame_0.png")
+                    except Exception as e:
+                        print(f"[GPU] DEBUG: Konnte Frame 0 nicht speichern: {e}")
+                
                 process.stdin.write(pixels)
 
                 if i % 100 == 0 or i == frame_count - 1:
