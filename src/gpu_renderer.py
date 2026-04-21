@@ -475,10 +475,12 @@ class GPUBatchRenderer:
             void main() {
                 vec3 bg = texture(u_bg_texture, v_uv).rgb;
                 vec4 viz = texture(u_viz_texture, v_uv);
-                // Visualizer-Alpha direkt verwenden (kein Luma-Masking!)
-                // Luma-Masking hat dunkle Visualizer-Bereiche transparent gemacht,
-                // was dazu fuehrte dass der Hintergrund durchschimmerte.
+                // Visualizer-Alpha verwenden, mit Fallback fuer Shader die
+                // keinen Alpha ausgeben (viz.a bleibt 0, aber Farbe ist sichtbar)
                 float viz_alpha = viz.a;
+                if (viz_alpha < 0.01 && length(viz.rgb) > 0.01) {
+                    viz_alpha = 1.0;
+                }
                 vec3 col = mix(bg, viz.rgb, viz_alpha);
                 f_color = vec4(col, 1.0);
             }
