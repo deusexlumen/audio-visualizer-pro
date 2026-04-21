@@ -1,5 +1,19 @@
 # Session Notes – Audio Visualizer Pro
 
+## 2026-04-21 – Zwei Bugs gefixt (GUI Slide-In + AudioFeatures Cache)
+
+**Bug 1: `ValueError: 'slide_up' is not in list` in `gui.py`**
+- Ursache: Im Streamlit-Session-State war noch der alte Wert `"slide_up"` gespeichert, aber die Optionsliste der Selectbox wurde auf `["none", "up", "down", "left", "right"]` geaendert. `.index()` crashte.
+- Fix: Vor `.index()` wird geprueft, ob der Session-State-Wert in der Optionsliste existiert. Falls nicht, Fallback auf `"none"`.
+- Betroffene Zeilen: `quote_slide` und `quote_slide_out` Selectboxen.
+
+**Bug 2: `[GPU Preview] Fehler: 1 validation error for AudioFeatures key Input should be a valid string`**
+- Ursache: Obwohl der Cache-Lade-Fix vom 2026-04-25 bereits im Code war, gab es einen Edge-Case: Object-Arrays im NPZ-Cache konnten verschachtelt sein, sodass `.item()` selbst ein `np.ndarray` zurueckgab statt `None`. Pydantic bekam dann ein ndarray statt eines Strings.
+- Fix in `src/analyzer.py`: Explizite Prüfung `isinstance(item, np.ndarray)` im Cache-Lade-Code. Falls ein ndarray zurueckkommt, wird es auf `None` gesetzt.
+- Status: ✅ Beide Fixes applied.
+
+---
+
 ## 2026-04-25 – Audio-Analyse Caching Bug gefixt
 
 **Problem:**

@@ -907,7 +907,7 @@ def main():
 
         st.markdown("### ✨ Look wählen")
 
-        if st.button("🤖 Auto", key="look_auto", use_container_width=True, help="Wählt den passenden Look basierend auf deinem Audio"):
+        if st.button("🤖 Auto", key="look_auto", width='stretch', help="Wählt den passenden Look basierend auf deinem Audio"):
             if features:
                 if features.mode == 'speech':
                     recommended_look = "podcast_clean"
@@ -933,7 +933,7 @@ def main():
                     f"{look['name']}\n{look['description']}",
                     key=f"look_btn_{look_key}",
                     type=btn_type,
-                    use_container_width=True
+                    width='stretch'
                 ):
                     apply_look(look_key, uploaded_file)
                     st.rerun()
@@ -1180,9 +1180,17 @@ def main():
                     quote_auto_scale = st.checkbox("Auto-Skalierung", value=st.session_state.get(f"quote_autoscale_{quotes_cache_key}", True), key=f"quote_autoscale_{quotes_cache_key}")
                     quote_scale_in = st.checkbox("Scale-In", value=st.session_state.get(f"quote_scale_in_{quotes_cache_key}", False), key=f"quote_scale_in_{quotes_cache_key}")
                 with anim_col2:
-                    quote_slide = st.selectbox("Slide-In", ["none", "up", "down", "left", "right"], index=["none", "up", "down", "left", "right"].index(st.session_state.get(f"quote_slide_{quotes_cache_key}", "none")), key=f"quote_slide_{quotes_cache_key}")
+                    slide_options = ["none", "up", "down", "left", "right"]
+                    slide_val = st.session_state.get(f"quote_slide_{quotes_cache_key}", "none")
+                    if slide_val not in slide_options:
+                        slide_val = "none"
+                    quote_slide = st.selectbox("Slide-In", slide_options, index=slide_options.index(slide_val), key=f"quote_slide_{quotes_cache_key}")
                     quote_slide_dist = st.slider("Slide-In Distanz (px)", 0, 300, st.session_state.get(f"quote_slide_dist_{quotes_cache_key}", 100), key=f"quote_slide_dist_{quotes_cache_key}")
-                    quote_slide_out = st.selectbox("Slide-Out", ["none", "up", "down", "left", "right"], index=["none", "up", "down", "left", "right"].index(st.session_state.get(f"quote_slide_out_{quotes_cache_key}", "none")), key=f"quote_slide_out_{quotes_cache_key}")
+                    slide_out_options = ["none", "up", "down", "left", "right"]
+                    slide_out_val = st.session_state.get(f"quote_slide_out_{quotes_cache_key}", "none")
+                    if slide_out_val not in slide_out_options:
+                        slide_out_val = "none"
+                    quote_slide_out = st.selectbox("Slide-Out", slide_out_options, index=slide_out_options.index(slide_out_val), key=f"quote_slide_out_{quotes_cache_key}")
                     quote_slide_out_dist = st.slider("Slide-Out Distanz (px)", 0, 300, st.session_state.get(f"quote_slide_out_dist_{quotes_cache_key}", 100), key=f"quote_slide_out_dist_{quotes_cache_key}")
                     quote_glow_pulse = st.checkbox("Glow-Pulse", value=st.session_state.get(f"quote_glow_pulse_{quotes_cache_key}", False), key=f"quote_glow_pulse_{quotes_cache_key}")
                     quote_glow_pulse_int = st.slider("Pulse-Stärke", 0.0, 1.0, st.session_state.get(f"quote_glow_pulse_int_{quotes_cache_key}", 0.5), key=f"quote_glow_pulse_int_{quotes_cache_key}")
@@ -1267,7 +1275,7 @@ def main():
                     bg_temp.write(uploaded_bg.getvalue())
                     bg_temp.close()
                     bg_image_path = bg_temp.name
-                    st.image(bg_image_path, caption="Hintergrundbild-Vorschau", use_container_width=True)
+                    st.image(bg_image_path, caption="Hintergrundbild-Vorschau", width='stretch')
 
                 bg_blur = st.slider("🔮 Blur (Weichzeichnung)", 0.0, 20.0,
                                     st.session_state.get("bg_blur", 0.0), 0.5,
@@ -1287,9 +1295,9 @@ def main():
         if uploaded_file and gpu_viz:
             export_col1, export_col2 = st.columns(2)
             with export_col1:
-                preview_clicked = st.button("📹 Schnell-Vorschau (5s)", key="btn_preview", use_container_width=True)
+                preview_clicked = st.button("📹 Schnell-Vorschau (5s)", key="btn_preview", width='stretch')
             with export_col2:
-                render_clicked = st.button("🎬 Video exportieren", key="btn_render", type="primary", use_container_width=True)
+                render_clicked = st.button("🎬 Video exportieren", key="btn_render", type="primary", width='stretch')
 
             with st.expander("🔧 Technische Einstellungen", expanded=False):
                 tech_col1, tech_col2, tech_col3 = st.columns(3)
@@ -1407,7 +1415,7 @@ def main():
                                 # Hash erst nach erfolgreichem Render speichern
                                 st.session_state["last_preview_hash"] = preview_params_hash
                                 st.session_state["last_preview_img"] = preview_img
-                                preview_container.image(preview_img, caption=f"👁️ Live-Preview: {gpu_viz}", use_container_width=True)
+                                preview_container.image(preview_img, caption=f"👁️ Live-Preview: {gpu_viz}", width='stretch')
                             else:
                                 render_error = True
                                 preview_container.error("GPU-Preview konnte nicht gerendert werden.")
@@ -1416,7 +1424,7 @@ def main():
                         preview_container.error(f"GPU-Live-Preview Fehler: {e}")
 
             if not render_error and not preview_needs_update and "last_preview_img" in st.session_state:
-                preview_container.image(st.session_state["last_preview_img"], caption=f"👁️ Live-Preview: {gpu_viz}", use_container_width=True)
+                preview_container.image(st.session_state["last_preview_img"], caption=f"👁️ Live-Preview: {gpu_viz}", width='stretch')
 
             if preview_clicked or render_clicked:
                 progress_bar = st.progress(0)

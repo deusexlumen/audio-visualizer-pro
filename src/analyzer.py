@@ -87,7 +87,15 @@ class AudioAnalyzer:
                         loaded_data[k] = str(val.item())
                     elif k in scalar_fields or val.size == 1:
                         # Skalare Werte (None, float, int, bool) aus 0-dim Array extrahieren
-                        loaded_data[k] = val.item() if val.size > 0 else None
+                        if val.size == 0:
+                            loaded_data[k] = None
+                        else:
+                            item = val.item()
+                            # Edge-Case: Object-Arrays koennen verschachtelt sein
+                            if isinstance(item, np.ndarray):
+                                loaded_data[k] = None
+                            else:
+                                loaded_data[k] = item
                     else:
                         loaded_data[k] = val
                 else:
