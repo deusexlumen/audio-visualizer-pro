@@ -852,7 +852,11 @@ def main():
             temp_audio_path = st.session_state[temp_audio_key]
 
             # Features nur einmal analysieren und cachen
-            if features_key not in st.session_state:
+            # WICHTIG: Lock-Mechanismus verhindert parallele Analyse bei Streamlit-Reruns
+            features_lock_key = f"{features_key}_analyzing"
+            
+            if features_key not in st.session_state and features_lock_key not in st.session_state:
+                st.session_state[features_lock_key] = True  # Lock setzen
                 analyzer = AudioAnalyzer()
 
                 with st.status("⏳ Audio wird analysiert...", expanded=True) as status:
@@ -874,8 +878,13 @@ def main():
                     status.update(label="✅ Analyse abgeschlossen", state="complete", expanded=False)
 
                 st.session_state[features_key] = features
-            else:
+                del st.session_state[features_lock_key]  # Lock freigeben
+            elif features_key in st.session_state:
                 features = st.session_state[features_key]
+            else:
+                # Analyse laeuft gerade in einem anderen Thread/Rerun
+                st.info("⏳ Analyse läuft bereits...")
+                features = None
 
             if features:
                 st.markdown(f"""
@@ -1016,8 +1025,12 @@ def main():
                                 st.error("Audio-Pfad nicht gefunden. Bitte Datei neu hochladen.")
                                 return
 
-                            analyzer = AudioAnalyzer()
-                            features_opt = analyzer.analyze(audio_path, fps=30)
+                            # Verwende gecachte Features falls verfuegbar, sonst neu analysieren
+                            if features_key in st.session_state and st.session_state[features_key] is not None:
+                                features_opt = st.session_state[features_key]
+                            else:
+                                analyzer = AudioAnalyzer()
+                                features_opt = analyzer.analyze(audio_path, fps=30)
 
                             feature_summary = {
                                 'duration': features_opt.duration,

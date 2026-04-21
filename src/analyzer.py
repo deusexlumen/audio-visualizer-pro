@@ -51,9 +51,20 @@ class AudioAnalyzer:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
     def _get_cache_path(self, audio_path: str, fps: int) -> Path:
-        file_stat = Path(audio_path).stat()
+        """Cache-Key basiert auf Datei-Inhalt (MD5) + fps — nicht auf mtime."""
+        path = Path(audio_path)
+        file_stat = path.stat()
         hasher = hashlib.md5()
-        hasher.update(f"{file_stat.st_size}_{file_stat.st_mtime}_{fps}_v2".encode())
+        hasher.update(str(file_stat.st_size).encode())
+        try:
+            with open(path, 'rb') as f:
+                hasher.update(f.read(1024 * 1024))  # Erste 1MB
+                if file_stat.st_size > 2 * 1024 * 1024:
+                    f.seek(-1024 * 1024, 2)
+                    hasher.update(f.read())  # Letzte 1MB
+        except Exception:
+            pass
+        hasher.update(f"_{fps}_v3".encode())
         return self.cache_dir / f"{hasher.hexdigest()}.npz"
     
     def _progress(self, msg: str, step: int, total: int, callback: Optional[Callable] = None):
