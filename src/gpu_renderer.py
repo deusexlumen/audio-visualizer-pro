@@ -475,8 +475,8 @@ class GPUBatchRenderer:
                 // Helligkeit des Visualizer-Pixels berechnen
                 float luma = dot(viz.rgb, vec3(0.299, 0.587, 0.114));
                 // Fast-schwarze Bereiche (Visualizer-Hintergrund) werden transparent
-                // ab 8% Helligkeit wird der Pixel sichtbar
-                float viz_alpha = viz.a * smoothstep(0.0, 0.08, luma);
+                // Threshold bei 2% statt 8%: Dunkle Visualizer bleiben sichtbar
+                float viz_alpha = viz.a * smoothstep(0.0, 0.02, luma);
                 vec3 col = mix(bg, viz.rgb, viz_alpha);
                 f_color = vec4(col, 1.0);
             }
@@ -799,9 +799,20 @@ class GPUBatchRenderer:
         scaled_box_y = box_y + slide_offset_y + (box_h - scaled_box_h) / 2.0
         
         # === Box-Hintergrund rendern ===
-        box_color = list(config.box_color)
-        if len(box_color) < 4:
-            box_color = list(config.box_color) + [160]
+        # Sicherstellen, dass box_color ein 4-Tuple mit RGBA-Werten ist
+        raw_color = config.box_color
+        if isinstance(raw_color, str):
+            # Hex-String ohne Alpha
+            hex_str = raw_color.lstrip('#')
+            r = int(hex_str[0:2], 16)
+            g = int(hex_str[2:4], 16)
+            b = int(hex_str[4:6], 16)
+            box_color = [r, g, b, 200]
+        else:
+            box_color = list(raw_color)
+            if len(box_color) < 4:
+                box_color = list(box_color) + [200]
+        
         box_r = box_color[0] / 255.0
         box_g = box_color[1] / 255.0
         box_b = box_color[2] / 255.0
@@ -819,7 +830,10 @@ class GPUBatchRenderer:
         # Radius als Faktor der kleineren Box-Haelfte (0.0 - 0.5)
         min_half_size = min(scaled_box_w, scaled_box_h) / 2.0
         radius_factor = min(0.45, config.box_radius / min_half_size) if min_half_size > 1 else 0.15
-        self._box_prog["u_radius"].value = radius_factor
+        try:
+            self._box_prog["u_radius"].value = radius_factor
+        except Exception:
+            pass  # Falls uniform nicht existiert, scharfe Ecken
         self._box_prog["u_resolution"].value = (self.width, self.height)
         self._box_vbo.write(box_data.tobytes())
         self._box_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=1)

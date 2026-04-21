@@ -213,7 +213,7 @@ class GeminiIntegration:
                 max_quotes = 5
 
             try:
-                uploaded_file = self.client.files.upload(file=str(audio_path))
+                uploaded_file = self._upload_audio_with_retry(str(audio_path))
             except Exception as e:
                 raise RuntimeError(f"Audio-Upload zu Gemini fehlgeschlagen: {e}") from e
 

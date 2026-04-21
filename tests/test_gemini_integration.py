@@ -102,7 +102,7 @@ class TestGeminiIntegration:
                 mock_client.files.get.return_value = mock_file
                 
                 mock_response = Mock()
-                mock_response.text = '[{"text": "Hello world", "start_time": 10.5, "end_time": 15.2, "confidence": 0.9}]'
+                mock_response.text = '[{"text": "Hello world today", "start_time": 10.5, "end_time": 15.2, "confidence": 0.9}]'
                 mock_client.models.generate_content.return_value = mock_response
                 
                 mock_genai.Client.return_value = mock_client
@@ -111,7 +111,7 @@ class TestGeminiIntegration:
                 quotes = gemini.extract_quotes(tmp_path, max_quotes=1)
                 
                 assert len(quotes) == 1
-                assert quotes[0].text == "Hello world"
+                assert quotes[0].text == "Hello world today"
                 assert quotes[0].start_time == 10.5
                 assert quotes[0].end_time == 15.2
                 assert quotes[0].confidence == 0.9
@@ -147,7 +147,7 @@ class TestGeminiIntegration:
                 mock_client.files.get.return_value = mock_file
                 
                 mock_response = Mock()
-                mock_response.text = '[{"text": "Zweites", "start_time": 20.0, "end_time": 25.0, "confidence": 0.8}, {"text": "Erstes", "start_time": 5.0, "end_time": 10.0, "confidence": 0.9}]'
+                mock_response.text = '[{"text": "Zweites Zitat hier", "start_time": 20.0, "end_time": 25.0, "confidence": 0.8}, {"text": "Erstes Zitat hier", "start_time": 5.0, "end_time": 10.0, "confidence": 0.9}]'
                 mock_client.models.generate_content.return_value = mock_response
                 
                 mock_genai.Client.return_value = mock_client
@@ -155,8 +155,8 @@ class TestGeminiIntegration:
                 gemini = GeminiIntegration(api_key="test-key")
                 quotes = gemini.extract_quotes(tmp_path)
                 
-                assert quotes[0].text == "Erstes"
-                assert quotes[1].text == "Zweites"
+                assert quotes[0].text == "Erstes Zitat hier"
+                assert quotes[1].text == "Zweites Zitat hier"
             finally:
                 os.unlink(tmp_path)
 

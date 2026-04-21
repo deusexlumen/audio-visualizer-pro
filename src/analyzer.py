@@ -79,12 +79,22 @@ class AudioAnalyzer:
             loaded_data = {}
             # Skalare Felder die aus 0-dim numpy Arrays zurueckkonvertiert werden muessen
             scalar_fields = {'duration', 'sample_rate', 'fps', 'frame_count', 'tempo', 'key', 'mode'}
+            # Array-Felder muessen IMMER als ndarray bleiben, auch bei size 0 oder 1
+            array_fields = {'rms', 'onset', 'spectral_centroid', 'spectral_rolloff',
+                            'zero_crossing_rate', 'transient', 'voice_clarity',
+                            'chroma', 'mfcc', 'tempogram', 'beat_frames'}
             for k in data.files:
                 val = data[k]
                 if isinstance(val, np.ndarray):
                     if val.dtype.kind == 'U':
                         # Unicode-String
                         loaded_data[k] = str(val.item())
+                    elif k in array_fields:
+                        # Array-Felder: immer als ndarray behalten
+                        if val.size == 0:
+                            loaded_data[k] = np.array([], dtype=val.dtype if val.dtype != object else np.float32)
+                        else:
+                            loaded_data[k] = val
                     elif k in scalar_fields or val.size == 1:
                         # Skalare Werte (None, float, int, bool) aus 0-dim Array extrahieren
                         if val.size == 0:

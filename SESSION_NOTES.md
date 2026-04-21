@@ -1,5 +1,20 @@
 # Session Notes – Audio Visualizer Pro
 
+## 2026-04-21 – Fixes committed & gepusht + State-of-the-Art README
+
+**Commit:** `ba2f258` auf `master`
+**Remote:** `https://github.com/deusexlumen/audio-visualizer-pro.git`
+
+**Enthaltene Änderungen:**
+- `gui.py` — Slide-In Validation Fix + Streamlit `use_container_width` → `width`
+- `src/analyzer.py` — AudioFeatures Cache-Edge-Case (verschachtelte ndarrays)
+- `SESSION_NOTES.md` — Dokumentation der Fixes
+- `README.md` — Komplette Überarbeitung: ASCII-Banner, Mermaid-Diagramme, Feature-Matrix, 16-Visualizer-Galerie, Farbpaletten, Roadmap
+
+**Status:** ✅ Live auf GitHub.
+
+---
+
 ## 2026-04-21 – Zwei Bugs gefixt (GUI Slide-In + AudioFeatures Cache)
 
 **Bug 1: `ValueError: 'slide_up' is not in list` in `gui.py`**
