@@ -52,6 +52,9 @@ class GPUBatchRenderer:
             color_attachments=[self.ctx.texture((width, height), 4)]
         )
         
+        # Dummy schwarze Textur fuer Composite ohne Hintergrundbild (verhindert Memory-Leak)
+        self._dummy_black_texture = self.ctx.texture((1, 1), 3, b'\x00\x00\x00')
+        
         # Post-Process FBO (zweiter Pass fuer Color-Grading)
         self.post_fbo = self.ctx.framebuffer(
             color_attachments=[self.ctx.texture((width, height), 3)]
@@ -200,7 +203,7 @@ class GPUBatchRenderer:
                 if bg_texture is not None:
                     self.bg_fbo.use()
                     self.ctx.clear(0.05, 0.05, 0.05)
-                    self._render_background(bg_texture, 1.0, background_vignette)
+                    self._render_background(bg_texture, background_opacity, background_vignette)
                     bg_tex = self.bg_fbo.color_attachments[0]
                 else:
                     bg_tex = None
@@ -472,11 +475,10 @@ class GPUBatchRenderer:
             void main() {
                 vec3 bg = texture(u_bg_texture, v_uv).rgb;
                 vec4 viz = texture(u_viz_texture, v_uv);
-                // Helligkeit des Visualizer-Pixels berechnen
-                float luma = dot(viz.rgb, vec3(0.299, 0.587, 0.114));
-                // Fast-schwarze Bereiche (Visualizer-Hintergrund) werden transparent
-                // Threshold bei 2% statt 8%: Dunkle Visualizer bleiben sichtbar
-                float viz_alpha = viz.a * smoothstep(0.0, 0.02, luma);
+                // Visualizer-Alpha direkt verwenden (kein Luma-Masking!)
+                // Luma-Masking hat dunkle Visualizer-Bereiche transparent gemacht,
+                // was dazu fuehrte dass der Hintergrund durchschimmerte.
+                float viz_alpha = viz.a;
                 vec3 col = mix(bg, viz.rgb, viz_alpha);
                 f_color = vec4(col, 1.0);
             }
@@ -504,8 +506,8 @@ class GPUBatchRenderer:
             bg_texture.use(location=0)
             self._composite_prog["u_bg_texture"].value = 0
         else:
-            # Dummy schwarze Textur fuer den Fall ohne Hintergrundbild
-            self.ctx.texture((1, 1), 3, b'\x00\x00\x00').use(location=0)
+            # Dummy schwarze Textur wiederverwenden (kein Memory-Leak)
+            self._dummy_black_texture.use(location=0)
             self._composite_prog["u_bg_texture"].value = 0
         viz_texture.use(location=1)
         self._composite_prog["u_viz_texture"].value = 1
