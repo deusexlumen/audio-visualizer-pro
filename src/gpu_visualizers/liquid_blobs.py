@@ -47,6 +47,7 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
             """,
             fragment_shader="""
             #version 330
+            uniform float u_brightness;
             in vec3 v_color;
             in float v_alpha;
             in vec2 v_local;
@@ -56,7 +57,7 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
                 if (dist > 1.0) discard;
                 float core = 1.0 - smoothstep(0.0, 0.6, dist);
                 float glow = exp(-dist * dist * 3.0);
-                vec3 col = v_color * (core + glow * 0.5);
+                vec3 col = v_color * (core + glow * 0.5) * u_brightness;
                 float alpha = (core * 0.95 + glow * 0.4) * v_alpha;
                 f_color = vec4(col, alpha);
             }
@@ -83,10 +84,11 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
             """,
             fragment_shader="""
             #version 330
+            uniform float u_brightness;
             in vec3 v_color;
             in float v_alpha;
             out vec4 f_color;
-            void main() { f_color = vec4(v_color, v_alpha); }
+            void main() { f_color = vec4(v_color * u_brightness, v_alpha); }
             """,
         )
 
@@ -233,6 +235,10 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
         # --- Rendern ---
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+
+        brightness = self.params.get("brightness", 1.0)
+        self._blob_prog["u_brightness"].value = brightness
+        self._line_prog["u_brightness"].value = brightness
 
         # Verbindungen + Ringe
         if line_verts:

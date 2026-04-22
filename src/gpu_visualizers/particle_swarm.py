@@ -60,6 +60,7 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
             """,
             fragment_shader="""
             #version 330
+            uniform float u_brightness;
             in vec3 v_color;
             in float v_alpha;
             in vec2 v_local_pos;
@@ -74,7 +75,7 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
                 // Glow: exponentieller Abfall
                 float glow = exp(-dist * dist * 3.5);
 
-                vec3 final_color = v_color * (core + glow * 0.7);
+                vec3 final_color = v_color * (core + glow * 0.7) * u_brightness;
                 float alpha = (core * 0.95 + glow * 0.45) * v_alpha;
 
                 f_color = vec4(final_color, alpha);
@@ -282,6 +283,7 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
             total_size = current_size * 1.5 + glow_size * rms
 
             # Trail-Punkte als Instanzen
+            trail_decay = self.params.get("trail_decay", 0.7)
             if trail_len > 0:
                 for ti, (tx, ty, tl) in enumerate(self._trails[i]):
                     if tl > 0 and instance_idx < self._max_instances:
@@ -290,7 +292,9 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
                             if len(self._trails[i]) > 0
                             else 0
                         )
-                        t_alpha = 0.35 * t_ratio * tl
+                        trail_dist = len(self._trails[i]) - 1 - ti
+                        trail_fade = pow(1.0 - trail_decay, trail_dist)
+                        t_alpha = 0.35 * t_ratio * tl * trail_fade
                         t_size = max(1.0, current_size * 0.4)
                         self._instance_data[instance_idx] = [
                             tx,
@@ -335,8 +339,9 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
             ]
             instance_idx += 1
 
-        # Aufloesung an Shader uebergeben
+        # Aufloesung und Brightness an Shader uebergeben
         self._prog["u_resolution"].value = (self.width, self.height)
+        self._prog["u_brightness"].value = self.params.get("brightness", 1.0)
 
         # Rendern
         if instance_idx > 0:

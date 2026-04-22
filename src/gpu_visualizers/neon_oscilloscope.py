@@ -56,6 +56,7 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
             """,
             fragment_shader="""
             #version 330
+            uniform float u_brightness;
             in vec3 v_color;
             in float v_alpha;
             in float v_t;
@@ -69,7 +70,7 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
                 // Glow: weicher, exponentieller Abfall
                 float glow = exp(-dist * dist * 5.0);
 
-                vec3 final_color = v_color * (core + glow * 0.8);
+                vec3 final_color = v_color * (core + glow * 0.8) * u_brightness;
                 float alpha = (core * 0.95 + glow * 0.5) * v_alpha;
 
                 f_color = vec4(final_color, alpha);
@@ -100,11 +101,12 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
             """,
             fragment_shader="""
             #version 330
+            uniform float u_brightness;
             in vec3 v_color;
             in float v_alpha;
             out vec4 f_color;
             void main() {
-                f_color = vec4(v_color, v_alpha);
+                f_color = vec4(v_color * u_brightness, v_alpha);
             }
             """,
         )
@@ -122,9 +124,10 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
             #version 330
             uniform vec3 u_color;
             uniform float u_alpha;
+            uniform float u_brightness;
             out vec4 f_color;
             void main() {
-                f_color = vec4(u_color, u_alpha);
+                f_color = vec4(u_color * u_brightness, u_alpha);
             }
             """,
         )
@@ -269,15 +272,24 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
 
         # --- Ribbon rendern (Trail + Hauptlinie) ---
         self._ribbon_prog["u_resolution"].value = (self.width, self.height)
-        self._ribbon_prog["u_thickness"].value = float(self.params["line_thickness"])
+        thickness_scale = 0.5 + (self.params.get("line_width", 0.003) - 0.001) / 0.019 * 1.5
+        self._ribbon_prog["u_thickness"].value = float(self.params["line_thickness"]) * thickness_scale
 
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
 
+        # Brightness-Uniforms binden
+        brightness = self.params.get("brightness", 1.0)
+        self._ribbon_prog["u_brightness"].value = brightness
+        self._line_prog["u_brightness"].value = brightness
+        self._flash_prog["u_brightness"].value = brightness
+
         # Trail-Linien (aeltere Wellenformen)
+        trail_decay = self.params.get("trail_decay", 0.7)
         for i, hist_wave in enumerate(self._history[:-1]):
-            alpha_factor = (i + 1) / len(self._history)
-            trail_alpha = alpha_factor * 0.4
+            trail_idx = len(self._history) - 1 - i
+            trailFade = pow(1.0 - trail_decay, trail_idx)
+            trail_alpha = trailFade * 0.5
             trail_color = (
                 secondary_color[0] * trail_alpha,
                 secondary_color[1] * trail_alpha,

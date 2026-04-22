@@ -29,10 +29,11 @@ void main() {
 
 _FRAGMENT_SHADER = """
 #version 330
+uniform float u_brightness;
 in vec3 v_color;
 out vec4 f_color;
 void main() {
-    f_color = vec4(v_color, 1.0);
+    f_color = vec4(v_color * u_brightness, 1.0);
 }
 """
 
@@ -115,7 +116,8 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
         vertices = self._build_bar_vertices(max_height, hue)
         self.vbo.write(vertices.tobytes())
 
-        # Zeichnen
+        # Brightness binden und zeichnen
+        self.prog["u_brightness"].value = self.params.get("brightness", 1.0)
         self.vao.render(mode=moderngl.TRIANGLES)
 
     def _build_bar_vertices(self, max_height: float, hue: float) -> np.ndarray:

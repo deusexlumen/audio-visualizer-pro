@@ -53,6 +53,7 @@ class ChromaFieldGPU(BaseGPUVisualizer):
             """,
             fragment_shader="""
             #version 330
+            uniform float u_brightness;
             in vec3 v_color;
             in float v_alpha;
             in vec2 v_local;
@@ -65,7 +66,7 @@ class ChromaFieldGPU(BaseGPUVisualizer):
                 float core = 1.0 - smoothstep(0.0, 0.5, dist);
                 float glow = exp(-dist * dist * 4.0);
 
-                vec3 final_color = v_color * (core + glow * 0.3);
+                vec3 final_color = v_color * (core + glow * 0.3) * u_brightness;
                 float alpha = (core * 0.9 + glow * 0.4) * v_alpha;
                 f_color = vec4(final_color, alpha);
             }
@@ -95,11 +96,12 @@ class ChromaFieldGPU(BaseGPUVisualizer):
             """,
             fragment_shader="""
             #version 330
+            uniform float u_brightness;
             in vec3 v_color;
             in float v_alpha;
             out vec4 f_color;
             void main() {
-                f_color = vec4(v_color, v_alpha);
+                f_color = vec4(v_color * u_brightness, v_alpha);
             }
             """,
         )
@@ -228,6 +230,14 @@ class ChromaFieldGPU(BaseGPUVisualizer):
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
 
+        brightness = self.params.get("brightness", 1.0)
+        self._particle_prog["u_brightness"].value = brightness
+        self._line_prog["u_brightness"].value = brightness
+
+        # Linien-Width aus Parameter
+        line_width_val = self.params.get("line_width", 0.003)
+        self.ctx.line_width = max(1.0, line_width_val * 400.0)
+
         # Verbindungslinien
         if line_verts:
             line_arr = np.array(line_verts, dtype=np.float32)
@@ -241,4 +251,5 @@ class ChromaFieldGPU(BaseGPUVisualizer):
             self._instance_vbo.write(self._instance_data[:instance_idx].tobytes())
             self._particle_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_idx)
 
+        self.ctx.line_width = 1.0
         self.ctx.disable(moderngl.BLEND)

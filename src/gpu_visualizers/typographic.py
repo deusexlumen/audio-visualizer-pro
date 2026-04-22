@@ -49,11 +49,12 @@ class TypographicGPU(BaseGPUVisualizer):
             """,
             fragment_shader="""
             #version 330
+            uniform float u_brightness;
             in vec3 v_color;
             in float v_alpha;
             out vec4 f_color;
             void main() {
-                f_color = vec4(v_color, v_alpha);
+                f_color = vec4(v_color * u_brightness, v_alpha);
             }
             """,
         )
@@ -78,10 +79,11 @@ class TypographicGPU(BaseGPUVisualizer):
             """,
             fragment_shader="""
             #version 330
+            uniform float u_brightness;
             in vec3 v_color;
             in float v_alpha;
             out vec4 f_color;
-            void main() { f_color = vec4(v_color, v_alpha); }
+            void main() { f_color = vec4(v_color * u_brightness, v_alpha); }
             """,
         )
 
@@ -220,6 +222,14 @@ class TypographicGPU(BaseGPUVisualizer):
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
 
+        brightness = self.params.get("brightness", 1.0)
+        self._rect_prog["u_brightness"].value = brightness
+        self._line_prog["u_brightness"].value = brightness
+
+        # Linien-Width aus Parameter
+        line_width_val = self.params.get("line_width", 0.003)
+        self.ctx.line_width = max(1.0, line_width_val * 400.0)
+
         # Mittellinie
         self._line_prog["u_resolution"].value = (self.width, self.height)
         self._line_vbo.write(line_verts.tobytes())
@@ -231,4 +241,5 @@ class TypographicGPU(BaseGPUVisualizer):
             self._rect_vbo.write(self._rect_data[:rect_idx].tobytes())
             self._rect_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=rect_idx)
 
+        self.ctx.line_width = 1.0
         self.ctx.disable(moderngl.BLEND)

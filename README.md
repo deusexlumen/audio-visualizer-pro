@@ -378,6 +378,37 @@ python main.py create-config --output meine_config.json
 
 ---
 
+### GPU Visual Effect Parameter
+
+Alle GPU-Visualizer unterstützen diese universellen Effekt-Parameter, die über `params` in der Config oder via GUI-Slider gesteuert werden:
+
+| Parameter | Bereich | Default | Beschreibung |
+|-----------|---------|---------|--------------|
+| `line_width` | 0.001 – 0.02 | 0.003 | Linien-Dicke (Multiplier für Linien-Visualisierungen) |
+| `trail_length` | 0 – 12 | 0 | Anzahl der Echo/Trail-Frames (0 = kein Trail) |
+| `trail_decay` | 0.1 – 0.95 | 0.7 | Verblass-Geschwindigkeit der Trails (höher = langsamer) |
+| `brightness` | 0.5 – 2.0 | 1.0 | Gesamt-Helligkeit des finalen Bildes |
+
+**Verwendung in der Config:**
+
+```json
+{
+  "visual": {
+    "type": "neon_oscilloscope",
+    "params": {
+      "line_thickness": 4,
+      "trail_length": 8,
+      "trail_decay": 0.7,
+      "brightness": 1.2
+    }
+  }
+}
+```
+
+> 💡 **Tipp:** Nicht jeder Visualizer unterstützt jeden Parameter nativ. `brightness` funktioniert jedoch garantiert in **allen** GPU-Visualizern. `line_width` wirkt sich primär auf Linien-basierte Visualizer aus (Oscilloscope, Wave Circle, Mandala), während `trail_length` bei Visualizern mit Bewegungsechos zum Tragen kommt (Oscilloscope, Wave Circle, Particle Swarm, Pulsing Core).
+
+---
+
 ## 🧪 Tests
 
 ```bash

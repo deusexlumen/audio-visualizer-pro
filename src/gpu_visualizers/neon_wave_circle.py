@@ -42,10 +42,11 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
             """,
             fragment_shader="""
             #version 330
+            uniform float u_brightness;
             in vec3 v_color;
             in float v_alpha;
             out vec4 f_color;
-            void main() { f_color = vec4(v_color, v_alpha); }
+            void main() { f_color = vec4(v_color * u_brightness, v_alpha); }
             """,
         )
 
@@ -74,6 +75,7 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
             """,
             fragment_shader="""
             #version 330
+            uniform float u_brightness;
             in vec3 v_color;
             in float v_alpha;
             in vec2 v_local;
@@ -83,7 +85,8 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
                 if (dist > 1.0) discard;
                 float core = 1.0 - smoothstep(0.0, 0.6, dist);
                 float glow = exp(-dist * dist * 3.0);
-                f_color = vec4(v_color * (core + glow * 0.6), (core * 0.95 + glow * 0.4) * v_alpha);
+                vec3 col = v_color * (core + glow * 0.6);
+                f_color = vec4(col * u_brightness, (core * 0.95 + glow * 0.4) * v_alpha);
             }
             """,
         )
@@ -238,11 +241,42 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
             line_verts.append([bx, by, *bar_color, 1.0])
             line_verts.append([ex, ey, *bar_color, 1.0])
 
+        # --- Trail-History fuer Echo-Ringe ---
+        if not hasattr(self, '_line_history'):
+            self._line_history = []
+        self._line_history.append([list(v) for v in line_verts])
+        trail_len = int(self.params.get("trail_length", 0))
+        if len(self._line_history) > trail_len + 1:
+            self._line_history.pop(0)
+
         # --- Rendern ---
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
 
-        # Linien
+        brightness = self.params.get("brightness", 1.0)
+        self._line_prog["u_brightness"].value = brightness
+        self._quad_prog["u_brightness"].value = brightness
+
+        # Linien-Width aus Parameter
+        line_width_val = self.params.get("line_width", 0.003)
+        self.ctx.line_width = max(1.0, line_width_val * 400.0)
+
+        # Trail-Linien (Echo-Ringe)
+        trail_decay = self.params.get("trail_decay", 0.7)
+        for hi, hist in enumerate(self._line_history[:-1]):
+            if not hist:
+                continue
+            trail_idx = len(self._line_history) - 1 - hi
+            trailFade = pow(1.0 - trail_decay, trail_idx)
+            faded = []
+            for v in hist:
+                faded.append([v[0], v[1], v[2], v[3], v[4], v[5] * trailFade])
+            arr = np.array(faded, dtype=np.float32)
+            self._line_prog["u_resolution"].value = (self.width, self.height)
+            self._line_vbo.write(arr.tobytes())
+            self._line_vao.render(mode=moderngl.LINES)
+
+        # Aktuelle Linien
         if line_verts:
             arr = np.array(line_verts, dtype=np.float32)
             self._line_prog["u_resolution"].value = (self.width, self.height)
@@ -254,4 +288,5 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
         self._core_vbo.write(core_data.tobytes())
         self._core_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=1)
 
+        self.ctx.line_width = 1.0
         self.ctx.disable(moderngl.BLEND)

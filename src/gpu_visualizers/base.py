@@ -138,6 +138,14 @@ class BaseGPUVisualizer(abc.ABC):
     Jeder Visualizer kann Parameter haben, die via GUI-Slider angepasst werden.
     """
 
+    # Visuelle Effekt-Parameter, die von allen GPU-Visualizern unterstuetzt werden
+    EFFECTS = {
+        'line_width': (0.003, 0.001, 0.02, 0.001),
+        'trail_length': (0, 0, 12, 1),
+        'trail_decay': (0.7, 0.1, 0.95, 0.05),
+        'brightness': (1.0, 0.5, 2.0, 0.05),
+    }
+
     # Override in subclasses: {param_name: (default, min, max, step)}
     PARAMS = {}
 
@@ -151,7 +159,9 @@ class BaseGPUVisualizer(abc.ABC):
         self.ctx = ctx
         self.width = width
         self.height = height
-        self.params = {k: v[0] for k, v in self.PARAMS.items()}
+        # Merge EFFECTS und PARAMS (PARAMS ueberschreiben EFFECTS bei Duplikaten)
+        self.params = {k: v[0] for k, v in self.EFFECTS.items()}
+        self.params.update({k: v[0] for k, v in self.PARAMS.items()})
         self._setup()
 
     def set_params(self, params: dict):

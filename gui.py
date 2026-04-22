@@ -206,7 +206,7 @@ LOOKS = {
         "name": "🎬 Podcast Cinematic",
         "description": "Warm, Film-Grain, Vignette. Für Storytelling und Hörbücher.",
         "visualizer": "typographic",
-        "params": {"text_size": 56, "animation_speed": 0.15, "bar_width": 4, "bar_spacing": 2},
+        "params": {"text_size": 56, "animation_speed": 0.15, "bar_width": 4, "bar_spacing": 2, "line_width": 0.003, "trail_length": 0, "trail_decay": 0.7, "brightness": 1.0},
         "colors": {"primary": "#E8A87C", "secondary": "#C38D9E", "background": "#0F0F1A"},
         "postprocess": {"contrast": 1.15, "saturation": 0.9, "brightness": -0.02, "warmth": 0.35, "film_grain": 0.2},
         "quotes": {
@@ -224,7 +224,7 @@ LOOKS = {
         "name": "🎵 Musik Energy",
         "description": "Dynamisch, bunt, schnelle Visuals. Für EDM, Pop und Rock.",
         "visualizer": "spectrum_bars",
-        "params": {"bar_count": 64, "smoothing": 0.3, "bar_width": 3, "glow_intensity": 0.6},
+        "params": {"bar_count": 64, "smoothing": 0.3, "bar_width": 3, "glow_intensity": 0.6, "line_width": 0.003, "trail_length": 0, "trail_decay": 0.7, "brightness": 1.0},
         "colors": {"primary": "#FF0055", "secondary": "#00CCFF", "background": "#0A0A0A"},
         "postprocess": {"contrast": 1.1, "saturation": 1.1, "brightness": -0.02, "warmth": 0.05, "film_grain": 0.05},
         "quotes": {
@@ -242,7 +242,7 @@ LOOKS = {
         "name": "🌊 Musik Chill",
         "description": "Sanft, fließend, entspannt. Für Ambient, Folk und Indie.",
         "visualizer": "liquid_blobs",
-        "params": {"blob_count": 5, "fluidity": 0.6},
+        "params": {"blob_count": 5, "fluidity": 0.6, "line_width": 0.003, "trail_length": 0, "trail_decay": 0.7, "brightness": 1.0},
         "colors": {"primary": "#4ECDC4", "secondary": "#96CEB4", "background": "#1A1A3E"},
         "postprocess": {"contrast": 1.05, "saturation": 0.85, "brightness": 0.02, "warmth": 0.2, "film_grain": 0.1},
         "quotes": {
@@ -260,7 +260,7 @@ LOOKS = {
         "name": "🧘 Meditation",
         "description": "Langsam, sanft, zentriert. Für Yoga und Meditation.",
         "visualizer": "sacred_mandala",
-        "params": {"rotation_speed": 0.15, "layer_count": 5},
+        "params": {"rotation_speed": 0.15, "layer_count": 5, "line_width": 0.003, "trail_length": 0, "trail_decay": 0.7, "brightness": 1.0},
         "colors": {"primary": "#9D4EDD", "secondary": "#C77DFF", "background": "#0F0F1E"},
         "postprocess": {"contrast": 1.0, "saturation": 0.75, "brightness": 0.0, "warmth": 0.15, "film_grain": 0.15},
         "quotes": {

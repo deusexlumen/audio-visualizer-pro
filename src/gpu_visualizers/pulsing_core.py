@@ -29,6 +29,9 @@ uniform vec3 u_color;
 uniform float u_pulse_intensity;
 uniform int u_ring_count;
 uniform float u_glow_radius;
+uniform float u_trail_length;
+uniform float u_trail_decay;
+uniform float u_brightness;
 out vec4 f_color;
 
 void main() {
@@ -52,11 +55,21 @@ void main() {
 
     vec3 color = u_color * glow + u_color * ring * u_onset * 0.7;
 
+    // Trail-Echo-Ringe
+    int trails = int(u_trail_length);
+    for (int t = 1; t <= 8; t++) {
+        if (t > trails) break;
+        float trailFade = pow(1.0 - u_trail_decay, float(t));
+        float trailRadius = max(0.02, radius - float(t) * 0.03);
+        float trailGlow = exp(-dist * dist / (trailRadius * trailRadius * 2.0 / u_glow_radius));
+        color += u_color * trailGlow * 0.12 * trailFade;
+    }
+
     // Subtiler Hintergrund-Glow
     float bgGlow = exp(-dist * dist / ((radius + 0.2) * (radius + 0.2) * 3.0)) * u_rms * 0.15;
     color += u_color * bgGlow;
 
-    f_color = vec4(color, 1.0);
+    f_color = vec4(color * u_brightness, 1.0);
 }
 """
 
@@ -144,6 +157,9 @@ class PulsingCoreGPU(BaseGPUVisualizer):
         self.prog["u_pulse_intensity"].value = float(self.params['pulse_intensity'])
         self.prog["u_ring_count"].value = int(self.params['ring_count'])
         self.prog["u_glow_radius"].value = float(self.params['glow_radius'])
+        self.prog["u_trail_length"].value = float(self.params.get('trail_length', 0))
+        self.prog["u_trail_decay"].value = float(self.params.get('trail_decay', 0.7))
+        self.prog["u_brightness"].value = float(self.params.get('brightness', 1.0))
 
         # Zeichnen
         self.vao.render(mode=moderngl.TRIANGLE_STRIP)
