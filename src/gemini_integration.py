@@ -241,16 +241,35 @@ class GeminiIntegration:
             Wichtig: Die Zeitangaben muessen realistisch sein. Ein typisches Zitat dauert 3-8 Sekunden.
             """
 
-            try:
-                response = self.client.models.generate_content(
-                    model=self.model,
-                    contents=[prompt, uploaded_file],
-                    config={
-                        "response_mime_type": "application/json",
-                    }
+            # Retry mit Exponential Backoff bei 503/UEBERLASTET
+            last_error = None
+            for attempt in range(3):
+                try:
+                    response = self.client.models.generate_content(
+                        model=self.model,
+                        contents=[prompt, uploaded_file],
+                        config={
+                            "response_mime_type": "application/json",
+                        }
+                    )
+                    break
+                except Exception as e:
+                    last_error = e
+                    error_str = str(e).lower()
+                    # 503 oder "high demand" oder "unavailable" -> retry
+                    if "503" in str(e) or "unavailable" in error_str or "high demand" in error_str:
+                        wait_time = 2 * (attempt + 1)
+                        print(f"[Gemini] 503 Ueberlastet, Versuch {attempt + 1}/3. Warte {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+                    # Andere Fehler sofort weitergeben
+                    raise RuntimeError(f"Zitat-Extraktion durch Gemini fehlgeschlagen: {e}") from e
+            else:
+                # Alle 3 Versuche fehlgeschlagen
+                raise RuntimeError(
+                    f"Gemini ist nach 3 Versuchen weiterhin nicht erreichbar (503 UNAVAILABLE). "
+                    f"Bitte versuche es in ein paar Minuten erneut oder fuege Zitate manuell hinzu."
                 )
-            except Exception as e:
-                raise RuntimeError(f"Zitat-Extraktion durch Gemini fehlgeschlagen: {e}") from e
 
             quotes_data = self._parse_json_response(response.text)
 

@@ -1239,8 +1239,54 @@ def render_visualizer_page():
 
                         st.session_state[quotes_cache_key] = quotes
                     except Exception as e:
-                        st.error(f"Zitat-Extraktion fehlgeschlagen: {e}")
-                        st.info("💡 Tipp: Stelle sicher, dass GEMINI_API_KEY gesetzt ist.")
+                        error_msg = str(e)
+                        if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg:
+                            st.warning("⚠️ Gemini ist derzeit überlastet (503). Retry wurde bereits versucht.")
+                        else:
+                            st.error(f"Zitat-Extraktion fehlgeschlagen: {e}")
+                        st.info("💡 Du kannst Zitate manuell hinzufügen oder Demo-Zitate verwenden.")
+
+            # ---- Fallback: Demo-Zitate (wenn Gemini down ist) ----
+            if quotes_cache_key not in st.session_state or not st.session_state[quotes_cache_key]:
+                demo_col1, demo_col2 = st.columns(2)
+                with demo_col1:
+                    if st.button("🎲 Demo-Zitate erstellen", key=f"demo_quotes_{quotes_cache_key}"):
+                        duration = features.duration if features else 60.0
+                        demo_quotes = [
+                            Quote(text="Das Abenteuer beginnt jetzt.", start_time=min(5.0, duration * 0.05), end_time=min(13.0, duration * 0.1), confidence=0.95),
+                            Quote(text="Jeder Moment ist eine Chance.", start_time=min(duration * 0.3, duration - 15.0), end_time=min(duration * 0.3 + 8.0, duration - 5.0), confidence=0.90),
+                            Quote(text="Bleib dran, es lohnt sich.", start_time=min(duration * 0.6, duration - 10.0), end_time=min(duration * 0.6 + 8.0, duration - 2.0), confidence=0.88),
+                        ]
+                        st.session_state[quotes_cache_key] = demo_quotes
+                        st.success("✅ 3 Demo-Zitate erstellt! Du kannst sie unten bearbeiten.")
+                        st.rerun()
+                with demo_col2:
+                    if st.button("✏️ Manuell hinzufügen", key=f"manual_quote_toggle_{quotes_cache_key}"):
+                        st.session_state[f"show_manual_quote_{quotes_cache_key}"] = True
+                        st.rerun()
+
+            # ---- Manueller Quote-Editor ----
+            if st.session_state.get(f"show_manual_quote_{quotes_cache_key}", False):
+                st.markdown("##### ✏️ Manuell Zitate hinzufügen")
+                with st.form(key=f"manual_quote_form_{quotes_cache_key}"):
+                    mq_text = st.text_area("Zitat-Text", value="", placeholder="Gib dein Zitat hier ein...")
+                    mq_col1, mq_col2 = st.columns(2)
+                    with mq_col1:
+                        mq_start = st.number_input("Startzeit (Sek)", min_value=0.0, max_value=features.duration if features else 9999.0, value=0.0, step=1.0)
+                    with mq_col2:
+                        mq_end = st.number_input("Endzeit (Sek)", min_value=0.0, max_value=features.duration if features else 9999.0, value=min(8.0, features.duration if features else 8.0), step=1.0)
+                    submitted = st.form_submit_button("➕ Zitat hinzufügen")
+                    if submitted and mq_text.strip():
+                        existing = st.session_state.get(quotes_cache_key, [])
+                        existing.append(Quote(
+                            text=mq_text.strip(),
+                            start_time=max(0.0, mq_start),
+                            end_time=max(mq_start + 1.0, mq_end),
+                            confidence=1.0
+                        ))
+                        st.session_state[quotes_cache_key] = existing
+                        st.success("✅ Zitat hinzugefügt!")
+                        st.rerun()
 
             st.markdown("##### ⚙️ Zitat-Einstellungen")
             qe_col1, qe_col2 = st.columns(2)
