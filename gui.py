@@ -188,7 +188,7 @@ LOOKS = {
         "name": "🎙️ Podcast Clean",
         "description": "Dunkel, dezent, große lesbare Quotes. Perfekt für News und Interviews.",
         "visualizer": "voice_flow",
-        "params": {"flow_speed": 0.4, "wave_depth": 0.5, "color_saturation": 0.7, "breathe_intensity": 0.4, "line_count": 5, "glow_strength": 0.6},
+        "params": {"flow_speed": 0.4, "wave_depth": 0.5, "color_saturation": 0.7, "breathe_intensity": 0.4, "line_count": 5, "glow_strength": 0.6, "line_width": 0.003, "trail_length": 3, "trail_decay": 0.7, "brightness": 1.0},
         "colors": {"primary": "#667EEA", "secondary": "#764BA2", "background": "#1A1A2E"},
         "postprocess": {"contrast": 1.05, "saturation": 0.8, "brightness": 0.0, "warmth": 0.1, "film_grain": 0.05},
         "quotes": {
