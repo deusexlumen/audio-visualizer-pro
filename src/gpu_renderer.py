@@ -81,6 +81,9 @@ class GPUBatchRenderer:
         codec: str = "h264",
         quality: str = "high",
         postprocess: dict = None,
+        viz_offset_x: float = 0.0,
+        viz_offset_y: float = 0.0,
+        viz_scale: float = 1.0,
     ):
         """Rendert ein Video aus Audio-Analyse auf der GPU.
 
@@ -97,6 +100,9 @@ class GPUBatchRenderer:
             codec: Video-Codec ('h264', 'hevc', 'prores').
             quality: Qualitaet ('low', 'medium', 'high', 'lossless').
             postprocess: Color-Grading Parameter dict mit keys: contrast, saturation, brightness, warmth, film_grain.
+            viz_offset_x: Horizontaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
+            viz_offset_y: Vertikaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
+            viz_scale: Skalierungsfaktor des Visualizers (0.5 bis 2.0).
         """
         audio_path = str(audio_path)
         output_path = str(output_path)
@@ -191,8 +197,7 @@ class GPUBatchRenderer:
                 self._init_text_renderer()
 
             # Haupt-Render-Loop — IDENTISCH zur Preview (direktes Rendering)
-            # Kein Composite-Shader, keine separaten FBOs.
-            # Das eliminiert ALLE Unterschiede zwischen Preview und Final Render.
+            # Visualizer wird in viz_fbo gerendert und dann mit Offset/Scale geblittet.
             for i in range(frame_count):
                 time = i / self.fps
                 
@@ -200,16 +205,39 @@ class GPUBatchRenderer:
                 self.fbo.use()
                 self.ctx.clear(0.05, 0.05, 0.05)
                 
+                # DEBUG: Schritt 1 nach clear
+                if i == 0:
+                    self._save_debug(self.fbo, "debug_step1_after_clear.png")
+                
                 # Hintergrundbild (falls vorhanden)
                 if bg_texture is not None:
                     self._render_background(bg_texture, background_opacity, background_vignette)
+                    if i == 0:
+                        self._save_debug(self.fbo, "debug_step2_after_bg.png")
                 
-                # Visualizer direkt drueber rendern (genau wie Preview)
+                # Visualizer in temporären viz_fbo rendern
+                self.viz_fbo.use()
+                self.ctx.clear(0.0, 0.0, 0.0, 0.0)
                 viz.render(features_dict, time)
+                if i == 0:
+                    self._save_debug(self.viz_fbo, "debug_step3_after_viz.png")
+                
+                # Visualizer von viz_fbo auf main fbo blitten (mit Offset/Scale)
+                self.fbo.use()
+                self._blit_viz_to_fbo(
+                    self.viz_fbo.color_attachments[0],
+                    offset_x=viz_offset_x,
+                    offset_y=viz_offset_y,
+                    scale=viz_scale,
+                )
+                if i == 0:
+                    self._save_debug(self.fbo, "debug_step3b_after_viz_blit.png")
                 
                 # Quote-Overlays auf GPU rendern
                 if quotes and quote_config and quote_config.enabled:
                     self._render_quotes_gpu(time, quotes, quote_config)
+                    if i == 0:
+                        self._save_debug(self.fbo, "debug_step4_after_quotes.png")
                 
                 # Post-Process (Color-Grading) anwenden falls konfiguriert
                 if postprocess:
@@ -223,19 +251,12 @@ class GPUBatchRenderer:
                         time=time,
                     )
                     pixels = self.post_fbo.read(components=3)
+                    if i == 0:
+                        self._save_debug(self.post_fbo, "debug_step5_final.png")
                 else:
                     pixels = self.fbo.read(components=3)
-                
-                # DEBUG: Speichere Frame 0 als PNG fuer Diagnose
-                if i == 0:
-                    try:
-                        from PIL import Image
-                        img_array = np.frombuffer(pixels, dtype=np.uint8).reshape((self.height, self.width, 3))
-                        img_array = np.flipud(img_array)  # OpenGL Origin unten links
-                        Image.fromarray(img_array, mode='RGB').save("debug_frame_0.png")
-                        print(f"[GPU] DEBUG: Frame 0 gespeichert als debug_frame_0.png")
-                    except Exception as e:
-                        print(f"[GPU] DEBUG: Konnte Frame 0 nicht speichern: {e}")
+                    if i == 0:
+                        self._save_debug(self.fbo, "debug_step5_final.png")
                 
                 process.stdin.write(pixels)
 
@@ -269,6 +290,18 @@ class GPUBatchRenderer:
             # Temporaere Datei aufraeumen
             if os.path.exists(temp_video.name):
                 os.unlink(temp_video.name)
+
+    def _save_debug(self, fbo_obj, filename: str):
+        """Speichert den aktuellen FBO-Inhalt als PNG fuer Debugging."""
+        try:
+            from PIL import Image
+            raw = fbo_obj.read(components=3)
+            arr = np.frombuffer(raw, dtype=np.uint8).reshape((self.height, self.width, 3))
+            arr = np.flipud(arr)  # OpenGL Origin unten links
+            Image.fromarray(arr, mode='RGB').save(filename)
+            print(f"[GPU] DEBUG: {filename} gespeichert ({self.width}x{self.height})")
+        except Exception as e:
+            print(f"[GPU] DEBUG: Konnte {filename} nicht speichern: {e}")
 
     def _load_background_texture(self, image_path: str, blur: float):
         """Laedt ein Hintergrundbild als Textur.
@@ -520,6 +553,70 @@ class GPUBatchRenderer:
         viz_texture.use(location=1)
         self._composite_prog["u_viz_texture"].value = 1
         self._composite_vao.render(mode=moderngl.TRIANGLE_STRIP)
+        self.ctx.disable(moderngl.BLEND)
+    
+    def _init_blit_shader(self):
+        """Initialisiert einen Shader zum Blitten einer Textur mit Offset und Skalierung."""
+        self._blit_prog = self.ctx.program(
+            vertex_shader="""
+            #version 330
+            in vec2 in_pos;
+            in vec2 in_uv;
+            out vec2 v_uv;
+            void main() {
+                gl_Position = vec4(in_pos, 0.0, 1.0);
+                v_uv = in_uv;
+            }
+            """,
+            fragment_shader="""
+            #version 330
+            uniform sampler2D u_texture;
+            uniform float u_opacity;
+            in vec2 v_uv;
+            out vec4 f_color;
+            void main() {
+                vec4 tex = texture(u_texture, v_uv);
+                f_color = vec4(tex.rgb, tex.a * u_opacity);
+            }
+            """
+        )
+        quad = np.array([
+            [-1.0, -1.0, 0.0, 0.0],
+            [ 1.0, -1.0, 1.0, 0.0],
+            [-1.0,  1.0, 0.0, 1.0],
+            [ 1.0,  1.0, 1.0, 1.0],
+        ], dtype=np.float32)
+        self._blit_vbo = self.ctx.buffer(quad.tobytes())
+        self._blit_vao = self.ctx.vertex_array(
+            self._blit_prog, [(self._blit_vbo, "2f 2f", "in_pos", "in_uv")]
+        )
+    
+    def _blit_viz_to_fbo(self, source_texture, offset_x=0.0, offset_y=0.0, scale=1.0, opacity=1.0):
+        """Blittet die Visualizer-Textur auf den aktuellen FBO mit Offset und Skalierung."""
+        if not hasattr(self, '_blit_prog'):
+            self._init_blit_shader()
+        
+        # Quad-Vertices basierend auf Offset und Skalierung berechnen
+        x1 = -1.0 * scale + offset_x
+        x2 =  1.0 * scale + offset_x
+        y1 = -1.0 * scale + offset_y
+        y2 =  1.0 * scale + offset_y
+        
+        vertices = np.array([
+            x1, y1, 0.0, 0.0,
+            x2, y1, 1.0, 0.0,
+            x1, y2, 0.0, 1.0,
+            x2, y2, 1.0, 1.0,
+        ], dtype=np.float32)
+        self._blit_vbo.write(vertices.tobytes())
+        
+        self._blit_prog["u_texture"].value = 0
+        self._blit_prog["u_opacity"].value = opacity
+        source_texture.use(location=0)
+        
+        self.ctx.enable(moderngl.BLEND)
+        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+        self._blit_vao.render(mode=moderngl.TRIANGLE_STRIP)
         self.ctx.disable(moderngl.BLEND)
     
     def _render_background(self, texture, opacity: float, vignette: float = 0.0):
@@ -807,6 +904,21 @@ class GPUBatchRenderer:
         scaled_box_h = box_h * scale
         scaled_box_x = box_x + slide_offset_x + (box_w - scaled_box_w) / 2.0
         scaled_box_y = box_y + slide_offset_y + (box_h - scaled_box_h) / 2.0
+        
+        # Config-Offset und -Skalierung anwenden
+        config_scale = getattr(config, 'scale', 1.0)
+        offset_x = getattr(config, 'offset_x', 0)
+        offset_y = getattr(config, 'offset_y', 0)
+        
+        if config_scale != 1.0:
+            scale = scale * config_scale
+            scaled_box_w = box_w * scale
+            scaled_box_h = box_h * scale
+            scaled_box_x = box_x + slide_offset_x + offset_x + (box_w - scaled_box_w) / 2.0
+            scaled_box_y = box_y + slide_offset_y + offset_y + (box_h - scaled_box_h) / 2.0
+        else:
+            scaled_box_x += offset_x
+            scaled_box_y += offset_y
         
         # === Box-Hintergrund rendern ===
         # Sicherstellen, dass box_color ein 4-Tuple mit RGBA-Werten ist

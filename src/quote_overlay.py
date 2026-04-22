@@ -52,6 +52,11 @@ class QuoteOverlayConfig:
     typewriter_mode: str = "char"   # 'char' oder 'word'
     glow_pulse: bool = False        # Glow pulsiert beim Erscheinen
     glow_pulse_intensity: float = 0.5  # Max Glow waehrend Pulse
+    
+    # Position & Skalierung
+    offset_x: int = 0       # Horizontaler Offset in Pixeln (negativ = links, positiv = rechts)
+    offset_y: int = 0       # Vertikaler Offset in Pixeln (negativ = oben, positiv = unten)
+    scale: float = 1.0      # Skalierungsfaktor (0.5 = halbe Groesse, 2.0 = doppelte Groesse)
 
 
 class QuoteOverlayRenderer:
@@ -71,6 +76,7 @@ class QuoteOverlayRenderer:
         self.quotes = quotes or []
         self.config = config or QuoteOverlayConfig()
         self._font = None
+        self._font_path = None
         self._load_font()
     
     def _load_font(self):
@@ -99,12 +105,14 @@ class QuoteOverlayRenderer:
         for path in font_paths:
             try:
                 self._font = ImageFont.truetype(path, self.config.font_size)
+                self._font_path = path
                 return
             except (OSError, IOError):
                 continue
         
         # Fallback auf Default-Schrift
         self._font = ImageFont.load_default()
+        self._font_path = None
     
     def _get_active_quote(self, time_seconds: float) -> Optional[Quote]:
         """
@@ -217,24 +225,37 @@ class QuoteOverlayRenderer:
         box_width = min(text_width + 2 * padding, int(img.width * self.config.max_width_ratio))
         box_height = text_height + 2 * padding
         
-        # Box positionieren je nach Einstellung
-        box_x = (img.width - box_width) // 2
+        # Offset und Skalierung anwenden
+        config_scale = getattr(self.config, 'scale', 1.0)
+        offset_x = getattr(self.config, 'offset_x', 0)
+        offset_y = getattr(self.config, 'offset_y', 0)
+        
+        box_width = int(box_width * config_scale)
+        box_height = int(box_height * config_scale)
+        padding = int(padding * config_scale)
+        box_radius = int(self.config.box_radius * config_scale)
+        
+        # Box positionieren je nach Einstellung (mit Offset)
         if self.config.position == "bottom":
-            box_y = img.height - box_height - self.config.box_margin_bottom
+            box_x = (img.width - box_width) // 2 + offset_x
+            box_y = img.height - box_height - self.config.box_margin_bottom + offset_y
         elif self.config.position == "top":
-            box_y = self.config.box_margin_bottom
+            box_x = (img.width - box_width) // 2 + offset_x
+            box_y = self.config.box_margin_bottom + offset_y
         else:  # center
-            box_y = (img.height - box_height) // 2
+            box_x = (img.width - box_width) // 2 + offset_x
+            box_y = (img.height - box_height) // 2 + offset_y
         
         # Schatten zeichnen
         shadow = self.config.shadow_offset
+        scaled_shadow = (int(shadow[0] * config_scale), int(shadow[1] * config_scale))
         shadow_rect = [
-            box_x + shadow[0], box_y + shadow[1],
-            box_x + box_width + shadow[0], box_y + box_height + shadow[1]
+            box_x + scaled_shadow[0], box_y + scaled_shadow[1],
+            box_x + box_width + scaled_shadow[0], box_y + box_height + scaled_shadow[1]
         ]
         draw.rounded_rectangle(
             shadow_rect, 
-            radius=self.config.box_radius,
+            radius=box_radius,
             fill=self.config.shadow_color
         )
         
@@ -245,7 +266,7 @@ class QuoteOverlayRenderer:
         box_color[3] = int(box_color[3] * alpha)
         draw.rounded_rectangle(
             [box_x, box_y, box_x + box_width, box_y + box_height],
-            radius=self.config.box_radius,
+            radius=box_radius,
             fill=tuple(box_color)
         )
         

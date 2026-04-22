@@ -1,15 +1,12 @@
 """
-Voice Flow - Signature Podcast-Visualizer.
+Voice Flow - Signature Podcast-Visualizer v2.
 
-Organischer, atmender Flow fuer Podcasts und Sprach-Inhalte.
-- Langsame FBM-Noise Wellen (nie ablenkend)
-- Voice-Clarity steuert sanfte Intensitaet
-- Keine harten Beats oder Explosionen
-- Atmender, meditativer Rhythmus
-- Soft-Chroma Farbverlaeufe
-
-Psychologische Vorgabe: Die Visualisierung darf NIEMALS
-vom gesprochenen Wort ablenken.
+Deutliche, leuchtende Wellen fuer Podcasts und Sprach-Inhalte.
+- Sichtbare Wellen-Linien (wie ein sanftes Oszilloskop)
+- Voice-Clarity steuert Amplitude klar und deutlich
+- Bewegung auch bei Stille (Atem-Effekt)
+- Helle, leuchtende Farben auf dunklem Hintergrund
+- Nie ablenkend, aber immer sichtbar
 """
 
 import numpy as np
@@ -19,16 +16,17 @@ from .base import BaseGPUVisualizer
 
 class VoiceFlowGPU(BaseGPUVisualizer):
     """
-    Voice Flow - Sanfter, organischer Podcast-Visualizer.
-    Fliesst wie Wasser, atmet wie ein Organismus.
+    Voice Flow v2 - Klar sichtbare Podcast-Wellen.
+    Leuchtende Linien, die mit der Stimme tanzen.
     """
 
     PARAMS = {
-        'flow_speed': (0.15, 0.05, 0.5, 0.01),
-        'wave_depth': (0.4, 0.1, 0.8, 0.05),
-        'color_saturation': (0.5, 0.2, 0.8, 0.05),
-        'breathe_intensity': (0.3, 0.0, 0.6, 0.05),
-        'detail_level': (3, 1, 5, 1),
+        'flow_speed': (0.4, 0.1, 1.0, 0.05),
+        'wave_depth': (0.5, 0.1, 1.0, 0.05),
+        'color_saturation': (0.7, 0.3, 1.0, 0.05),
+        'breathe_intensity': (0.4, 0.0, 0.8, 0.05),
+        'line_count': (5, 3, 12, 1),
+        'glow_strength': (0.6, 0.0, 1.0, 0.05),
     }
 
     def _setup(self):
@@ -48,99 +46,110 @@ class VoiceFlowGPU(BaseGPUVisualizer):
             uniform float u_wave_depth;
             uniform float u_color_saturation;
             uniform float u_breathe_intensity;
-            uniform float u_detail_level;
+            uniform float u_line_count;
+            uniform float u_glow_strength;
 
             out vec4 f_color;
 
-            // === Lygia Math ===
             vec3 hsv2rgb(vec3 c) {
                 vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
                 vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
                 return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
             }
-            mat2 rot2(float a) {
-                float c = cos(a), s = sin(a);
-                return mat2(c, -s, s, c);
-            }
 
-            // === Lygia Noise ===
-            float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-            float noise(vec2 p) {
-                vec2 i = floor(p);
-                vec2 f = fract(p);
-                float a = hash(i);
-                float b = hash(i + vec2(1.0, 0.0));
-                float c = hash(i + vec2(0.0, 1.0));
-                float d = hash(i + vec2(1.0, 1.0));
-                vec2 u = f * f * (3.0 - 2.0 * f);
-                return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-            }
-            float fbm(vec2 p, int octaves) {
-                float v = 0.0;
-                float a = 0.5;
-                mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-                for (int i = 0; i < 5; i++) {
-                    if (i >= octaves) break;
-                    v += a * noise(p);
-                    p = rot * p * 2.0 + vec2(100.0);
-                    a *= 0.5;
-                }
-                return v;
+            float hash(vec2 p) {
+                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
             }
 
             void main() {
+                // Normalisierte UV-Koordinaten (0..1)
                 vec2 uv = gl_FragCoord.xy / u_resolution;
-                uv.x *= u_resolution.x / u_resolution.y;
-
-                // Langsamer Atem-Takt (ca. 6-10 BPM)
-                float breathe = sin(u_time * 0.8) * 0.5 + 0.5;
-                float breatheAmt = u_breathe_intensity * (0.5 + breathe * 0.5);
-
-                // Voice-Clarity steuert sanfte Wellen-Amplitude
-                float voiceAmt = u_voice * u_wave_depth;
-
-                // Mehrere uebereinanderliegende Noise-Ebenen
-                vec2 p = uv * 2.0;
+                
+                // Aspect-ratio korrigierte x-Koordinate fuer symmetrische Wellen
+                float x = uv.x;
+                float y = uv.y;
+                
+                // Atem-Takt (langsam, immer sichtbar)
+                float breathe = sin(u_time * 0.6) * 0.5 + 0.5;
+                float breatheAmt = u_breathe_intensity * (0.3 + breathe * 0.7);
+                
+                // Voice-Amplitude (mindestens 0.15 damit immer etwas zu sehen ist)
+                float voiceAmt = max(0.15, u_voice) * u_wave_depth;
+                
+                // Kombinierte Amplitude: Voice + Atem
+                float totalAmp = voiceAmt + breatheAmt * 0.2;
+                
+                // Zeit mit Flow-Speed
                 float t = u_time * u_flow_speed;
-
-                // Ebene 1: Grosse, langsame Wellen
-                float n1 = fbm(p + vec2(t * 0.3, t * 0.2), int(u_detail_level));
-
-                // Ebene 2: Mittlere Details (Voice-reaktiv)
-                float n2 = fbm(p * 2.0 + vec2(-t * 0.2, t * 0.4) + n1 * 0.5, int(u_detail_level));
-
-                // Ebene 3: Feine Details (sehr subtil)
-                float n3 = fbm(p * 4.0 + vec2(t * 0.1, -t * 0.15) + n2 * 0.3, max(1, int(u_detail_level) - 1));
-
-                // Kombiniere mit Gewichtung
-                float finalNoise = n1 * 0.5 + n2 * 0.35 + n3 * 0.15;
-
-                // Sanfte Wellen-Displacement
-                float wave = sin(uv.x * 3.14159 * 2.0 + t + finalNoise * 2.0) * voiceAmt;
-                wave += sin(uv.x * 1.5 + t * 0.7) * breatheAmt * 0.3;
-
-                // Farbgebung: Chroma-basiert, aber sehr gedämpft
-                vec3 baseColor = u_color;
-                float hueShift = finalNoise * 0.05 + wave * 0.02;
-                vec3 color1 = hsv2rgb(vec3(fract(baseColor.x + hueShift), u_color_saturation * 0.6, 0.4 + wave * 0.1));
-                vec3 color2 = hsv2rgb(vec3(fract(baseColor.x + hueShift + 0.15), u_color_saturation * 0.5, 0.3 + wave * 0.08));
-
-                // Verlauf von oben nach unten
-                float grad = uv.y + wave * 0.1;
-                vec3 col = mix(color2, color1, grad);
-
-                // Sehr sanfter Glow in der Mitte
-                float centerDist = length((uv - vec2(0.5 * u_resolution.x / u_resolution.y, 0.5)) * vec2(1.0, 0.6));
-                float centerGlow = exp(-centerDist * centerDist * 3.0) * u_voice * 0.15;
-                col += baseColor * centerGlow;
-
-                // Dunkler Hintergrund (nie heller als 0.4)
-                col = clamp(col, 0.0, 0.4 + u_voice * 0.1);
-
-                // Sehr sanftes Film Grain (optional, subtil)
-                float grain = hash(gl_FragCoord.xy + fract(u_time * 100.0) * 100.0) * 0.02 - 0.01;
-                col += grain;
-
+                
+                // Hintergrund: sehr dunkel, leicht gefaerbt
+                vec3 bgColor = u_color * 0.08;
+                vec3 col = bgColor;
+                
+                // Base-Hue aus der Chroma-Farbe
+                float baseHue = fract(u_color.x);
+                
+                // Mehrere Wellen-Linien
+                int lines = int(u_line_count);
+                for (int i = 0; i < 12; i++) {
+                    if (i >= lines) break;
+                    
+                    float fi = float(i);
+                    
+                    // Jede Linie hat eigene Frequenz, Phase und Geschwindigkeit
+                    float freq = 2.0 + fi * 1.5;
+                    float phase = fi * 1.047; // 60-Grad-Offset
+                    float speed = 1.0 + fi * 0.3;
+                    
+                    // Vertikale Position der Linie (verteilt ueber den Bildschirm)
+                    float lineY = 0.2 + fi * 0.6 / max(float(lines - 1), 1.0);
+                    
+                    // Welle: Sinus mit Noise-Modulation
+                    float wave = sin(x * freq * 3.14159 + t * speed + phase);
+                    // Zusaetzliche Oberwelle fuer Detail
+                    wave += sin(x * freq * 2.5 + t * speed * 1.3 + phase * 2.0) * 0.3;
+                    wave *= 0.5 + 0.5; // Normalize to -1..1
+                    
+                    // Amplitude skalieren
+                    float amp = totalAmp * (0.8 + fi * 0.1);
+                    float yOffset = wave * amp * 0.15;
+                    
+                    // Distanz zur Wellen-Linie
+                    float dist = abs(y - (lineY + yOffset));
+                    
+                    // Hue fuer diese Linie (leicht verschoben)
+                    float hue = fract(baseHue + fi * 0.08 + sin(t * 0.1) * 0.02);
+                    float sat = u_color_saturation * (0.8 + fi * 0.05);
+                    vec3 lineColor = hsv2rgb(vec3(hue, sat, 1.0));
+                    
+                    // Gluehender Kern der Linie
+                    float lineWidth = 0.003 + u_voice * 0.002;
+                    float core = smoothstep(lineWidth, 0.0, dist);
+                    
+                    // Glow um die Linie
+                    float glow = smoothstep(0.08, 0.0, dist) * u_glow_strength;
+                    
+                    // Voice reagiert auf Glow-Staerke
+                    glow *= (0.5 + u_voice * 0.5);
+                    
+                    // Zur Farbe addieren
+                    col += lineColor * core * 0.9;
+                    col += lineColor * glow * 0.4;
+                }
+                
+                // Horizontaler Scanline-Effekt (subtil, Voice-reaktiv)
+                float scanline = sin(y * u_resolution.y * 0.5 + t * 2.0) * 0.5 + 0.5;
+                col *= 0.95 + scanline * 0.05 * (0.5 + u_voice * 0.5);
+                
+                // Vignette (Raender abdunkeln)
+                vec2 center = uv - 0.5;
+                float vig = 1.0 - length(center) * 0.6;
+                vig = smoothstep(0.0, 1.0, vig);
+                col *= 0.7 + vig * 0.3;
+                
+                // Clamp
+                col = clamp(col, 0.0, 1.0);
+                
                 f_color = vec4(col, 1.0);
             }
             """,
@@ -165,6 +174,7 @@ class VoiceFlowGPU(BaseGPUVisualizer):
         self._prog["u_wave_depth"].value = self.params["wave_depth"]
         self._prog["u_color_saturation"].value = self.params["color_saturation"]
         self._prog["u_breathe_intensity"].value = self.params["breathe_intensity"]
-        self._prog["u_detail_level"].value = self.params["detail_level"]
+        self._prog["u_line_count"].value = self.params["line_count"]
+        self._prog["u_glow_strength"].value = self.params["glow_strength"]
 
         self._vao.render(mode=moderngl.TRIANGLE_STRIP)

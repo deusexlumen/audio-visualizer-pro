@@ -80,6 +80,9 @@ def render_gpu_preview(
     postprocess: dict = None,
     quotes: list = None,
     quote_config: QuoteOverlayConfig = None,
+    viz_offset_x: float = 0.0,
+    viz_offset_y: float = 0.0,
+    viz_scale: float = 1.0,
 ):
     """
     Rendert ein einzelnes Frame fuer die Live-Vorschau.
@@ -96,6 +99,9 @@ def render_gpu_preview(
         background_blur: Blur fuer Hintergrund
         background_vignette: Vignette fuer Hintergrund
         background_opacity: Opacity fuer Hintergrund
+        viz_offset_x: Horizontaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
+        viz_offset_y: Vertikaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
+        viz_scale: Skalierungsfaktor des Visualizers (0.5 bis 2.0).
 
     Returns:
         PIL.Image oder None bei Fehler
@@ -139,7 +145,19 @@ def render_gpu_preview(
         if bg_texture is not None:
             renderer._render_background(bg_texture, background_opacity)
 
+        # Visualizer in temporären viz_fbo rendern
+        renderer.viz_fbo.use()
+        renderer.ctx.clear(0.0, 0.0, 0.0, 0.0)
         viz.render(features_dict, preview_time)
+
+        # Visualizer von viz_fbo auf main fbo blitten (mit Offset/Scale)
+        renderer.fbo.use()
+        renderer._blit_viz_to_fbo(
+            renderer.viz_fbo.color_attachments[0],
+            offset_x=viz_offset_x,
+            offset_y=viz_offset_y,
+            scale=viz_scale,
+        )
 
         # Quote-Overlays auf GPU rendern
         if quotes and quote_config and quote_config.enabled:
