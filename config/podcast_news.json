@@ -1,0 +1,28 @@
+{
+  "description": "Sachlicher News-Podcast – minimalistisch und professionell",
+  "audio_file": "input.mp3",
+  "output_file": "podcast_news.mp4",
+  "visual": {
+    "type": "typographic",
+    "resolution": [1920, 1080],
+    "fps": 30,
+    "colors": {
+      "primary": "#3498DB",
+      "secondary": "#BDC3C7",
+      "background": "#1A1A2E"
+    },
+    "params": {
+      "text_size": 56,
+      "animation_speed": 0.15,
+      "bar_width": 4,
+      "bar_spacing": 2
+    }
+  },
+  "postprocess": {
+    "contrast": 1.0,
+    "saturation": 0.8,
+    "grain": 0.0,
+    "vignette": 0.1,
+    "chromatic_aberration": 0.0
+  }
+}

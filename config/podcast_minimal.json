@@ -1,0 +1,25 @@
+{
+  "audio_file": "podcast.mp3",
+  "output_file": "podcast_visual.mp4",
+  "visual": {
+    "type": "typographic",
+    "resolution": [1920, 1080],
+    "fps": 30,
+    "colors": {
+      "primary": "#00CCFF",
+      "secondary": "#FF6B6B",
+      "background": "#121212"
+    },
+    "params": {
+      "show_waveform": true,
+      "show_progress": true,
+      "show_time": true
+    }
+  },
+  "postprocess": {
+    "contrast": 1.05,
+    "saturation": 0.9,
+    "grain": 0.02,
+    "vignette": 0.2
+  }
+}

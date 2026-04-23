@@ -1,0 +1,25 @@
+{
+  "audio_file": "input.mp3",
+  "output_file": "liquid_output.mp4",
+  "visual": {
+    "type": "liquid_blobs",
+    "resolution": [1920, 1080],
+    "fps": 60,
+    "colors": {
+      "primary": "#00D9FF",
+      "secondary": "#FF006E",
+      "background": "#080815"
+    },
+    "params": {
+      "blob_count": 6,
+      "merge_effect": true,
+      "reflection": true
+    }
+  },
+  "postprocess": {
+    "contrast": 1.15,
+    "saturation": 1.25,
+    "grain": 0.04,
+    "vignette": 0.35
+  }
+}

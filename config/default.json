@@ -1,0 +1,25 @@
+{
+  "audio_file": "input.mp3",
+  "output_file": "output.mp4",
+  "visual": {
+    "type": "pulsing_core",
+    "resolution": [1920, 1080],
+    "fps": 60,
+    "colors": {
+      "primary": "#FF0055",
+      "secondary": "#00CCFF",
+      "background": "#0A0A0A"
+    },
+    "params": {
+      "particle_intensity": 1.0,
+      "shake_on_beat": false
+    }
+  },
+  "postprocess": {
+    "contrast": 1.0,
+    "saturation": 1.0,
+    "grain": 0.0,
+    "vignette": 0.0,
+    "chromatic_aberration": 0.0
+  }
+}

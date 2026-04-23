@@ -1,0 +1,27 @@
+{
+  "audio_file": "input.mp3",
+  "output_file": "aggressive_output.mp4",
+  "visual": {
+    "type": "spectrum_bars",
+    "resolution": [1920, 1080],
+    "fps": 60,
+    "colors": {
+      "primary": "#FF0055",
+      "secondary": "#FFAA00",
+      "background": "#050505"
+    },
+    "params": {
+      "particle_intensity": 2.0,
+      "shake_on_beat": true,
+      "bar_count": 40,
+      "bar_style": "gradient"
+    }
+  },
+  "postprocess": {
+    "contrast": 1.2,
+    "saturation": 1.3,
+    "grain": 0.05,
+    "vignette": 0.4,
+    "chromatic_aberration": 1.5
+  }
+}

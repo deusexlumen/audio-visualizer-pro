@@ -1,0 +1,27 @@
+{
+  "audio_file": "input.mp3",
+  "output_file": "particle_output.mp4",
+  "visual": {
+    "type": "particle_swarm",
+    "resolution": [1920, 1080],
+    "fps": 60,
+    "colors": {
+      "primary": "#00F5FF",
+      "secondary": "#FF00A0",
+      "background": "#020205"
+    },
+    "params": {
+      "particle_count": 150,
+      "physics_enabled": true,
+      "gravity_center": true,
+      "explosion_intensity": 1.5
+    }
+  },
+  "postprocess": {
+    "contrast": 1.15,
+    "saturation": 1.2,
+    "grain": 0.04,
+    "vignette": 0.3,
+    "chromatic_aberration": 1.0
+  }
+}

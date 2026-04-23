@@ -1,0 +1,25 @@
+{
+  "audio_file": "input.mp3",
+  "output_file": "circle_output.mp4",
+  "visual": {
+    "type": "neon_wave_circle",
+    "resolution": [1920, 1080],
+    "fps": 60,
+    "colors": {
+      "primary": "#39FF14",
+      "secondary": "#FF073A",
+      "background": "#020205"
+    },
+    "params": {
+      "ring_count": 5,
+      "frequency_display": true
+    }
+  },
+  "postprocess": {
+    "contrast": 1.25,
+    "saturation": 1.5,
+    "grain": 0.02,
+    "vignette": 0.5,
+    "chromatic_aberration": 0.3
+  }
+}

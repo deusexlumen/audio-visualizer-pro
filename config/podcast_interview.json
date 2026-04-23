@@ -1,0 +1,26 @@
+{
+  "description": "Gesprächiger Interview-Podcast – warm und fließend",
+  "audio_file": "input.mp3",
+  "output_file": "podcast_interview.mp4",
+  "visual": {
+    "type": "liquid_blobs",
+    "resolution": [1920, 1080],
+    "fps": 30,
+    "colors": {
+      "primary": "#E67E22",
+      "secondary": "#F39C12",
+      "background": "#1A1A2E"
+    },
+    "params": {
+      "blob_count": 5,
+      "fluidity": 0.6
+    }
+  },
+  "postprocess": {
+    "contrast": 1.05,
+    "saturation": 0.95,
+    "grain": 0.02,
+    "vignette": 0.15,
+    "chromatic_aberration": 0.0
+  }
+}
