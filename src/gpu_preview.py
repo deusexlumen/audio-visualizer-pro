@@ -11,6 +11,7 @@ from PIL import Image
 from .analyzer import AudioAnalyzer
 from .gpu_renderer import GPUPreviewRenderer
 from .gpu_visualizers import get_visualizer
+from .quote_overlay import QuoteOverlayConfig
 
 
 def render_gpu_preview(
@@ -26,6 +27,8 @@ def render_gpu_preview(
     background_vignette: float = 0.0,
     background_opacity: float = 0.3,
     postprocess: dict = None,
+    quotes: list = None,
+    quote_config: QuoteOverlayConfig = None,
 ):
     """
     Rendert ein einzelnes Frame fuer die Live-Vorschau.
@@ -64,7 +67,7 @@ def render_gpu_preview(
         bg_texture = None
         if background_image:
             bg_texture = renderer._load_background_texture(
-                background_image, background_blur, background_vignette
+                background_image, background_blur
             )
 
         # Feature-Dict vorbereiten
@@ -88,6 +91,11 @@ def render_gpu_preview(
             renderer._render_background(bg_texture, background_opacity)
 
         viz.render(features_dict, preview_time)
+
+        # Quote-Overlays auf GPU rendern
+        if quotes and quote_config and quote_config.enabled:
+            renderer._init_text_renderer()
+            renderer._render_quotes_gpu(preview_time, quotes, quote_config)
 
         # Post-Process (Color-Grading) anwenden falls konfiguriert
         if postprocess:

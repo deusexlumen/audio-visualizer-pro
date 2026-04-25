@@ -128,7 +128,7 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
                 "x": 0.0,
                 "y": 0.0,
                 "current_radius": 0.0,
-                "color": (1.0, 1.0, 1.0),
+                "color": (0.6, 0.6, 0.6),
             })
 
     def render(self, features: dict, time: float):
@@ -162,8 +162,8 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
             blob["current_radius"] = blob["base_radius"] * (0.8 + rms * 0.6)
 
             hue = (base_hue + i * 0.15) % 1.0
-            sat = 0.7 + (chroma[(dominant + i) % 12] if chroma is not None else 0.0) * 0.3
-            val = 0.6 + rms * 0.4
+            sat = 0.25 + (chroma[(dominant + i) % 12] if chroma is not None else 0.0) * 0.1
+            val = 0.4 + rms * 0.3
             blob["color"] = self._hsv_to_rgb(hue, sat, val)
 
         # --- Instanz-Array fuellen ---
@@ -191,7 +191,7 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
 
             # Innerer Highlight
             if instance_idx < self._max_instances:
-                hi_color = tuple(min(1.0, c + 0.3) for c in blob["color"])
+                hi_color = tuple(min(1.0, c + 0.1) for c in blob["color"])
                 offset = blob["current_radius"] * 0.3
                 self._blob_data[instance_idx] = [
                     blob["x"] - offset, blob["y"] - offset,
@@ -221,7 +221,7 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
             for i in range(3):
                 radius = 100.0 + i * 80.0 + onset * 50.0
                 hue = (base_hue + i * 0.1) % 1.0
-                rgb = self._hsv_to_rgb(hue, 0.8, 1.0)
+                rgb = self._hsv_to_rgb(hue, 0.35, 0.7)
                 alpha = onset * 0.4 * (1.0 - i / 3.0)
                 segments = 48
                 for j in range(segments):

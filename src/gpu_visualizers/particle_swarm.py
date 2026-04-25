@@ -216,7 +216,7 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
             main_hue = float(np.argmax(chroma)) / 12.0
         else:
             main_hue = 0.5
-        main_color = self._hsv_to_rgb(main_hue, 0.85, 1.0)
+        main_color = self._hsv_to_rgb(main_hue, 0.35, 0.7)
 
         # Instance-Array fuellen
         instance_idx = 0
@@ -273,8 +273,8 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
 
             # Farbe und Groesse berechnen
             life_ratio = life / max_life if max_life > 0 else 0.0
-            saturation = 0.7 + rms * 0.3
-            value = life_ratio * (0.5 + rms * 0.5)
+            saturation = 0.3 + rms * 0.15
+            value = life_ratio * (0.4 + rms * 0.3)
             rgb = self._hsv_to_rgb(float(hue), saturation, value)
 
             depth_scale = 0.6 + depth * 0.4 if depth_enabled else 1.0

@@ -19,18 +19,18 @@ from .gemini_integration import Quote
 class QuoteOverlayConfig:
     """Konfiguration fuer Quote Overlays."""
     enabled: bool = True
-    font_size: int = 36
-    font_color: tuple = (255, 255, 255)  # RGB
-    box_color: tuple = (0, 0, 0, 160)    # RGBA, halbtransparent
-    box_padding: int = 24
+    font_size: int = 52
+    font_color: tuple = (255, 255, 255)  # RGB - Weiss
+    box_color: tuple = (26, 26, 46, 200)  # RGBA - Dunkelblau, halbtransparent
+    box_padding: int = 32
     box_radius: int = 16
-    box_margin_bottom: int = 120  # Abstand vom unteren Rand
-    max_width_ratio: float = 0.8  # Max 80% der Bildbreite
-    fade_duration: float = 0.5    # Sekunden fuer Fade-In/Out
-    shadow_color: tuple = (0, 0, 0, 100)
+    box_margin_bottom: int = 100  # Abstand vom unteren Rand
+    max_width_ratio: float = 0.75  # Max 75% der Bildbreite
+    fade_duration: float = 0.6    # Sekunden fuer Fade-In/Out
+    shadow_color: tuple = (0, 0, 0, 120)
     shadow_offset: tuple = (3, 3)
-    line_spacing: int = 8
-    max_chars_per_line: int = 50
+    line_spacing: int = 10
+    max_chars_per_line: int = 40
     display_duration: float = 8.0  # Maximale Anzeigedauer pro Zitat in Sekunden
     position: str = "bottom"      # 'bottom', 'center', 'top'
     font_path: Optional[str] = None  # Benutzerdefinierte Schriftart

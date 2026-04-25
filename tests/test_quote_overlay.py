@@ -188,11 +188,11 @@ class TestQuoteOverlayConfig:
         """Standard-Werte pruefen."""
         config = QuoteOverlayConfig()
         assert config.enabled is True
-        assert config.font_size == 36
+        assert config.font_size == 52
         assert config.font_color == (255, 255, 255)
-        assert config.box_color == (0, 0, 0, 160)
-        assert config.box_padding == 24
-        assert config.fade_duration == 0.5
+        assert config.box_color == (26, 26, 46, 200)
+        assert config.box_padding == 32
+        assert config.fade_duration == 0.6
         assert config.auto_scale_font is True
         assert config.min_font_size == 16
         assert config.max_font_size == 72

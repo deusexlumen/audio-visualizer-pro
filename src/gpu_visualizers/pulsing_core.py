@@ -47,10 +47,10 @@ void main() {
         float ringWidth = 0.015;
         float ringGlow = smoothstep(ringRadius + ringWidth, ringRadius, dist)
                        * smoothstep(ringRadius - ringWidth, ringRadius, dist);
-        ring += ringGlow * (0.3 + u_onset * 0.7);
+        ring += ringGlow * (0.2 + u_onset * 0.4);
     }
 
-    vec3 color = u_color * glow + u_color * ring * u_onset * 2.0;
+    vec3 color = u_color * glow + u_color * ring * u_onset * 0.7;
 
     // Subtiler Hintergrund-Glow
     float bgGlow = exp(-dist * dist / ((radius + 0.2) * (radius + 0.2) * 3.0)) * u_rms * 0.15;
@@ -96,6 +96,27 @@ class PulsingCoreGPU(BaseGPUVisualizer):
             self.prog,
             [(self.vbo, "2f", "in_position")],
         )
+
+    @staticmethod
+    def _chroma_to_color(chroma: np.ndarray) -> tuple:
+        """Wandelt ein Chroma-Vektor in eine elegante, gedaempfte RGB-Farbe um."""
+        chroma = np.asarray(chroma).flatten()
+        if chroma.size < 12:
+            chroma = np.pad(chroma, (0, 12 - chroma.size))
+
+        angles = np.linspace(0.0, 2.0 * np.pi, 12, endpoint=False)
+        x = np.sum(chroma * np.cos(angles))
+        y = np.sum(chroma * np.sin(angles))
+
+        hue = np.arctan2(y, x) / (2.0 * np.pi)
+        if hue < 0:
+            hue += 1.0
+
+        strength = float(np.max(chroma))
+        saturation = min(0.35, 0.2 + 0.15 * strength)
+        value = min(0.7, 0.5 + 0.2 * strength)
+
+        return PulsingCoreGPU._hsv_to_rgb(hue, saturation, value)
 
     def render(self, features: dict, time: float):
         """Rendert einen Frame mit aktuellem RMS, Onset und Chroma-Farbe.

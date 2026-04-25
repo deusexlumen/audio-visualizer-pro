@@ -65,7 +65,7 @@ class ChromaFieldGPU(BaseGPUVisualizer):
                 float core = 1.0 - smoothstep(0.0, 0.5, dist);
                 float glow = exp(-dist * dist * 4.0);
 
-                vec3 final_color = v_color * (core + glow * 0.7);
+                vec3 final_color = v_color * (core + glow * 0.3);
                 float alpha = (core * 0.9 + glow * 0.4) * v_alpha;
                 f_color = vec4(final_color, alpha);
             }
@@ -181,8 +181,8 @@ class ChromaFieldGPU(BaseGPUVisualizer):
 
             # Farbe basierend auf Note
             hue = p["note"] / 12.0
-            sat = 0.6 + note_strength * 0.4
-            val = 0.4 + note_strength * 0.6
+            sat = 0.25 + note_strength * 0.1
+            val = 0.4 + note_strength * 0.3
             rgb = self._hsv_to_rgb(hue, sat, val)
 
             size = float(p["size"] * (0.8 + rms * 0.4) * base_size / 8.0)
@@ -205,7 +205,7 @@ class ChromaFieldGPU(BaseGPUVisualizer):
                 if dist < conn_dist:
                     note_strength = float(chroma[p1["note"]]) if chroma is not None else 0.5
                     alpha = (1.0 - dist / conn_dist) * 0.35 * note_strength
-                    rgb = self._hsv_to_rgb(p1["note"] / 12.0, 0.6 + note_strength * 0.4, 0.6)
+                    rgb = self._hsv_to_rgb(p1["note"] / 12.0, 0.2 + note_strength * 0.15, 0.5)
                     line_verts.append([p1["x"], p1["y"], rgb[0], rgb[1], rgb[2], alpha])
                     line_verts.append([p2["x"], p2["y"], rgb[0], rgb[1], rgb[2], alpha])
 
@@ -217,7 +217,7 @@ class ChromaFieldGPU(BaseGPUVisualizer):
             note_strength = float(chroma[note]) if chroma is not None else 0.0
             x = cx + np.cos(angle) * ring_radius
             y = cy + np.sin(angle) * ring_radius
-            rgb = self._hsv_to_rgb(note / 12.0, 0.9, 0.5 + note_strength * 0.5)
+            rgb = self._hsv_to_rgb(note / 12.0, 0.2 + note_strength * 0.15, 0.4 + note_strength * 0.3)
             dot_size = 8.0 + note_strength * 12.0
             # Ring-Partikel als Instanzen hinzufuegen
             if instance_idx < self._max_particles:

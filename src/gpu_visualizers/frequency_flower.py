@@ -182,8 +182,8 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
             hue = (base_hue + i / num_petals * 0.3) % 1.0
             ci = (dominant + i) % 12
             strength = chroma[ci] if chroma is not None else 0.5
-            sat = 0.5 + strength * 0.4
-            val = 0.6 + rms * 0.3
+            sat = min(0.35, 0.25 + strength * 0.1)
+            val = min(0.7, 0.4 + rms * 0.3)
             petal_colors.append(self._hsv_to_rgb(hue, sat, val))
 
         # Rotation
@@ -229,7 +229,7 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
         # --- Bluetenmitte (Stempel) ---
         center_radius = 25.0 + rms * 30.0
         center_hue = (base_hue + 0.5) % 1.0
-        center_color = self._hsv_to_rgb(center_hue, 0.8, 1.0)
+        center_color = self._hsv_to_rgb(center_hue, 0.35, 0.7)
 
         # Stempel als Kreis (Line Loop)
         segments = 32
@@ -247,7 +247,7 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
             sx = cx + np.cos(a) * dist
             sy = cy + np.sin(a) * dist
             stamen_size = 5.0 + rms * 8.0
-            stamen_color = self._hsv_to_rgb((center_hue + i * 0.1) % 1.0, 0.9, 1.0)
+            stamen_color = self._hsv_to_rgb((center_hue + i * 0.1) % 1.0, 0.35, 0.7)
             if particle_idx < len(self._particle_data):
                 self._particle_data[particle_idx] = [
                     sx, sy, stamen_color[0], stamen_color[1], stamen_color[2], stamen_size, 1.0
@@ -280,7 +280,7 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
             stem_x = cx
             bend = np.sin(progress * 10.0) * 20.0
             stem_hue = (base_hue + 0.3) % 1.0
-            stem_color = self._hsv_to_rgb(stem_hue, 0.6, 0.4)
+            stem_color = self._hsv_to_rgb(stem_hue, 0.35, 0.4)
             stem_width = 8.0
 
             points_left = []

@@ -42,11 +42,22 @@ class GPUBatchRenderer:
             color_attachments=[self.ctx.texture((width, height), 3)]
         )
         
+        # Temporaerer FBO fuer Hintergrundbild
+        self.bg_fbo = self.ctx.framebuffer(
+            color_attachments=[self.ctx.texture((width, height), 3)]
+        )
+        
+        # Temporaerer FBO fuer Visualizer (wird ueber Hintergrundbild composited)
+        self.viz_fbo = self.ctx.framebuffer(
+            color_attachments=[self.ctx.texture((width, height), 4)]
+        )
+        
         # Post-Process FBO (zweiter Pass fuer Color-Grading)
         self.post_fbo = self.ctx.framebuffer(
             color_attachments=[self.ctx.texture((width, height), 3)]
         )
         self._init_postprocess()
+        self._init_composite_shader()
 
     def render(
         self,
@@ -178,15 +189,26 @@ class GPUBatchRenderer:
 
             # Haupt-Render-Loop
             for i in range(frame_count):
+                time = i / self.fps
+                
+                # --- PASS 1: Visualizer in temporaeres FBO rendern (mit Alpha) ---
+                self.viz_fbo.use()
+                self.ctx.clear(0.0, 0.0, 0.0, 0.0)
+                viz.render(features_dict, time)
+                
+                # --- PASS 2: Hintergrundbild vorbereiten ---
+                if bg_texture is not None:
+                    self.bg_fbo.use()
+                    self.ctx.clear(0.05, 0.05, 0.05)
+                    self._render_background(bg_texture, 1.0, background_vignette)
+                    bg_tex = self.bg_fbo.color_attachments[0]
+                else:
+                    bg_tex = None
+                
+                # --- PASS 3: Alles in finalen FBO compositen ---
                 self.fbo.use()
                 self.ctx.clear(0.05, 0.05, 0.05)
-                
-                # Hintergrundbild zeichnen (wenn vorhanden)
-                if bg_texture is not None:
-                    self._render_background(bg_texture, background_opacity, background_vignette)
-                
-                time = i / self.fps
-                viz.render(features_dict, time)
+                self._composite_viz_over_bg(bg_tex, self.viz_fbo.color_attachments[0])
 
                 # Quote-Overlays auf GPU rendern
                 if quotes and quote_config and quote_config.enabled:
@@ -332,7 +354,6 @@ class GPUBatchRenderer:
             uniform float u_warmth;
             uniform float u_film_grain;
             uniform float u_time;
-            uniform vec2 u_resolution;
             in vec2 v_uv;
             out vec4 f_color;
             
@@ -419,10 +440,71 @@ class GPUBatchRenderer:
         self._pp_prog["u_warmth"].value = warmth
         self._pp_prog["u_film_grain"].value = film_grain
         self._pp_prog["u_time"].value = time
-        self._pp_prog["u_resolution"].value = (self.width, self.height)
         
         texture.use(location=0)
         self._pp_vao.render(mode=moderngl.TRIANGLE_STRIP)
+    
+    def _init_composite_shader(self):
+        """Initialisiert einen Shader, der Visualizer (mit Alpha) ueber Hintergrundbild mischt."""
+        self._composite_prog = self.ctx.program(
+            vertex_shader="""
+            #version 330
+            in vec2 in_pos;
+            in vec2 in_uv;
+            out vec2 v_uv;
+            void main() {
+                gl_Position = vec4(in_pos, 0.0, 1.0);
+                v_uv = in_uv;
+            }
+            """,
+            fragment_shader="""
+            #version 330
+            uniform sampler2D u_bg_texture;
+            uniform sampler2D u_viz_texture;
+            in vec2 v_uv;
+            out vec4 f_color;
+            void main() {
+                vec3 bg = texture(u_bg_texture, v_uv).rgb;
+                vec4 viz = texture(u_viz_texture, v_uv);
+                // Helligkeit des Visualizer-Pixels berechnen
+                float luma = dot(viz.rgb, vec3(0.299, 0.587, 0.114));
+                // Fast-schwarze Bereiche (Visualizer-Hintergrund) werden transparent
+                // ab 8% Helligkeit wird der Pixel sichtbar
+                float viz_alpha = viz.a * smoothstep(0.0, 0.08, luma);
+                vec3 col = mix(bg, viz.rgb, viz_alpha);
+                f_color = vec4(col, 1.0);
+            }
+            """
+        )
+        quad = np.array([
+            [-1.0, -1.0, 0.0, 0.0],
+            [1.0, -1.0, 1.0, 0.0],
+            [-1.0, 1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0],
+        ], dtype=np.float32)
+        vbo = self.ctx.buffer(quad.tobytes())
+        self._composite_vao = self.ctx.vertex_array(
+            self._composite_prog, [(vbo, "2f 2f", "in_pos", "in_uv")]
+        )
+    
+    def _composite_viz_over_bg(self, bg_texture, viz_texture):
+        """Mischt Visualizer-Textur (RGBA) ueber Hintergrund-Textur (RGB).
+        
+        Wenn bg_texture None, wird nur der Visualizer (auf schwarzem Hintergrund) gerendert.
+        """
+        self.ctx.enable(moderngl.BLEND)
+        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+        if bg_texture is not None:
+            bg_texture.use(location=0)
+            self._composite_prog["u_bg_texture"].value = 0
+        else:
+            # Dummy schwarze Textur fuer den Fall ohne Hintergrundbild
+            self.ctx.texture((1, 1), 3, b'\x00\x00\x00').use(location=0)
+            self._composite_prog["u_bg_texture"].value = 0
+        viz_texture.use(location=1)
+        self._composite_prog["u_viz_texture"].value = 1
+        self._composite_vao.render(mode=moderngl.TRIANGLE_STRIP)
+        self.ctx.disable(moderngl.BLEND)
     
     def _render_background(self, texture, opacity: float, vignette: float = 0.0):
         """Zeichnet das Hintergrundbild als Fullscreen-Quad mit Shader-Vignette.
@@ -503,7 +585,7 @@ class GPUBatchRenderer:
             width=self.width, height=self.height
         )
         
-        # Box-Shader fuer Quote-Hintergruende
+        # Box-Shader fuer Quote-Hintergruende (abgerundetes Rechteck)
         self._box_prog = self.ctx.program(
             vertex_shader="""
             #version 330
@@ -514,24 +596,37 @@ class GPUBatchRenderer:
             in vec4 in_color;
             out vec4 v_color;
             out vec2 v_local;
+            out vec2 v_size;
             void main() {
                 vec2 pixel = in_center + in_pos * in_size;
                 vec2 ndc = (pixel / u_resolution) * 2.0 - 1.0;
                 ndc.y = -ndc.y;
                 gl_Position = vec4(ndc, 0.0, 1.0);
                 v_color = in_color;
-                v_local = in_pos;
+                v_local = in_pos * in_size;  // Pixel-Koordinaten innerhalb der Box
+                v_size = in_size;
             }
             """,
             fragment_shader="""
             #version 330
             in vec4 v_color;
             in vec2 v_local;
+            in vec2 v_size;
             out vec4 f_color;
+            
+            float sdRoundBox(vec2 p, vec2 b, float r) {
+                vec2 d = abs(p) - b + r;
+                return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)) - r;
+            }
+            
+            uniform float u_radius;
             void main() {
-                float d = length(v_local);
-                if (d > 1.0) discard;
-                float alpha = (1.0 - smoothstep(0.0, 1.0, d)) * v_color.a;
+                float radius = min(v_size.x, v_size.y) * u_radius;
+                float d = sdRoundBox(v_local, v_size, radius);
+                // Anti-Aliasing: 1 Pixel weicher Uebergang am Rand
+                float edge_alpha = 1.0 - smoothstep(0.0, 1.0, d);
+                if (edge_alpha < 0.01) discard;
+                float alpha = edge_alpha * v_color.a;
                 f_color = vec4(v_color.rgb, alpha);
             }
             """,
@@ -614,28 +709,30 @@ class GPUBatchRenderer:
         max_box_w = self.width * config.max_width_ratio
         
         if config.auto_scale_font:
-            char_width_factor = 0.55
+            font_size = min(config.max_font_size, font_size)
+            # SDF-Text ist proportional, Faktor ~0.6-0.7 fuer gute Schaetzung
+            char_width_factor = 0.62
             longest_line_chars = max(len(line) for line in lines)
             
-            max_attempts = 20
+            max_attempts = 50
             for _ in range(max_attempts):
                 line_width = longest_line_chars * font_size * char_width_factor
-                line_height = font_size * 1.2
+                line_height = font_size * config.line_spacing
                 total_h = len(lines) * line_height + config.box_padding * 2
                 total_w = line_width + config.box_padding * 2
                 
-                if total_w <= max_box_w and total_h <= self.height * 0.4:
+                if total_w <= max_box_w and total_h <= self.height * 0.35:
                     break
-                font_size = max(config.min_font_size, font_size - 2)
+                font_size = max(config.min_font_size, font_size - 1)
                 if font_size <= config.min_font_size:
                     break
         
-        line_height = font_size * 1.2
+        line_height = font_size * config.line_spacing
         total_text_height = len(lines) * line_height
-        max_line_width = max(len(line) for line in lines) * font_size * 0.55
+        max_line_width = max(len(line) for line in lines) * font_size * 0.62
         
         padding = config.box_padding
-        box_w = min(max_line_width + padding * 2, max_box_w)
+        box_w = min(max(max_line_width, self.width * 0.25) + padding * 2, max_box_w)
         box_h = total_text_height + padding * 2
         
         # ---- Position + Slide-In Animation ----
@@ -713,6 +810,10 @@ class GPUBatchRenderer:
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
         
+        # Radius als Faktor der kleineren Box-Haelfte (0.0 - 0.5)
+        min_half_size = min(scaled_box_w, scaled_box_h) / 2.0
+        radius_factor = min(0.45, config.box_radius / min_half_size) if min_half_size > 1 else 0.15
+        self._box_prog["u_radius"].value = radius_factor
         self._box_prog["u_resolution"].value = (self.width, self.height)
         self._box_vbo.write(box_data.tobytes())
         self._box_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=1)
@@ -724,21 +825,23 @@ class GPUBatchRenderer:
             config.font_color[2] / 255.0,
         )
         
-        text_y = scaled_box_y + padding * scale + (total_text_height * scale) / 2.0 - (line_height * scale) / 2.0
+        # Text vertikal in der Box zentrieren
+        text_block_height = len(lines) * line_height * scale
+        text_start_y = scaled_box_y + (scaled_box_h - text_block_height) / 2.0 + line_height * scale * 0.15
         
         # ---- Glow-Pulse ----
-        glow_intensity = 0.15
+        glow_intensity = 0.25
         if config.glow_pulse:
             pulse = np.sin(fade_in_progress * np.pi) * config.glow_pulse_intensity
-            glow_intensity = 0.15 + pulse
+            glow_intensity = 0.25 + pulse
         
         for i, line in enumerate(lines):
-            line_y = text_y + i * line_height * scale + slide_offset_y
+            line_y = text_start_y + i * line_height * scale
             
-            # Alignment
-            line_w_approx = len(line) * font_size * 0.55 * scale
+            # Alignment mit korrekter Breitenberechnung
+            line_w_approx = len(line) * font_size * 0.62 * scale
             if config.text_align == "center":
-                line_x = self.width / 2.0 + slide_offset_x
+                line_x = scaled_box_x + scaled_box_w / 2.0
             elif config.text_align == "right":
                 line_x = scaled_box_x + scaled_box_w - padding * scale - line_w_approx / 2.0
             else:  # left
@@ -757,7 +860,7 @@ class GPUBatchRenderer:
                 alpha=line_alpha,
                 align="center" if config.text_align == "center" else "left",
                 glow=glow_intensity,
-                glow_color=text_color,
+                glow_color=text_color,  # Glow in Textfarbe fuer weichen Halo
                 smoothing=0.25,
             )
         

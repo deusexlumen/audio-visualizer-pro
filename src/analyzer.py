@@ -85,7 +85,7 @@ class AudioAnalyzer:
                     loaded_data[k] = val
             return AudioFeatures(**loaded_data)
         
-        total_steps = 8
+        total_steps = 9
         step = 0
         
         # Audio laden

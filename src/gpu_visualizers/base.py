@@ -115,7 +115,8 @@ vec3 chromaColor(vec3 chroma, float sat, float val) {
     float strength = max(max(chroma[0], chroma[1]), max(max(chroma[2], chroma[3]),
                       max(max(chroma[4], chroma[5]), max(max(chroma[6], chroma[7]),
                       max(max(chroma[8], chroma[9]), max(chroma[10], chroma[11]))))));
-    return hsv2rgb(vec3(hue, sat + 0.3 * strength, val + 0.4 * strength));
+    // Gedämpfte, elegante Farben
+    return hsv2rgb(vec3(hue, sat + 0.15 * strength, val + 0.2 * strength));
 }
 
 vec3 applyChromaticAberration(sampler2D tex, vec2 uv, float amount) {

@@ -41,9 +41,22 @@ class TestGeminiIntegration:
                 tmp_path = tmp.name
             
             try:
+                # Mock FileState fuer ACTIVE-Check
+                mock_active_state = Mock()
+                mock_active_state.name = "ACTIVE"
+                mock_processing_state = Mock()
+                mock_processing_state.name = "PROCESSING"
+                mock_types = Mock()
+                mock_types.FileState.ACTIVE = mock_active_state
+                mock_types.FileState.PROCESSING = mock_processing_state
+                mock_genai.types = mock_types
+                
                 mock_client = Mock()
                 mock_file = Mock()
+                mock_file.state = mock_active_state
+                mock_file.name = "files/test-audio"
                 mock_client.files.upload.return_value = mock_file
+                mock_client.files.get.return_value = mock_file
                 
                 mock_response = Mock()
                 mock_response.text = "  Das ist ein Test-Transkript.  "
@@ -71,9 +84,22 @@ class TestGeminiIntegration:
                 tmp_path = tmp.name
             
             try:
+                # Mock FileState fuer ACTIVE-Check
+                mock_active_state = Mock()
+                mock_active_state.name = "ACTIVE"
+                mock_processing_state = Mock()
+                mock_processing_state.name = "PROCESSING"
+                mock_types = Mock()
+                mock_types.FileState.ACTIVE = mock_active_state
+                mock_types.FileState.PROCESSING = mock_processing_state
+                mock_genai.types = mock_types
+                
                 mock_client = Mock()
                 mock_file = Mock()
+                mock_file.state = mock_active_state
+                mock_file.name = "files/test-audio"
                 mock_client.files.upload.return_value = mock_file
+                mock_client.files.get.return_value = mock_file
                 
                 mock_response = Mock()
                 mock_response.text = '[{"text": "Hello world", "start_time": 10.5, "end_time": 15.2, "confidence": 0.9}]'
@@ -103,8 +129,22 @@ class TestGeminiIntegration:
                 tmp_path = tmp.name
             
             try:
+                # Mock FileState fuer ACTIVE-Check
+                mock_active_state = Mock()
+                mock_active_state.name = "ACTIVE"
+                mock_processing_state = Mock()
+                mock_processing_state.name = "PROCESSING"
+                mock_types = Mock()
+                mock_types.FileState.ACTIVE = mock_active_state
+                mock_types.FileState.PROCESSING = mock_processing_state
+                mock_genai.types = mock_types
+                
                 mock_client = Mock()
-                mock_client.files.upload.return_value = Mock()
+                mock_file = Mock()
+                mock_file.state = mock_active_state
+                mock_file.name = "files/test-audio"
+                mock_client.files.upload.return_value = mock_file
+                mock_client.files.get.return_value = mock_file
                 
                 mock_response = Mock()
                 mock_response.text = '[{"text": "Zweites", "start_time": 20.0, "end_time": 25.0, "confidence": 0.8}, {"text": "Erstes", "start_time": 5.0, "end_time": 10.0, "confidence": 0.9}]'

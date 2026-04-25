@@ -78,6 +78,12 @@ class SmartMatcher:
         'liquid_blobs': 'Organische, fließende Formen für sanfte Übergänge',
         'neon_wave_circle': 'Wellenförmige Kreise für dynamischen Mix',
         'frequency_flower': 'Blumen-artiges Frequenzmuster für melodische Stücke',
+        'speech_focus': 'Diskrete Wellenform für Sprach-Content ohne Ablenkung',
+        'voice_flow': 'Sanfte Stimm-Atmung für Podcasts und Gespräche',
+        'bass_temple': 'Tiefe Bass-Resonanz für kraftvolle Musik',
+        'lumina_core': 'Subtiler Leuchtkern für elegante Visuals',
+        'spectrum_genesis': 'Fein aufgelöstes Spektrum für detailreiche Musik',
+        'orchestral_swell': 'Orchestrale Dynamik für filmische Stimmungen',
     }
     
     def __init__(self):
@@ -187,6 +193,9 @@ class SmartMatcher:
         
         if mode == 'speech':
             # Podcast / Sprache – Sub-Genre-Erkennung
+            # WICHTIG: Für Speech NUR dezente, podcast-optimierte Visualizer nutzen.
+            # Nie pulsing_core, particle_swarm, spectrum_bars etc. – die wirken im
+            # Sprach-Modus wie "Kinderdisko" und lenken vom Content ab.
             if rms_mean < 0.25 and dynamic_range < 0.3:
                 # News: Sehr gleichmäßig, monoton, ein Sprecher
                 visualizer = 'typographic'
@@ -195,22 +204,22 @@ class SmartMatcher:
                 params = {'text_size': 56, 'animation_speed': 0.15, 'bar_width': 4, 'bar_spacing': 2}
             elif dynamic_range < 0.55:
                 # Interview: Zwei Sprecher, moderate Dynamik, Pausen
-                visualizer = 'liquid_blobs'
-                reason = 'Interview-Format erkannt: Gesprächiger Wechsel, moderate Dynamik – fließende Formen unterstreichen den Dialog.'
+                visualizer = 'voice_flow'
+                reason = 'Interview-Format erkannt: Gesprächiger Wechsel, moderate Dynamik – sanfte Stimm-Atmung unterstreicht den Dialog.'
                 confidence = 0.85
-                params = {'blob_count': 5, 'fluidity': 0.6}
+                params = {'flow_intensity': 0.5, 'smoothness': 0.8}
             elif dynamic_range > 0.85:
                 # Story: Viel Dynamik, Soundeffekte, Einspieler
-                visualizer = 'sacred_mandala'
-                reason = 'Storytelling erkannt: Hohe Dynamik, atmosphärische Passagen – meditative Mandalas fangen die Stimmung ein.'
+                visualizer = 'speech_focus'
+                reason = 'Storytelling erkannt: Hohe Dynamik, atmosphärische Passagen – diskrete Wellenform fängt die Stimmung ein.'
                 confidence = 0.88
-                params = {'rotation_speed': 0.15, 'layer_count': 7}
+                params = {'wave_scale': 0.6, 'reactive_intensity': 0.4}
             else:
-                # Mixed/Allround Podcast
-                visualizer = 'pulsing_core'
-                reason = 'Allround-Sprach-Content – sanftes Pulsen gibt visuelles Feedback ohne Ablenkung.'
-                confidence = 0.75
-                params = {'pulse_intensity': 0.6, 'glow_radius': 80}
+                # Mixed/Allround Podcast – sicherster Default
+                visualizer = 'voice_flow'
+                reason = 'Allround-Sprach-Content – sanfte Stimm-Atmung gibt visuelles Feedback ohne Ablenkung.'
+                confidence = 0.78
+                params = {'flow_intensity': 0.5, 'smoothness': 0.8}
         
         elif mode == 'music':
             # Musik

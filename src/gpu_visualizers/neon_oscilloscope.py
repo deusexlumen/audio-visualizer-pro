@@ -256,9 +256,9 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
             base_hue = dominant / 12.0
         else:
             base_hue = 0.5
-        neon_color = self._hsv_to_rgb(base_hue, 0.9, 1.0)
+        neon_color = self._hsv_to_rgb(base_hue, 0.35, 0.7)
         secondary_hue = (base_hue + 0.5) % 1.0
-        secondary_color = self._hsv_to_rgb(secondary_hue, 0.8, 1.0)
+        secondary_color = self._hsv_to_rgb(secondary_hue, 0.35, 0.7)
 
         # --- Wellenform generieren und in History speichern ---
         waveform = self._generate_waveform(float(frame_idx), rms, spectral)
