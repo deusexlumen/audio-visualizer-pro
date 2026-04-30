@@ -412,4 +412,4 @@ class GPUTextRenderer:
         self._prog["u_atlas_size"].value = (self.atlas.atlas_width, self.atlas.atlas_height)
         
         self._vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_idx)
-        self.ctx.disable(moderngl.BLEND)
+        # Blending wird vom Aufrufer verwaltet (State-Machine-Sicherheit)

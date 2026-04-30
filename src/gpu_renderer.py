@@ -1006,6 +1006,12 @@ class GPUBatchRenderer:
         self._box_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=1)
         
         # === Text rendern ===
+        # Blending explizit erzwingen vor dem Text-Pass.
+        # Vorhergehende Post-Process-/FBO-Passes koennten GL_BLEND
+        # oder die Blend-Funktion ueberschrieben haben.
+        self.ctx.enable(moderngl.BLEND)
+        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+        
         text_color = (
             config.font_color[0] / 255.0,
             config.font_color[1] / 255.0,
