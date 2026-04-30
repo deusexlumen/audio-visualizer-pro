@@ -78,9 +78,48 @@ def cleanup_stale_uploads(max_age_days: int = 7):
                     print(f"[Cleanup] Fehler beim Löschen von {file_path}: {e}")
 
 
-# Asset-Verzeichnisse anlegen und veraltete Dateien aufräumen
+def _restore_uploaded_assets():
+    """
+    Stellt hochgeladene Assets aus den persistenten Verzeichnissen
+    in den Streamlit Session-State wieder her.
+    Wird bei jedem App-Start/Refresh aufgerufen.
+    """
+    # Audio wiederherstellen
+    if not st.session_state.get("audio_path"):
+        audio_dir = ASSET_DIRS["audio"]
+        if audio_dir.exists():
+            audio_files = sorted(
+                [f for f in audio_dir.iterdir() if f.is_file()],
+                key=lambda f: f.stat().st_mtime,
+                reverse=True
+            )
+            if audio_files:
+                newest = audio_files[0]
+                st.session_state["audio_path"] = str(newest)
+                # Versuche den Dateinamen aus dem Pfad zu rekonstruieren
+                st.session_state["audio_name"] = newest.name
+                st.session_state["audio_size"] = newest.stat().st_size
+                print(f"[Restore] Audio wiederhergestellt: {newest}")
+
+    # Hintergrundbild wiederherstellen
+    if not st.session_state.get("bg_image_path"):
+        bg_dir = ASSET_DIRS["backgrounds"]
+        if bg_dir.exists():
+            bg_files = sorted(
+                [f for f in bg_dir.iterdir() if f.is_file()],
+                key=lambda f: f.stat().st_mtime,
+                reverse=True
+            )
+            if bg_files:
+                newest = bg_files[0]
+                st.session_state["bg_image_path"] = str(newest)
+                print(f"[Restore] Hintergrundbild wiederhergestellt: {newest}")
+
+
+# Asset-Verzeichnisse anlegen, veraltete Dateien aufräumen und Session-State wiederherstellen
 _ensure_asset_dirs()
 cleanup_stale_uploads()
+_restore_uploaded_assets()
 
 
 # Seiten-Config
@@ -964,6 +1003,12 @@ def render_start_page():
         st.session_state["audio_size"] = getattr(uploaded_file, 'size', 0)
         st.session_state["file_id"] = file_id
         st.session_state["current_temp_audio_key"] = temp_audio_key
+    elif st.session_state.get("audio_path"):
+        # Audio wurde bereits hochgeladen und ist im Session-State (z.B. nach Refresh)
+        audio_path = st.session_state["audio_path"]
+        ext = audio_path.split(".")[-1] if "." in audio_path else "mp3"
+        st.audio(audio_path, format=f'audio/{ext}')
+        st.info(f"🎵 Audio geladen: {st.session_state.get('audio_name', 'Unbekannt')}")
         st.session_state["current_features_key"] = features_key
 
         # Features nur einmal analysieren und cachen
@@ -1495,6 +1540,9 @@ def render_visualizer_page():
                     f.write(uploaded_bg.getvalue())
                 st.session_state["bg_image_path"] = str(user_bg_path)
                 st.image(str(user_bg_path), caption="Hintergrundbild-Vorschau", width='stretch')
+            elif st.session_state.get("bg_image_path"):
+                # Hintergrundbild ist im Session-State (z.B. nach Refresh)
+                st.image(st.session_state["bg_image_path"], caption="Hintergrundbild-Vorschau", width='stretch')
 
             bg_blur = st.slider("🔮 Blur (Weichzeichnung)", 0.0, 20.0,
                                 st.session_state.get("bg_blur", 0.0), 0.5,
