@@ -11,6 +11,7 @@ Neu in v2.0:
 
 import librosa
 import numpy as np
+import scipy.signal.windows
 import hashlib
 import subprocess
 import tempfile
@@ -64,7 +65,7 @@ class AudioAnalyzer:
                     hasher.update(f.read())  # Letzte 1MB
         except Exception:
             pass
-        hasher.update(f"_{fps}_v4".encode())
+        hasher.update(f"_{fps}_v5".encode())
         return self.cache_dir / f"{hasher.hexdigest()}.npz"
     
     def _progress(self, msg: str, step: int, total: int, callback: Optional[Callable] = None):
@@ -155,29 +156,38 @@ class AudioAnalyzer:
         n_fft = 2048
         expected_frames = int(duration * fps)
         
-        # Gemeinsamer STFT für Frequenz-basierte Features
-        self._progress("STFT Berechnung...", step := step + 1, total_steps, progress_callback)
-        stft = np.abs(librosa.stft(y, hop_length=hop_length, n_fft=n_fft))
+        # === Pre-Emphasis Filter (0.97) ===
+        # Hebt hochfrequente Anteile (Konsonanten, S-Laute) fuer Sprach-Analyse an
+        y = np.copy(y)
+        y[1:] -= 0.97 * y[:-1]
         
-        # RMS
+        # === Windowing: Blackman-Harris zur Minimierung von Spectral Leakage ===
+        window = scipy.signal.windows.blackmanharris(n_fft)
+        
+        # Gemeinsamer STFT fuer Frequenz-basierte Features (mit explizitem Window)
+        self._progress("STFT Berechnung...", step := step + 1, total_steps, progress_callback)
+        stft_complex = librosa.stft(y, hop_length=hop_length, n_fft=n_fft, window=window)
+        stft = np.abs(stft_complex)
+        
+        # RMS (Zeitbereich, profitiert trotzdem vom Pre-Emphasis)
         self._progress("Berechne Lautstaerke...", step := step + 1, total_steps, progress_callback)
         rms = librosa.feature.rms(y=y, hop_length=hop_length, frame_length=n_fft)[0]
         rms = self._normalize(rms)
         
-        # Onset
+        # Onset (aus bereits windowed Power-Spektrogramm fuer Konsistenz)
         self._progress("Erkenne Beats...", step := step + 1, total_steps, progress_callback)
-        onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
+        onset_env = librosa.onset.onset_strength(S=stft**2, sr=sr)
         onset = self._normalize(onset_env)
         
-        # Spektrale Features
+        # Spektrale Features (aus bereits windowed STFT)
         self._progress("Analysiere Spektrum...", step := step + 1, total_steps, progress_callback)
-        spec_cent = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop_length)[0]
-        spec_roll = librosa.feature.spectral_rolloff(y=y, sr=sr, hop_length=hop_length)[0]
+        spec_cent = librosa.feature.spectral_centroid(S=stft, sr=sr)[0]
+        spec_roll = librosa.feature.spectral_rolloff(S=stft, sr=sr)[0]
         zcr = librosa.feature.zero_crossing_rate(y=y, hop_length=hop_length)[0]
         
-        # Chroma
+        # Chroma (aus bereits windowed STFT)
         self._progress("Erkenne Tonart...", step := step + 1, total_steps, progress_callback)
-        chroma = librosa.feature.chroma_stft(y=y, sr=sr, hop_length=hop_length, n_fft=n_fft)
+        chroma = librosa.feature.chroma_stft(S=stft, sr=sr)
         
         # NEU: Transient-Detection (fuer Kick/Snare)
         self._progress("Erkenne Transienten...", step := step + 1, total_steps, progress_callback)
