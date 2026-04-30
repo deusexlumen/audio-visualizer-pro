@@ -54,5 +54,8 @@ Thumbs.db
 # Logs
 *.log
 
+# Debug-Screenshots
+debug_step*.png
+
 # Secrets
 .env
