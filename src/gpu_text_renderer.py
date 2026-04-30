@@ -244,7 +244,6 @@ class GPUTextRenderer:
             fragment_shader="""
             #version 330
             uniform sampler2D u_atlas;
-            uniform vec2 u_atlas_size;
             uniform float u_smoothing;
             uniform float u_glow;
             uniform vec3 u_glow_color;
@@ -407,10 +406,6 @@ class GPUTextRenderer:
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
         self._instance_vbo.write(self._instance_data[:instance_idx].tobytes())
-        
-        # Atlas-Größe für Shadow-Offset-Berechnung
-        self._prog["u_atlas_size"].value = (self.atlas.atlas_width, self.atlas.atlas_height)
-        
         self._vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_idx)
         # Blending wird vom Aufrufer verwaltet (State-Machine-Sicherheit)
 
