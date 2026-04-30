@@ -152,6 +152,81 @@ class GeminiIntegration:
             max_workers=2, thread_name_prefix="gemini_"
         )
 
+    # -------------------------------------------------------------------------
+    # Retry-Wrapper fuer alle Gemini API-Calls
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _is_retryable_error(error: Exception) -> bool:
+        """Prueft, ob ein Fehler retry-bar ist (429, 503, Rate-Limit, etc.)."""
+        error_str = str(error).lower()
+        retry_indicators = [
+            "429", "503", "408", "504",
+            "too many requests", "rate limit", "quota",
+            "unavailable", "high demand", "overloaded",
+            "deadline exceeded", "timeout", "temporary",
+            "connection", "reset", "refused",
+        ]
+        return any(ind in error_str for ind in retry_indicators)
+
+    def _call_gemini_with_retry(self, call_fn, max_retries: int = 5, base_delay: float = 2.0):
+        """
+        Fuehrt einen Gemini API-Call mit Exponential Backoff aus.
+
+        Args:
+            call_fn: Callable, die den API-Call durchfuehrt (keine Argumente).
+            max_retries: Maximale Anzahl Versuche (inkl. erster Versuch).
+            base_delay: Basis-Wartezeit in Sekunden (verdoppelt sich pro Retry).
+
+        Returns:
+            Das Ergebnis von call_fn().
+
+        Raises:
+            RuntimeError: Wenn alle Versuche fehlschlagen.
+        """
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                return call_fn()
+            except Exception as e:
+                last_error = e
+                if not self._is_retryable_error(e):
+                    # Nicht retry-barer Fehler -> sofort weiterwerfen
+                    raise
+
+                if attempt < max_retries:
+                    wait_time = base_delay * (2 ** (attempt - 1))  # 2s, 4s, 8s, 16s
+                    print(
+                        f"[Gemini] Retry {attempt}/{max_retries} nach Fehler: {e}. "
+                        f"Warte {wait_time}s..."
+                    )
+                    time.sleep(wait_time)
+                else:
+                    print(f"[Gemini] Alle {max_retries} Versuche fehlgeschlagen: {e}")
+
+        raise RuntimeError(
+            f"Gemini API nach {max_retries} Versuchen nicht erreichbar. "
+            f"Letzter Fehler: {last_error}"
+        )
+
+    @staticmethod
+    def _load_default_config() -> dict:
+        """Laedt die Default-Config als Fallback bei API/Parsing-Fehlern."""
+        default_path = Path(__file__).parent.parent / "config" / "default.json"
+        try:
+            with open(default_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            return {
+                "params": cfg.get("visual", {}).get("params", {}),
+                "colors": cfg.get("visual", {}).get("colors", {}),
+                "postprocess": cfg.get("postprocess", {}),
+                "background": {"opacity": 0.3, "blur": 0.0, "vignette": 0.0},
+                "quotes": {},
+            }
+        except Exception as e:
+            print(f"[Gemini] Konnte default.json nicht laden: {e}")
+            return {}
+
     def shutdown(self):
         """Faehrt den internen ThreadPool sauber herunter."""
         self._executor.shutdown(wait=True)
@@ -272,13 +347,12 @@ class GeminiIntegration:
                 "Gib nur den gesprochenen Text aus, keine zusätzlichen Kommentare."
             )
 
-            try:
-                response = self.client.models.generate_content(
+            response = self._call_gemini_with_retry(
+                lambda: self.client.models.generate_content(
                     model=self.model,
                     contents=[prompt, uploaded_file]
                 )
-            except Exception as e:
-                raise RuntimeError(f"Transkription durch Gemini fehlgeschlagen: {e}") from e
+            )
 
             return response.text.strip()
         except (FileNotFoundError, RuntimeError):
@@ -353,37 +427,20 @@ class GeminiIntegration:
             Wichtig: Die Zeitangaben muessen realistisch sein. Ein typisches Zitat dauert 3-8 Sekunden.
             """
 
-            # Retry mit Exponential Backoff bei 503/UEBERLASTET
-            last_error = None
-            for attempt in range(3):
-                try:
-                    response = self.client.models.generate_content(
-                        model=self.model,
-                        contents=[prompt, uploaded_file],
-                        config={
-                            "response_mime_type": "application/json",
-                        }
-                    )
-                    break
-                except Exception as e:
-                    last_error = e
-                    error_str = str(e).lower()
-                    # 503 oder "high demand" oder "unavailable" -> retry
-                    if "503" in str(e) or "unavailable" in error_str or "high demand" in error_str:
-                        wait_time = 2 * (attempt + 1)
-                        print(f"[Gemini] 503 Ueberlastet, Versuch {attempt + 1}/3. Warte {wait_time}s...")
-                        time.sleep(wait_time)
-                        continue
-                    # Andere Fehler sofort weitergeben
-                    raise RuntimeError(f"Zitat-Extraktion durch Gemini fehlgeschlagen: {e}") from e
-            else:
-                # Alle 3 Versuche fehlgeschlagen
-                raise RuntimeError(
-                    f"Gemini ist nach 3 Versuchen weiterhin nicht erreichbar (503 UNAVAILABLE). "
-                    f"Bitte versuche es in ein paar Minuten erneut oder fuege Zitate manuell hinzu."
+            response = self._call_gemini_with_retry(
+                lambda: self.client.models.generate_content(
+                    model=self.model,
+                    contents=[prompt, uploaded_file],
+                    config={
+                        "response_mime_type": "application/json",
+                    }
                 )
+            )
 
             quotes_data = self._parse_json_response(response.text)
+            if not isinstance(quotes_data, list):
+                print(f"[Gemini] Zitat-Antwort war kein Array (Typ: {type(quotes_data).__name__}), verwende leere Liste")
+                quotes_data = []
 
             quotes = []
             for q in quotes_data:
@@ -454,21 +511,24 @@ class GeminiIntegration:
             - Antworte NUR mit JSON, keine Erklaerungen
             """
             
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=[prompt],
-                config={
-                    "response_mime_type": "application/json",
-                }
+            response = self._call_gemini_with_retry(
+                lambda: self.client.models.generate_content(
+                    model=self.model,
+                    contents=[prompt],
+                    config={
+                        "response_mime_type": "application/json",
+                    }
+                )
             )
-            
+
             optimized = self._parse_json_response(response.text)
-            
+
             # Validiere und filtere nur bekannte Parameter
             if isinstance(optimized, dict):
                 return {k: v for k, v in optimized.items() if k in current_params}
+            print(f"[Gemini] Parameter-Antwort ungueltig (Typ: {type(optimized).__name__}), verwende aktuelle Parameter")
             return current_params
-            
+
         except Exception as e:
             print(f"[Gemini] Parameter-Optimierung fehlgeschlagen: {e}")
             return current_params
@@ -740,16 +800,18 @@ WICHTIGE HINWEISE:
             if user_prompt:
                 prompt += f"\nZusaetzlicher User-Wunsch: {user_prompt}\n"
             
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=[prompt],
-                config={
-                    "response_mime_type": "application/json",
-                }
+            response = self._call_gemini_with_retry(
+                lambda: self.client.models.generate_content(
+                    model=self.model,
+                    contents=[prompt],
+                    config={
+                        "response_mime_type": "application/json",
+                    }
+                )
             )
-            
+
             optimized = self._parse_json_response(response.text)
-            
+
             default_quotes = {
                 "font_size": 52, "box_color": "#1a1a2e", "font_color": "#FFFFFF",
                 "position": "bottom", "display_duration": 8.0, "auto_scale_font": True,
@@ -759,9 +821,19 @@ WICHTIGE HINWEISE:
                 "fade_duration": 0.6, "line_spacing": 1.35, "max_font_size": 72,
                 "max_chars_per_line": 40,
             }
-            
+
             if not isinstance(optimized, dict):
-                print("[Gemini] KI-Antwort war kein Dictionary, verwende Fallback")
+                print(f"[Gemini] KI-Antwort war kein Dictionary (Typ: {type(optimized).__name__}), verwende Fallback")
+                # Versuche default.json zu laden und mit internem Fallback zu mergen
+                cfg_fallback = self._load_default_config()
+                if cfg_fallback:
+                    return {
+                        "params": cfg_fallback.get("params", default_result["params"]),
+                        "colors": cfg_fallback.get("colors", default_result["colors"]),
+                        "postprocess": {**default_result["postprocess"], **cfg_fallback.get("postprocess", {})},
+                        "background": default_result["background"],
+                        "quotes": default_result["quotes"],
+                    }
                 return default_result
             
             # === PARAM CLAMPING ===
@@ -805,6 +877,16 @@ WICHTIGE HINWEISE:
             
         except Exception as e:
             print(f"[Gemini] All-Settings-Optimierung fehlgeschlagen: {e}, verwende Fallback")
+            # Versuche default.json zu laden und mit internem Fallback zu mergen
+            cfg_fallback = self._load_default_config()
+            if cfg_fallback:
+                return {
+                    "params": cfg_fallback.get("params", default_result["params"]),
+                    "colors": cfg_fallback.get("colors", default_result["colors"]),
+                    "postprocess": {**default_result["postprocess"], **cfg_fallback.get("postprocess", {})},
+                    "background": default_result["background"],
+                    "quotes": default_result["quotes"],
+                }
             return default_result
 
     def generate_background_prompt(self, audio_features: dict) -> str:
@@ -858,31 +940,66 @@ WICHTIGE HINWEISE:
             Maximal 80 Woerter. Keine Anfuehrungszeichen am Anfang/Ende.
             """
             
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=[prompt]
+            response = self._call_gemini_with_retry(
+                lambda: self.client.models.generate_content(
+                    model=self.model,
+                    contents=[prompt]
+                )
             )
-            
+
             return response.text.strip().strip('"').strip("'")
-            
+
         except Exception as e:
             print(f"[Gemini] Bild-Prompt-Generierung fehlgeschlagen: {e}")
             return "abstract ambient background with soft gradients and atmospheric lighting, cinematic color grading, minimal composition, 8k quality"
 
     @staticmethod
     def _parse_json_response(text: str):
-        """Hilfsmethode: Extrahiert JSON aus der API-Antwort."""
+        """Hilfsmethode: Extrahiert JSON aus der API-Antwort.
+
+        Bei komplettem Parsing-Fehler wird None zurueckgegeben (nicht []),
+        damit der Aufrufer zwischen "leeres Array" und "ungueltige Antwort"
+        unterscheiden kann.
+        """
+        if not text or not text.strip():
+            print("[Gemini] API-Antwort war leer")
+            return None
+
+        text = text.strip()
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            try:
-                # Fallback: Versuche JSON aus Markdown-Code-Blöcken zu extrahieren
-                if "```json" in text:
-                    json_str = text.split("```json")[1].split("```")[0].strip()
-                elif "```" in text:
-                    json_str = text.split("```")[1].split("```")[0].strip()
-                else:
-                    json_str = text
-                return json.loads(json_str)
-            except (json.JSONDecodeError, IndexError, ValueError):
-                return []
+            pass
+
+        # Fallback 1: JSON aus Markdown-Code-Bloecken extrahieren
+        try:
+            if "```json" in text:
+                json_str = text.split("```json")[1].split("```")[0].strip()
+            elif "```" in text:
+                json_str = text.split("```")[1].split("```")[0].strip()
+            else:
+                json_str = text
+            return json.loads(json_str)
+        except (json.JSONDecodeError, IndexError, ValueError):
+            pass
+
+        # Fallback 2: Suche nach dem ersten { und letzten }
+        try:
+            start = text.find("{")
+            end = text.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                return json.loads(text[start:end + 1])
+        except json.JSONDecodeError:
+            pass
+
+        # Fallback 3: Suche nach dem ersten [ und letzten ]
+        try:
+            start = text.find("[")
+            end = text.rfind("]")
+            if start != -1 and end != -1 and end > start:
+                return json.loads(text[start:end + 1])
+        except json.JSONDecodeError:
+            pass
+
+        print(f"[Gemini] JSON-Parsing fehlgeschlagen. Antwort (erste 200 Zeichen): {text[:200]!r}")
+        return None

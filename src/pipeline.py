@@ -44,71 +44,84 @@ class RenderPipeline:
             )
             self.quote_overlay = QuoteOverlayRenderer(config.quotes, overlay_cfg)
         
-    def run(self, preview_mode: bool = False, preview_duration: float = 5.0):
+    def run(self, preview_mode: bool = False, preview_duration: float = 5.0,
+            cancel_event=None):
         """
         Führt die komplette Pipeline aus.
-        
+
         Args:
             preview_mode: Rendert nur erste N Sekunden für schnelles Testen
             preview_duration: Dauer der Vorschau in Sekunden
+            cancel_event: Optional threading.Event fuer User-Abbruch.
         """
         audio_path = Path(self.config.audio_file)
         if not audio_path.exists():
             raise FileNotFoundError(f"Audio nicht gefunden: {audio_path}")
-        
+
         # Schritt 1: Analyse (oder Cache laden)
         features = self.analyzer.analyze(
-            str(audio_path), 
+            str(audio_path),
             fps=self.config.visual.fps
         )
-        
+
         print(f"[Pipeline] Audio: {features.duration:.1f}s @ {features.tempo:.0f} BPM")
         print(f"[Pipeline] Mode: {features.mode}, Key: {features.key}")
-        
+
         # Schritt 2: Visualizer initialisieren
         VisualizerRegistry.autoload()  # Lade alle Plugins
         visualizer_class = VisualizerRegistry.get(self.config.visual.type)
         visualizer = visualizer_class(self.config.visual, features)
         visualizer.setup()
-        
+
         # Schritt 3: Rendering
         if preview_mode:
             print(f"[Pipeline] PREVIEW MODE: Nur erste {preview_duration} Sekunden")
             features.frame_count = int(preview_duration * features.fps)
-        
+
         # Frame-Index fuer Quote-Buffer bauen (O(1) Lookups im Render-Loop)
         if self.quote_overlay is not None:
             self.quote_overlay.build_frame_index(features.frame_count, features.fps)
-        
-        self._render_video(visualizer, features, audio_path)
-        
+
+        self._render_video(visualizer, features, audio_path, cancel_event=cancel_event)
+
         print(f"[Pipeline] Fertig! Output: {self.config.output_file}")
     
-    def _render_video(self, visualizer, features: AudioFeatures, audio_path: Path):
-        """Intern: Frame-Generierung + FFmpeg-Encoding."""
-        
+    def _render_video(self, visualizer, features: AudioFeatures, audio_path: Path,
+                      cancel_event=None):
+        """Intern: Frame-Generierung + FFmpeg-Encoding.
+
+        Args:
+            visualizer: Der zu verwendende Visualizer.
+            features: AudioFeatures fuer die Frame-Generierung.
+            audio_path: Pfad zur Audio-Datei fuer das Muxing.
+            cancel_event: Optional threading.Event fuer User-Abbruch.
+        """
+        import threading
+
         # Temporäre Datei für Video (ohne Audio)
         temp_video = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
         temp_video.close()
-        
+
         # Temporäre Datei für FFmpeg stderr (verhindert Blockieren bei langen Videos)
         stderr_file = tempfile.NamedTemporaryFile(mode='w', suffix='.log', delete=False)
         stderr_file.close()
+        stderr_handle = None
         process = None
-        
+        cancelled = False
+
         try:
             # FFmpeg-Writer über subprocess
             fps = features.fps
             width, height = self.config.visual.resolution
-            
+
             # FFmpeg-Befehl für Video-Encoding
             preset = 'ultrafast' if self.config.turbo_mode else 'medium'
             crf = '28' if self.config.turbo_mode else '23'
-            
+
             # Frame-Skip: Wir rendern nur jeden N-ten Frame
             frame_skip = max(1, self.config.frame_skip)
             input_fps = fps / frame_skip
-            
+
             ffmpeg_cmd = [
                 'ffmpeg', '-y',
                 '-f', 'rawvideo',
@@ -125,29 +138,36 @@ class RenderPipeline:
                 '-movflags', '+faststart',
                 temp_video.name
             ]
-            
+
             print(f"[Pipeline] Starte Rendering ({features.frame_count} Frames @ {fps}fps)...")
-            
+
             # Starte FFmpeg-Prozess (stderr in Datei umleiten)
+            stderr_handle = open(stderr_file.name, 'w')
             process = subprocess.Popen(
                 ffmpeg_cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.DEVNULL,
-                stderr=open(stderr_file.name, 'w')
+                stderr=stderr_handle
             )
-            
+
             # Hintergrundbild vorbereiten (wenn konfiguriert)
             bg_array = None
             if self.config.background_image and Path(self.config.background_image).exists():
                 bg_array = self._prepare_background(width, height)
-            
+
             # Frame-Loop mit Fortschrittsanzeige
             # Progress-Log-Intervall: Bei langen Videos seltener loggen
             total_render_frames = features.frame_count // frame_skip
             log_interval = max(1, total_render_frames // 100)
-            
+
             for render_idx in range(total_render_frames):
                 i = render_idx * frame_skip
+
+                # Cancel-Check: Wenn User abgebrochen hat, sofort raus
+                if cancel_event is not None and cancel_event.is_set():
+                    print("[Pipeline] Render abgebrochen durch User.")
+                    cancelled = True
+                    break
 
                 # === RENDER-LOOP PERFORMANCE-GARANTIE ===
                 # Dieser Loop darf NIEMALS auf Netzwerk-IO oder blockierende
@@ -173,24 +193,25 @@ class RenderPipeline:
 
                 # Direkt zu FFmpeg schreiben (kein Batching - war langsamer)
                 process.stdin.write(frame.tobytes())
-                
+
                 # Fortschritt loggen
                 if render_idx % log_interval == 0 or render_idx == total_render_frames - 1:
                     progress = (render_idx + 1) / total_render_frames * 100
                     print(f"[Pipeline] Rendering: {progress:.1f}% ({render_idx+1}/{total_render_frames} frames, skip={frame_skip})", flush=True)
-            
-            # Schließe stdin und warte auf FFmpeg
-            process.stdin.close()
-            process.wait()
-            
-            if process.returncode != 0:
-                with open(stderr_file.name, 'r') as f:
-                    stderr = f.read().strip() or "Unbekannter Fehler"
-                raise RuntimeError(f"FFmpeg Fehler beim Video-Encoding: {stderr}")
-            
-            # Audio hinzufügen (Muxing)
-            self._mux_audio(temp_video.name, audio_path, self.config.output_file)
-            
+
+            # Schließe stdin und warte auf FFmpeg (nur wenn nicht abgebrochen)
+            if not cancelled:
+                process.stdin.close()
+                process.wait()
+
+                if process.returncode != 0:
+                    with open(stderr_file.name, 'r') as f:
+                        stderr = f.read().strip() or "Unbekannter Fehler"
+                    raise RuntimeError(f"FFmpeg Fehler beim Video-Encoding: {stderr}")
+
+                # Audio hinzufügen (Muxing)
+                self._mux_audio(temp_video.name, audio_path, self.config.output_file)
+
         finally:
             # FFmpeg-Prozess sauber beenden (verhindert Zombies)
             if process is not None and process.poll() is None:
@@ -203,7 +224,15 @@ class RenderPipeline:
                     process.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     process.kill()
-            
+
+            # stderr File-Handle schliessen (verhindert File-Descriptor-Leak)
+            if stderr_handle is not None:
+                try:
+                    stderr_handle.close()
+                except Exception:
+                    pass
+
+            # Temporaere Dateien aufraeumen
             if Path(temp_video.name).exists():
                 Path(temp_video.name).unlink()
             if Path(stderr_file.name).exists():

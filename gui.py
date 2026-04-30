@@ -11,6 +11,7 @@ import os
 import sys
 import time
 import threading
+import queue
 from pathlib import Path
 from datetime import datetime
 
@@ -175,6 +176,12 @@ class AudioVisualizerGUI:
             self.gemini = GeminiIntegration()
         except Exception as e:
             print(f"[GUI] Gemini-Integration nicht verfuegbar: {e}")
+
+        # Thread-sichere Queue fuer Render-Fortschritt
+        self._render_queue = queue.Queue()
+
+        # Cancel-Flag fuer Render-Abbruch (thread-safe)
+        self._cancel_event = threading.Event()
 
     # -------------------------------------------------------------------------
     # UI Setup
@@ -385,6 +392,14 @@ class AudioVisualizerGUI:
                 callback=self._on_render_clicked,
                 width=-1,
                 tag="btn_render",
+            )
+            dpg.add_button(
+                label="⏹ Abbrechen",
+                callback=self._on_cancel_render_clicked,
+                width=-1,
+                tag="btn_cancel_render",
+                enabled=False,
+                show=True,
             )
             dpg.add_progress_bar(
                 default_value=0.0,
@@ -618,7 +633,7 @@ class AudioVisualizerGUI:
     # -------------------------------------------------------------------------
 
     def _on_render_clicked(self, sender, app_data):
-        """Startet den Video-Export im Hintergrund."""
+        """Startet den Video-Export im Hintergrund mit Fortschritts-Updates."""
         if self.state.is_rendering:
             self._set_status("Rendering läuft bereits...")
             return
@@ -630,11 +645,21 @@ class AudioVisualizerGUI:
             return
 
         self.state.is_rendering = True
+        self._cancel_event.clear()
         dpg.configure_item("btn_render", label="⏳ Render läuft...")
+        dpg.configure_item("btn_cancel_render", enabled=True)
         dpg.set_value("render_progress", 0.0)
         self._set_status("Starte Rendering...")
 
+        # Queue leeren vor neuem Render
+        while not self._render_queue.empty():
+            try:
+                self._render_queue.get_nowait()
+            except queue.Empty:
+                break
+
         def _render():
+            output_path = None
             try:
                 w, h = self.state.resolution
                 fps = self.state.render_fps
@@ -644,12 +669,16 @@ class AudioVisualizerGUI:
                 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
                 output_path = str(out_dir / f"visualization_{ts}.mp4")
 
+                def _progress_callback(frame, total):
+                    self._render_queue.put({"type": "progress", "frame": frame, "total": total})
+
                 renderer = GPUBatchRenderer(width=w, height=h, fps=fps)
 
                 renderer.render(
                     audio_path=self.state.audio_path,
                     visualizer_type=self.state.visualizer_type,
                     output_path=output_path,
+                    features=self.state.features,
                     params=self.state.get_params(),
                     background_image=self.state.background_path,
                     background_blur=self.state.bg_blur,
@@ -661,22 +690,77 @@ class AudioVisualizerGUI:
                     viz_offset_x=self.state.viz_offset_x,
                     viz_offset_y=self.state.viz_offset_y,
                     viz_scale=self.state.viz_scale,
+                    progress_callback=_progress_callback,
+                    cancel_event=self._cancel_event,
                 )
 
                 renderer.release()
 
-                self.state.is_rendering = False
-                dpg.set_value("render_progress", 1.0)
-                dpg.configure_item("btn_render", label="▶ Video exportieren")
-                self._set_status(f"Fertig: {output_path}")
+                if self._cancel_event.is_set():
+                    self._render_queue.put({"type": "cancelled"})
+                else:
+                    self._render_queue.put({"type": "done", "path": output_path})
 
             except Exception as e:
-                self.state.is_rendering = False
-                dpg.configure_item("btn_render", label="▶ Video exportieren")
-                dpg.set_value("render_progress", 0.0)
-                self._set_status(f"Render-Fehler: {e}")
+                self._render_queue.put({"type": "error", "message": str(e)})
 
         threading.Thread(target=_render, daemon=True).start()
+
+    def _on_cancel_render_clicked(self, sender, app_data):
+        """Setzt das Cancel-Flag, um den laufenden Render abzubrechen."""
+        if self.state.is_rendering:
+            self._cancel_event.set()
+            self._set_status("Abbruch angefordert...")
+
+    def _poll_render_queue(self):
+        """Verarbeitet Render-Fortschritts-Updates aus der Queue (im Main-Thread)."""
+        if not self.state.is_rendering and self._render_queue.empty():
+            return
+
+        # Alle pending Messages verarbeiten (nicht blockieren)
+        final_msg = None
+        while True:
+            try:
+                msg = self._render_queue.get_nowait()
+                final_msg = msg
+            except queue.Empty:
+                break
+
+        if final_msg is None:
+            return
+
+        msg_type = final_msg.get("type")
+
+        if msg_type == "progress":
+            frame = final_msg["frame"]
+            total = final_msg["total"]
+            progress = frame / total
+            dpg.set_value("render_progress", progress)
+            pct = progress * 100
+            self._set_status(f"Rendering... {pct:.1f}% ({frame}/{total})")
+
+        elif msg_type == "done":
+            self.state.is_rendering = False
+            dpg.configure_item("btn_cancel_render", enabled=False)
+            output_path = final_msg.get("path", "")
+            dpg.set_value("render_progress", 1.0)
+            dpg.configure_item("btn_render", label="▶ Video exportieren")
+            self._set_status(f"Fertig: {output_path}")
+
+        elif msg_type == "cancelled":
+            self.state.is_rendering = False
+            dpg.configure_item("btn_cancel_render", enabled=False)
+            dpg.set_value("render_progress", 0.0)
+            dpg.configure_item("btn_render", label="▶ Video exportieren")
+            self._set_status("Rendering abgebrochen.")
+
+        elif msg_type == "error":
+            self.state.is_rendering = False
+            dpg.configure_item("btn_cancel_render", enabled=False)
+            error_msg = final_msg.get("message", "Unbekannter Fehler")
+            dpg.set_value("render_progress", 0.0)
+            dpg.configure_item("btn_render", label="▶ Video exportieren")
+            self._set_status(f"Render-Fehler: {error_msg}")
 
     # -------------------------------------------------------------------------
     # KI Optimierung
@@ -873,6 +957,7 @@ class AudioVisualizerGUI:
         try:
             while dpg.is_dearpygui_running():
                 self._update_preview()
+                self._poll_render_queue()
                 dpg.render_dearpygui_frame()
         except KeyboardInterrupt:
             pass

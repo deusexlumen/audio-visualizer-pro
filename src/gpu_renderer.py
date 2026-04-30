@@ -84,6 +84,8 @@ class GPUBatchRenderer:
         viz_offset_x: float = 0.0,
         viz_offset_y: float = 0.0,
         viz_scale: float = 1.0,
+        progress_callback=None,
+        cancel_event=None,
     ):
         """Rendert ein Video aus Audio-Analyse auf der GPU.
 
@@ -103,6 +105,8 @@ class GPUBatchRenderer:
             viz_offset_x: Horizontaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
             viz_offset_y: Vertikaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
             viz_scale: Skalierungsfaktor des Visualizers (0.5 bis 2.0).
+            progress_callback: Optionaler Callback(frame, total_frames) fuer Fortschritts-Updates.
+            cancel_event: Optional threading.Event. Wenn gesetzt, wird die Render-Schleife unterbrochen.
         """
         audio_path = str(audio_path)
         output_path = str(output_path)
@@ -202,6 +206,11 @@ class GPUBatchRenderer:
             # Haupt-Render-Loop — IDENTISCH zur Preview (direktes Rendering)
             # Visualizer wird in viz_fbo gerendert und dann mit Offset/Scale geblittet.
             for i in range(frame_count):
+                # Cancel-Check: Wenn User abgebrochen hat, sofort raus
+                if cancel_event is not None and cancel_event.is_set():
+                    print("[GPU] Render abgebrochen durch User.")
+                    break
+
                 time = i / self.fps
                 
                 # --- Einzel-Pass: Direkt in finalen FBO rendern ---
@@ -269,12 +278,15 @@ class GPUBatchRenderer:
                 
                 process.stdin.write(pixels)
 
-                if i % 100 == 0 or i == frame_count - 1:
-                    progress = (i + 1) / frame_count * 100
-                    print(
-                        f"[GPU] {progress:.1f}% ({i + 1}/{frame_count})",
-                        flush=True,
-                    )
+                if i % 10 == 0 or i == frame_count - 1:
+                    if progress_callback:
+                        progress_callback(i + 1, frame_count)
+                    if i % 100 == 0 or i == frame_count - 1:
+                        progress_pct = (i + 1) / frame_count * 100
+                        print(
+                            f"[GPU] {progress_pct:.1f}% ({i + 1}/{frame_count})",
+                            flush=True,
+                        )
 
             # FFmpeg-Input sauber schliessen und warten
             process.stdin.close()
