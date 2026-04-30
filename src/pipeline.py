@@ -39,6 +39,8 @@ class RenderPipeline:
                 position=config.postprocess.get('quote_position', 'bottom'),
                 font_path=config.postprocess.get('quote_font_path', None),
                 text_align=config.postprocess.get('quote_text_align', 'center'),
+                latency_offset=config.postprocess.get('quote_latency_offset', 0.0),
+                buffer_lookahead=config.postprocess.get('quote_buffer_lookahead', 2.0),
             )
             self.quote_overlay = QuoteOverlayRenderer(config.quotes, overlay_cfg)
         
@@ -73,6 +75,10 @@ class RenderPipeline:
         if preview_mode:
             print(f"[Pipeline] PREVIEW MODE: Nur erste {preview_duration} Sekunden")
             features.frame_count = int(preview_duration * features.fps)
+        
+        # Frame-Index fuer Quote-Buffer bauen (O(1) Lookups im Render-Loop)
+        if self.quote_overlay is not None:
+            self.quote_overlay.build_frame_index(features.frame_count, features.fps)
         
         self._render_video(visualizer, features, audio_path)
         
@@ -145,17 +151,19 @@ class RenderPipeline:
                 
                 frame = visualizer.render_frame(i)
                 
-                # Post-Processing anwenden
+                # Post-Processing anwenden (Bloom, Grain, Vignette, Chromatic Aberration, LUT)
                 frame = self.post_processor.apply(frame)
                 
                 # Hintergrundbild kompositieren (NumPy, sehr schnell)
                 if bg_array is not None:
                     frame = self._composite_background_fast(frame, bg_array)
                 
-                # Quote Overlays anwenden (zeitbasiert)
+                # Quote Overlays anwenden (zeitbasiert + frame-synchroner Buffer)
+                # STRIKT NACH allen Post-Processing-Effekten, damit Typografie nicht
+                # von Bloom, Grain oder Chromatic-Aberration verzerrt wird.
                 if self.quote_overlay is not None:
                     frame_time = i / features.fps
-                    frame = self.quote_overlay.apply(frame, frame_time)
+                    frame = self.quote_overlay.apply(frame, frame_time, frame_idx=i)
                 
                 # Direkt zu FFmpeg schreiben (kein Batching - war langsamer)
                 process.stdin.write(frame.tobytes())

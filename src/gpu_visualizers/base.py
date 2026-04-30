@@ -229,6 +229,11 @@ class BaseGPUVisualizer(abc.ABC):
         else:
             result["voice_clarity"] = result["rms"]  # Fallback
 
+        if "voice_band" in features and len(features["voice_band"]) > 0:
+            result["voice_band"] = float(features["voice_band"][frame_idx])
+        else:
+            result["voice_band"] = result.get("voice_clarity", result["rms"])  # Fallback
+
         if "tempo" in features:
             result["tempo"] = float(features["tempo"])
         else:
@@ -264,7 +269,7 @@ class BaseGPUVisualizer(abc.ABC):
                 "u_beat": f["onset"] * 0.3,
                 "u_impact": f.get("transient", f["onset"]) * 0.2,
                 "u_detail": f["spectral_centroid"] * 0.5,
-                "u_flow": f.get("voice_clarity", f["rms"]),  # Podcast: viel Flow
+                "u_flow": f.get("voice_band", f.get("voice_clarity", f["rms"])),  # Podcast: Voice-Band > Voice-Clarity > RMS
                 "u_chroma": f["chroma"],
             }
         else:  # hybrid

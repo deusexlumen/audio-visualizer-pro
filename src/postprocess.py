@@ -107,6 +107,9 @@ class PostProcessor:
         if self.chromatic > 0:
             result = self._apply_chromatic_aberration(result)
         
+        # LUT (Color Lookup Table) anwenden
+        result = self.apply_lut(result)
+        
         return result
     
     def _apply_bloom(self, frame: np.ndarray) -> np.ndarray:

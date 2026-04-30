@@ -35,6 +35,9 @@ class VoiceFlowGPU(BaseGPUVisualizer):
     }
 
     def _setup(self):
+        self._prev_voice = 0.0
+        self._base_alpha = 0.08
+        
         self._prog = self.ctx.program(
             vertex_shader="""
             #version 330
@@ -180,13 +183,32 @@ class VoiceFlowGPU(BaseGPUVisualizer):
     def render(self, features: dict, time: float):
         frame_idx = int(time * features.get("fps", 30))
         f = self._get_feature_at_frame(features, frame_idx)
-        uniforms = self._map_features_to_uniforms(f, mode="speech")
 
-        color = self._chroma_to_color(uniforms["u_chroma"])
+        # === DYNAMISCHES SMOOTHING ===
+        # Roh-Wert aus dem Voice-Band (FFT Bins 4-20), Fallback auf voice_clarity / RMS
+        voice_raw = f.get("voice_band", f.get("voice_clarity", f["rms"]))
+        transient = f.get("transient", 0.0)
+
+        # Delta zur letzten Frame
+        delta = abs(voice_raw - self._prev_voice)
+
+        # Adaptive Alpha: Bei schnellen Transienten / grossen Deltas steigt alpha
+        # -> weniger Glättung, sofortige Reaktion, kein Lag
+        # Basis: 0.08 (sehr geglättet)
+        # Max: 0.95 (fast kein Smoothing)
+        dynamic_alpha = self._base_alpha + min(
+            0.95 - self._base_alpha,
+            max(transient * 0.75, delta * 5.0)
+        )
+
+        voice_smoothed = dynamic_alpha * voice_raw + (1.0 - dynamic_alpha) * self._prev_voice
+        self._prev_voice = voice_smoothed
+
+        color = self._chroma_to_color(f["chroma"])
 
         self._prog["u_resolution"].value = (self.width, self.height)
         self._prog["u_time"].value = time
-        self._prog["u_voice"].value = uniforms["u_flow"]
+        self._prog["u_voice"].value = voice_smoothed
         self._prog["u_color"].value = color
         self._prog["u_flow_speed"].value = self.params["flow_speed"]
         self._prog["u_wave_depth"].value = self.params["wave_depth"]

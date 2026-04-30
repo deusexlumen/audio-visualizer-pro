@@ -195,6 +195,9 @@ class GPUBatchRenderer:
             # Quote-Renderer initialisieren falls noetig
             if quotes and quote_config and quote_config.enabled:
                 self._init_text_renderer()
+            
+            # Frame-Index fuer Quote-Buffer bauen (O(1) Lookups im Render-Loop)
+            self._build_quote_frame_index(quotes, quote_config, frame_count)
 
             # Haupt-Render-Loop — IDENTISCH zur Preview (direktes Rendering)
             # Visualizer wird in viz_fbo gerendert und dann mit Offset/Scale geblittet.
@@ -233,13 +236,9 @@ class GPUBatchRenderer:
                 if i == 0:
                     self._save_debug(self.fbo, "debug_step3b_after_viz_blit.png")
                 
-                # Quote-Overlays auf GPU rendern
-                if quotes and quote_config and quote_config.enabled:
-                    self._render_quotes_gpu(time, quotes, quote_config)
-                    if i == 0:
-                        self._save_debug(self.fbo, "debug_step4_after_quotes.png")
-                
                 # Post-Process (Color-Grading) anwenden falls konfiguriert
+                # WICHTIG: Muss VOR den Quote-Overlays passieren, damit Text nicht
+                # von Bloom/Glitch/Grain verzerrt wird.
                 if postprocess:
                     self._apply_postprocess(
                         self.fbo.color_attachments[0],
@@ -250,13 +249,23 @@ class GPUBatchRenderer:
                         film_grain=postprocess.get("film_grain", 0.0),
                         time=time,
                     )
-                    pixels = self.post_fbo.read(components=3)
                     if i == 0:
-                        self._save_debug(self.post_fbo, "debug_step5_final.png")
+                        self._save_debug(self.post_fbo, "debug_step4_after_postprocess.png")
+                    target_fbo = self.post_fbo
                 else:
-                    pixels = self.fbo.read(components=3)
+                    target_fbo = self.fbo
+                
+                # Quote-Overlays auf GPU rendern (STRIKT NACH Post-Processing)
+                if quotes and quote_config and quote_config.enabled:
+                    target_fbo.use()
+                    self._render_quotes_gpu(time, quotes, quote_config, frame_idx=i)
                     if i == 0:
-                        self._save_debug(self.fbo, "debug_step5_final.png")
+                        self._save_debug(target_fbo, "debug_step5_after_quotes.png")
+                
+                # Pixel aus dem finalen FBO lesen
+                pixels = target_fbo.read(components=3)
+                if i == 0:
+                    self._save_debug(target_fbo, "debug_step6_final.png")
                 
                 process.stdin.write(pixels)
 
@@ -755,8 +764,44 @@ class GPUBatchRenderer:
             ],
         )
 
-    def _get_active_quote(self, time_seconds: float, quotes: list, display_duration: float):
-        """Findet das aktuell aktive Zitat."""
+    def _build_quote_frame_index(self, quotes, quote_config, frame_count):
+        """Baut einen vorberechneten Frame-Index fuer O(1) Quote-Lookups."""
+        self._quote_frame_index = None
+        if not quotes or not quote_config:
+            return
+        
+        latency_offset = getattr(quote_config, 'latency_offset', 0.0)
+        display_duration = getattr(quote_config, 'display_duration', 8.0)
+        
+        self._quote_frame_index = [[] for _ in range(frame_count)]
+        self._quote_config_display_duration = display_duration
+        self._quote_latency_offset = latency_offset
+        
+        for quote in quotes:
+            adj_start = quote.start_time + latency_offset
+            effective_end = min(quote.end_time, quote.start_time + display_duration)
+            adj_end = effective_end + latency_offset
+            start_frame = max(0, min(int(adj_start * self.fps), frame_count - 1))
+            end_frame = max(0, min(int(adj_end * self.fps), frame_count - 1))
+            
+            for f in range(start_frame, end_frame + 1):
+                self._quote_frame_index[f].append(quote)
+
+    def _get_active_quote(self, time_seconds: float, quotes: list, display_duration: float, frame_idx: int = None):
+        """Findet das aktuell aktive Zitat. Nutzt Frame-Index wenn verfuegbar."""
+        if frame_idx is not None and hasattr(self, '_quote_frame_index') and self._quote_frame_index is not None:
+            if 0 <= frame_idx < len(self._quote_frame_index):
+                candidates = self._quote_frame_index[frame_idx]
+                latency_offset = getattr(self, '_quote_latency_offset', 0.0)
+                for quote in candidates:
+                    effective_end = min(quote.end_time, quote.start_time + display_duration)
+                    adj_start = quote.start_time + latency_offset
+                    adj_end = effective_end + latency_offset
+                    if adj_start <= time_seconds <= adj_end:
+                        return quote
+                return None
+        
+        # Fallback: lineare Suche
         for quote in quotes:
             effective_end = min(quote.end_time, quote.start_time + display_duration)
             if quote.start_time <= time_seconds <= effective_end:
@@ -775,11 +820,11 @@ class GPUBatchRenderer:
             return max(0.0, min(1.0, progress))
         return 1.0
 
-    def _render_quotes_gpu(self, time: float, quotes: list, config):
+    def _render_quotes_gpu(self, time: float, quotes: list, config, frame_idx: int = None):
         """Rendert Quote-Overlays als GPU-Text mit Auto-Scale, Slide-In, Scale-In, Glow-Pulse und Typewriter."""
         import textwrap
         
-        quote = self._get_active_quote(time, quotes, config.display_duration)
+        quote = self._get_active_quote(time, quotes, config.display_duration, frame_idx)
         if quote is None:
             return
         
@@ -1004,6 +1049,11 @@ class GPUBatchRenderer:
                 glow=glow_intensity,
                 glow_color=text_color,  # Glow in Textfarbe fuer weichen Halo
                 smoothing=0.25,
+                outline_width=0.10,      # 10% Outline fuer scharfe Lesbarkeit
+                outline_color=(0.0, 0.0, 0.0),  # Schwarze Kontur
+                shadow_offset=(2.5, 2.5),       # 2.5px Drop-Shadow
+                shadow_color=(0.0, 0.0, 0.0),
+                shadow_alpha=0.45,
             )
         
         self.ctx.disable(moderngl.BLEND)

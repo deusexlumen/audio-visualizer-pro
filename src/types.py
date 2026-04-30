@@ -41,6 +41,7 @@ class AudioFeatures(BaseModel):
     # Neue Features für Pro-Visualizer
     transient: np.ndarray = Field(default_factory=lambda: np.array([]), description="Kick/Snare transients 0.0-1.0")
     voice_clarity: np.ndarray = Field(default_factory=lambda: np.array([]), description="Voice presence 80Hz-3kHz 0.0-1.0")
+    voice_band: np.ndarray = Field(default_factory=lambda: np.array([]), description="Voice band energy FFT bins 4-20 0.0-1.0")
     
     # Tonaale Features
     chroma: np.ndarray = Field(..., description="Shape: (12, frames) - C,C#,D...")

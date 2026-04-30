@@ -6,10 +6,11 @@ Zeitbasiert mit Fade-In/Out Animationen.
 """
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 import textwrap
+import threading
 
 from pathlib import Path
 from .gemini_integration import Quote
@@ -53,6 +54,15 @@ class QuoteOverlayConfig:
     glow_pulse: bool = False        # Glow pulsiert beim Erscheinen
     glow_pulse_intensity: float = 0.5  # Max Glow waehrend Pulse
     
+    # Spatial Frequency Compensation (Hintergrund-Blur unter dem Text)
+    spatial_compensation: bool = True
+    compensation_blur: float = 12.0
+    compensation_darken: float = 0.55
+    
+    # Audio-Visual Sync & Latenz-Kompensation
+    latency_offset: float = 0.0       # Sekunden (negativ = frueher, positiv = spaeter)
+    buffer_lookahead: float = 2.0     # Sekunden Prefetch fuer asynchrone Streams
+    
     # Position & Skalierung
     offset_x: int = 0       # Horizontaler Offset in Pixeln (negativ = links, positiv = rechts)
     offset_y: int = 0       # Vertikaler Offset in Pixeln (negativ = oben, positiv = unten)
@@ -78,6 +88,13 @@ class QuoteOverlayRenderer:
         self._font = None
         self._font_path = None
         self._load_font()
+        
+        # Frame-synchroner Buffer fuer asynchrone KI-Datenstroeme
+        self._lock = threading.Lock()
+        self._frame_index = None
+        self._frame_count = 0
+        self._fps = 30
+        self._dirty = True
     
     def _load_font(self):
         """Laedt eine Schriftart mit Fallback."""
@@ -114,16 +131,67 @@ class QuoteOverlayRenderer:
         self._font = ImageFont.load_default()
         self._font_path = None
     
-    def _get_active_quote(self, time_seconds: float) -> Optional[Quote]:
+    def set_latency_offset(self, offset: float):
+        """Setzt die Latenz-Kompensation (Sekunden). Negativ = frueher, Positiv = spaeter."""
+        self.config.latency_offset = offset
+        self._dirty = True
+    
+    def add_quote(self, quote: Quote):
+        """Thread-safes Hinzufuegen eines Zitats waehrend des Renderns."""
+        with self._lock:
+            self.quotes.append(quote)
+            self._dirty = True
+    
+    def build_frame_index(self, frame_count: int, fps: int):
+        """
+        Baut einen vorberechneten Frame-Index fuer O(1) Lookups.
+        Muss vor dem Render-Loop einmalig aufgerufen werden.
+        """
+        with self._lock:
+            self._frame_count = frame_count
+            self._fps = fps
+            self._frame_index = [[] for _ in range(frame_count)]
+            
+            for quote in self.quotes:
+                adj_start = quote.start_time + self.config.latency_offset
+                effective_end = min(quote.end_time, quote.start_time + self.config.display_duration)
+                adj_end = effective_end + self.config.latency_offset
+                start_frame = max(0, min(int(adj_start * fps), frame_count - 1))
+                end_frame = max(0, min(int(adj_end * fps), frame_count - 1))
+                
+                for f in range(start_frame, end_frame + 1):
+                    self._frame_index[f].append(quote)
+                    
+            self._dirty = False
+    
+    def _get_active_quote(self, time_seconds: float, frame_idx: int = None) -> Optional[Quote]:
         """
         Findet das aktuell aktive Zitat fuer eine gegebene Zeit.
         
-        Beruecksichtigt die maximale Anzeigedauer (display_duration).
+        Args:
+            time_seconds: Aktuelle Zeit im Video
+            frame_idx: Optionaler Frame-Index fuer schnellen O(1) Lookup
+            
+        Beruecksichtigt Latenz-Kompensation und maximale Anzeigedauer.
         """
+        # Schneller Frame-Index-Pfad (O(1))
+        if frame_idx is not None and self._frame_index is not None and not self._dirty:
+            if 0 <= frame_idx < self._frame_count:
+                candidates = self._frame_index[frame_idx]
+                for quote in candidates:
+                    effective_end = min(quote.end_time, quote.start_time + self.config.display_duration)
+                    adj_start = quote.start_time + self.config.latency_offset
+                    adj_end = effective_end + self.config.latency_offset
+                    if adj_start <= time_seconds <= adj_end:
+                        return quote
+                return None
+        
+        # Fallback: lineare Suche (kompatibel mit alten Aufrufen)
         for quote in self.quotes:
-            # Begrenze die Anzeigedauer auf display_duration
             effective_end = min(quote.end_time, quote.start_time + self.config.display_duration)
-            if quote.start_time <= time_seconds <= effective_end:
+            adj_start = quote.start_time + self.config.latency_offset
+            adj_end = effective_end + self.config.latency_offset
+            if adj_start <= time_seconds <= adj_end:
                 return quote
         return None
     
@@ -186,13 +254,14 @@ class QuoteOverlayRenderer:
             total_height = len(lines) * line_height + (len(lines) - 1) * self.config.line_spacing
             return (max_width, total_height)
     
-    def apply(self, frame: np.ndarray, time_seconds: float) -> np.ndarray:
+    def apply(self, frame: np.ndarray, time_seconds: float, frame_idx: int = None) -> np.ndarray:
         """
         Wendet Quote-Overlays auf einen Frame an.
         
         Args:
             frame: RGB numpy array (H, W, 3)
             time_seconds: Aktuelle Zeit im Video in Sekunden
+            frame_idx: Optionaler Frame-Index fuer schnellen O(1) Buffer-Lookup
             
         Returns:
             Frame mit Overlay (falls ein Zitat aktiv ist)
@@ -200,7 +269,7 @@ class QuoteOverlayRenderer:
         if not self.config.enabled or not self.quotes:
             return frame
         
-        quote = self._get_active_quote(time_seconds)
+        quote = self._get_active_quote(time_seconds, frame_idx)
         if quote is None:
             return frame
         
@@ -245,6 +314,25 @@ class QuoteOverlayRenderer:
         else:  # center
             box_x = (img.width - box_width) // 2 + offset_x
             box_y = (img.height - box_height) // 2 + offset_y
+        
+        # === SPATIAL FREQUENCY COMPENSATION ===
+        # Hintergrund im Text-Bereich leicht weichzeichnen und abdunkeln
+        # => Erhoeht Lesbarkeit vor hellen/komplexen Visualizern
+        if getattr(self.config, 'spatial_compensation', False):
+            comp_blur = getattr(self.config, 'compensation_blur', 12.0)
+            comp_darken = getattr(self.config, 'compensation_darken', 0.55)
+            
+            cx1 = max(0, int(box_x))
+            cy1 = max(0, int(box_y))
+            cx2 = min(img.width, int(box_x + box_width))
+            cy2 = min(img.height, int(box_y + box_height))
+            
+            if cx2 > cx1 and cy2 > cy1:
+                region = img.crop((cx1, cy1, cx2, cy2))
+                region = region.filter(ImageFilter.GaussianBlur(radius=comp_blur))
+                enhancer = ImageEnhance.Brightness(region)
+                region = enhancer.enhance(comp_darken)
+                img.paste(region, (cx1, cy1))
         
         # Schatten zeichnen
         shadow = self.config.shadow_offset

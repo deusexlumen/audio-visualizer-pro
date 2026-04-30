@@ -69,7 +69,7 @@ def test_analyze_basic(analyzer, test_audio_file):
     
     # Überprüfe grundlegende Attribute
     assert features.duration > 0
-    assert features.sample_rate == 11025  # Analyse nutzt 11025 Hz für maximale Speed
+    assert features.sample_rate == 44100  # Analyse nutzt 44.1kHz für hohe Zeitauflösung
     assert features.fps == 30
     assert features.tempo >= 0  # Reine Sinus-Welle hat möglicherweise kein erkennbares Tempo
     assert features.mode in ['music', 'speech', 'hybrid']

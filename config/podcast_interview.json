@@ -1,9 +1,9 @@
 {
-  "description": "Gesprächiger Interview-Podcast – warm und fließend",
+  "description": "Gespraechiger Interview-Podcast – warm und fliessend",
   "audio_file": "input.mp3",
   "output_file": "podcast_interview.mp4",
   "visual": {
-    "type": "liquid_blobs",
+    "type": "voice_flow",
     "resolution": [1920, 1080],
     "fps": 30,
     "colors": {
@@ -12,8 +12,16 @@
       "background": "#1A1A2E"
     },
     "params": {
-      "blob_count": 5,
-      "fluidity": 0.6
+      "flow_speed": 0.5,
+      "wave_depth": 0.6,
+      "color_saturation": 0.8,
+      "breathe_intensity": 0.35,
+      "line_count": 5,
+      "glow_strength": 0.5,
+      "line_width": 0.004,
+      "trail_length": 4,
+      "trail_decay": 0.75,
+      "brightness": 1.1
     }
   },
   "postprocess": {
@@ -21,6 +29,15 @@
     "saturation": 0.95,
     "grain": 0.02,
     "vignette": 0.15,
-    "chromatic_aberration": 0.0
+    "chromatic_aberration": 0.0,
+    "bloom": 0.0,
+    "quote_font_size": 48,
+    "quote_font_color": [255, 255, 255],
+    "quote_box_color": [26, 26, 46, 200],
+    "quote_display_duration": 8.0,
+    "quote_position": "bottom",
+    "quote_text_align": "center",
+    "quote_latency_offset": -0.15,
+    "quote_buffer_lookahead": 2.0
   }
 }

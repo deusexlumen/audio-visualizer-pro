@@ -64,7 +64,7 @@ class AudioAnalyzer:
                     hasher.update(f.read())  # Letzte 1MB
         except Exception:
             pass
-        hasher.update(f"_{fps}_v3".encode())
+        hasher.update(f"_{fps}_v4".encode())
         return self.cache_dir / f"{hasher.hexdigest()}.npz"
     
     def _progress(self, msg: str, step: int, total: int, callback: Optional[Callable] = None):
@@ -92,7 +92,7 @@ class AudioAnalyzer:
             scalar_fields = {'duration', 'sample_rate', 'fps', 'frame_count', 'tempo', 'key', 'mode'}
             # Array-Felder muessen IMMER als ndarray bleiben, auch bei size 0 oder 1
             array_fields = {'rms', 'onset', 'spectral_centroid', 'spectral_rolloff',
-                            'zero_crossing_rate', 'transient', 'voice_clarity',
+                            'zero_crossing_rate', 'transient', 'voice_clarity', 'voice_band',
                             'chroma', 'mfcc', 'tempogram', 'beat_frames'}
             for k in data.files:
                 val = data[k]
@@ -123,7 +123,7 @@ class AudioAnalyzer:
                     loaded_data[k] = val
             return AudioFeatures(**loaded_data)
         
-        total_steps = 9
+        total_steps = 10
         step = 0
         
         # Audio laden
@@ -135,7 +135,7 @@ class AudioAnalyzer:
             temp_wav.close()
             try:
                 subprocess.run(
-                    ['ffmpeg', '-y', '-i', str(audio_path), '-ar', '11025', '-ac', '1', temp_wav.name],
+                    ['ffmpeg', '-y', '-i', str(audio_path), '-ar', '44100', '-ac', '1', temp_wav.name],
                     capture_output=True, check=True
                 )
                 audio_path = temp_wav.name
@@ -145,18 +145,23 @@ class AudioAnalyzer:
                     temp_wav = None
         
         try:
-            y, sr = librosa.load(audio_path, sr=11025, mono=True)
+            y, sr = librosa.load(audio_path, sr=44100, mono=True)
             duration = librosa.get_duration(y=y, sr=sr)
         finally:
             if temp_wav and os.path.exists(temp_wav.name):
                 os.unlink(temp_wav.name)
         
-        hop_length = int(sr / fps)
+        hop_length = 256
+        n_fft = 2048
         expected_frames = int(duration * fps)
+        
+        # Gemeinsamer STFT für Frequenz-basierte Features
+        self._progress("STFT Berechnung...", step := step + 1, total_steps, progress_callback)
+        stft = np.abs(librosa.stft(y, hop_length=hop_length, n_fft=n_fft))
         
         # RMS
         self._progress("Berechne Lautstaerke...", step := step + 1, total_steps, progress_callback)
-        rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+        rms = librosa.feature.rms(y=y, hop_length=hop_length, frame_length=n_fft)[0]
         rms = self._normalize(rms)
         
         # Onset
@@ -172,7 +177,7 @@ class AudioAnalyzer:
         
         # Chroma
         self._progress("Erkenne Tonart...", step := step + 1, total_steps, progress_callback)
-        chroma = librosa.feature.chroma_stft(y=y, sr=sr, hop_length=hop_length)
+        chroma = librosa.feature.chroma_stft(y=y, sr=sr, hop_length=hop_length, n_fft=n_fft)
         
         # NEU: Transient-Detection (fuer Kick/Snare)
         self._progress("Erkenne Transienten...", step := step + 1, total_steps, progress_callback)
@@ -180,7 +185,13 @@ class AudioAnalyzer:
         
         # NEU: Voice Clarity (80Hz - 3kHz Band)
         self._progress("Analysiere Sprach-Präsenz...", step := step + 1, total_steps, progress_callback)
-        voice_clarity = self._detect_voice_clarity(y, sr, hop_length, expected_frames)
+        voice_clarity = self._detect_voice_clarity(y, sr, hop_length, expected_frames, stft=stft)
+        
+        # NEU: Voice Band (FFT Bins 4-20 für gezielte Sprach-Triggerung)
+        self._progress("Analysiere Sprach-Band...", step := step + 1, total_steps, progress_callback)
+        voice_band_raw = np.mean(stft[4:21, :], axis=0)
+        voice_band = self._normalize(voice_band_raw)
+        voice_band = self._interpolate_to_length(voice_band, expected_frames)
         
         # Tempo & Mode
         self._progress("Klassifiziere Audio-Typ...", step := step + 1, total_steps, progress_callback)
@@ -219,6 +230,7 @@ class AudioAnalyzer:
             zero_crossing_rate=self._normalize(self._interpolate_to_length(zcr, expected_frames)),
             transient=transient_smooth,
             voice_clarity=voice_clarity_smooth,
+            voice_band=voice_band,
             chroma=chroma,
             mfcc=mfcc,
             tempogram=tempogram,
@@ -255,13 +267,14 @@ class AudioAnalyzer:
         diff = self._normalize(diff)
         return self._interpolate_to_length(diff, target_frames)
     
-    def _detect_voice_clarity(self, y: np.ndarray, sr: int, hop_length: int, target_frames: int) -> np.ndarray:
+    def _detect_voice_clarity(self, y: np.ndarray, sr: int, hop_length: int, target_frames: int, stft: np.ndarray = None) -> np.ndarray:
         """
         Misst die Energie im Sprach-Band (80Hz - 3kHz) relativ zur Gesamtenergie.
         Hoeher = mehr Sprache, niedriger = mehr Musik/Noise.
         """
         # STFT fuer Frequenz-Analyse
-        stft = np.abs(librosa.stft(y, hop_length=hop_length))
+        if stft is None:
+            stft = np.abs(librosa.stft(y, hop_length=hop_length))
         freqs = librosa.fft_frequencies(sr=sr)
         
         # Maske fuer 80Hz - 3kHz

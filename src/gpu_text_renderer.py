@@ -211,6 +211,8 @@ class GPUTextRenderer:
         self.texture = texture
         self.width = width
         self.height = height
+        
+        # Neuer Text-Shader mit Outline + Drop-Shadow
         self._prog = ctx.program(
             vertex_shader="""
             #version 330
@@ -242,9 +244,15 @@ class GPUTextRenderer:
             fragment_shader="""
             #version 330
             uniform sampler2D u_atlas;
+            uniform vec2 u_atlas_size;
             uniform float u_smoothing;
             uniform float u_glow;
             uniform vec3 u_glow_color;
+            uniform float u_outline_width;
+            uniform vec3 u_outline_color;
+            uniform vec2 u_shadow_offset;
+            uniform vec3 u_shadow_color;
+            uniform float u_shadow_alpha;
 
             in vec2 v_uv;
             in vec3 v_color;
@@ -257,14 +265,34 @@ class GPUTextRenderer:
                 // Weiche Kanten: smoothstep um die Mitte (0.5)
                 float alpha = smoothstep(0.5 - u_smoothing, 0.5 + u_smoothing, sdf);
 
-                // Glow: bereich unterhalb der Kante mit exponentiellem Abfall
+                // Outline (Kontur um die Glyphe)
+                float outline = 0.0;
+                if (u_outline_width > 0.0) {
+                    float outline_edge = 0.5 - u_outline_width;
+                    outline = smoothstep(outline_edge - u_smoothing, outline_edge + u_smoothing, sdf);
+                    outline = max(0.0, outline - alpha);
+                }
+
+                // Drop-Shadow (versetztes SDF-Sampling im Atlas)
+                float shadow = 0.0;
+                if (length(u_shadow_offset) > 0.0) {
+                    float shadow_sdf = texture(u_atlas, v_uv + u_shadow_offset).r;
+                    shadow = smoothstep(0.5 - u_smoothing, 0.5 + u_smoothing, shadow_sdf);
+                    // Shadow nur dort, wo weder Fill noch Outline ist
+                    shadow = max(0.0, shadow - alpha - outline) * u_shadow_alpha;
+                }
+
+                // Glow: Bereich unterhalb der Kante mit exponentiellem Abfall
                 float glow = 0.0;
                 if (u_glow > 0.0) {
                     glow = exp(-sdf * sdf * 8.0) * u_glow;
                 }
 
-                vec3 final_color = v_color * alpha + u_glow_color * glow;
-                float final_alpha = max(alpha, glow) * v_alpha;
+                vec3 final_color = v_color * alpha
+                                 + u_outline_color * outline
+                                 + u_shadow_color * shadow
+                                 + u_glow_color * glow;
+                float final_alpha = max(max(alpha, outline), max(shadow, glow)) * v_alpha;
 
                 f_color = vec4(final_color, final_alpha);
             }
@@ -291,7 +319,12 @@ class GPUTextRenderer:
                     color: tuple = (1.0, 1.0, 1.0), alpha: float = 1.0,
                     align: str = "left", glow: float = 0.0,
                     glow_color: tuple = (1.0, 1.0, 1.0),
-                    smoothing: float = 0.25):
+                    smoothing: float = 0.25,
+                    outline_width: float = 0.0,
+                    outline_color: tuple = (0.0, 0.0, 0.0),
+                    shadow_offset: tuple = (0.0, 0.0),
+                    shadow_color: tuple = (0.0, 0.0, 0.0),
+                    shadow_alpha: float = 0.5):
         """
         Rendert einen Text-String auf der GPU.
 
@@ -358,6 +391,15 @@ class GPUTextRenderer:
         self._prog["u_smoothing"].value = smoothing
         self._prog["u_glow"].value = glow
         self._prog["u_glow_color"].value = glow_color
+        self._prog["u_outline_width"].value = outline_width
+        self._prog["u_outline_color"].value = outline_color
+        shadow_uv_offset = (
+            shadow_offset[0] / max(self.atlas.atlas_width, 1),
+            shadow_offset[1] / max(self.atlas.atlas_height, 1)
+        )
+        self._prog["u_shadow_offset"].value = shadow_uv_offset
+        self._prog["u_shadow_color"].value = shadow_color
+        self._prog["u_shadow_alpha"].value = shadow_alpha
 
         self.texture.use(location=0)
         self._prog["u_atlas"].value = 0
@@ -365,5 +407,9 @@ class GPUTextRenderer:
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
         self._instance_vbo.write(self._instance_data[:instance_idx].tobytes())
+        
+        # Atlas-Größe für Shadow-Offset-Berechnung
+        self._prog["u_atlas_size"].value = (self.atlas.atlas_width, self.atlas.atlas_height)
+        
         self._vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_idx)
         self.ctx.disable(moderngl.BLEND)
