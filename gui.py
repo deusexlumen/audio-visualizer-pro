@@ -1,42 +1,37 @@
 """
-Audio Visualizer Pro - Grafische Benutzeroberfläche (GUI)
+Audio Visualizer Pro – DearPyGui Frontend
 
-Eine moderne Web-basierte GUI mit Streamlit.
-Ermöglicht einfache Bedienung ohne Kommandozeile.
+Komplette Neuimplementierung der GUI mit DearPyGui (DPG).
+- Zwei-Spalten-Layout: Control-Panel links, Live-Preview rechts
+- Persistente Asset-Pfade (kein OS-Temp)
+- Live-Preview via ModernGL → DPG Raw Texture
 """
 
-import streamlit as st
-import subprocess
-import sys
-import json
 import os
-import tempfile
-import shutil
-import numpy as np
+import sys
+import time
+import threading
 from pathlib import Path
 from datetime import datetime
+
+import numpy as np
 from PIL import Image
 
-# .env Datei laden
-from dotenv import load_dotenv
-load_dotenv()
-
-# Füge src zum Pfad hinzu
+# src zum Pfad hinzufügen
 sys.path.insert(0, str(Path(__file__).parent))
 
+import dearpygui.dearpygui as dpg
+
 from src.analyzer import AudioAnalyzer
-from src.ai_matcher import SmartMatcher
-from src.gemini_integration import GeminiIntegration
-from src.types import VisualConfig, Quote
-from src.quote_overlay import QuoteOverlayConfig
-from src.postprocess import PostProcessor
-from src.gpu_renderer import GPUBatchRenderer, GPUPreviewRenderer
 from src.gpu_preview import render_gpu_preview
+from src.gpu_renderer import GPUBatchRenderer
 from src.gpu_visualizers import get_visualizer, list_visualizers
+from src.quote_overlay import QuoteOverlayConfig
+from src.types import Quote
 
 
 # =============================================================================
-# ASSET STORAGE LIFECYCLE MANAGEMENT
+# ASSET STORAGE
 # =============================================================================
 
 ASSET_DIRS = {
@@ -47,1927 +42,627 @@ ASSET_DIRS = {
 
 
 def _ensure_asset_dirs():
-    """Stellt sicher, dass alle Asset-Verzeichnisse existieren."""
-    for dir_path in ASSET_DIRS.values():
-        dir_path.mkdir(parents=True, exist_ok=True)
+    for d in ASSET_DIRS.values():
+        d.mkdir(parents=True, exist_ok=True)
 
 
-def cleanup_stale_uploads(max_age_days: int = 7):
-    """
-    Löscht User-Assets (Audio, Bilder, Fonts) und alte Output-Videos
-    älter als max_age_days. Wird beim Boot der GUI einmalig aufgerufen
-    (Watchdog-Konzept).
-    """
-    import time
-    now = time.time()
-    max_age_seconds = max_age_days * 86400
-
-    # Asset-Verzeichnisse + Output-Verzeichnisse bereinigen
-    dirs_to_clean = list(ASSET_DIRS.values()) + [Path("output"), Path("output/previews")]
-
-    for dir_path in dirs_to_clean:
-        if not dir_path.exists():
-            continue
-        for file_path in dir_path.iterdir():
-            if file_path.is_file():
-                try:
-                    if now - file_path.stat().st_mtime > max_age_seconds:
-                        file_path.unlink()
-                        print(f"[Cleanup] Gelöscht: {file_path}")
-                except Exception as e:
-                    print(f"[Cleanup] Fehler beim Löschen von {file_path}: {e}")
-
-
-def _restore_uploaded_assets():
-    """
-    Stellt hochgeladene Assets aus den persistenten Verzeichnissen
-    in den Streamlit Session-State wieder her.
-    Wird bei jedem App-Start/Refresh aufgerufen.
-    """
-    # Audio wiederherstellen
-    if not st.session_state.get("audio_path"):
-        audio_dir = ASSET_DIRS["audio"]
-        if audio_dir.exists():
-            audio_files = sorted(
-                [f for f in audio_dir.iterdir() if f.is_file()],
-                key=lambda f: f.stat().st_mtime,
-                reverse=True
-            )
-            if audio_files:
-                newest = audio_files[0]
-                st.session_state["audio_path"] = str(newest)
-                # Versuche den Dateinamen aus dem Pfad zu rekonstruieren
-                st.session_state["audio_name"] = newest.name
-                st.session_state["audio_size"] = newest.stat().st_size
-                print(f"[Restore] Audio wiederhergestellt: {newest}")
-
-    # Hintergrundbild wiederherstellen
-    if not st.session_state.get("bg_image_path"):
-        bg_dir = ASSET_DIRS["backgrounds"]
-        if bg_dir.exists():
-            bg_files = sorted(
-                [f for f in bg_dir.iterdir() if f.is_file()],
-                key=lambda f: f.stat().st_mtime,
-                reverse=True
-            )
-            if bg_files:
-                newest = bg_files[0]
-                st.session_state["bg_image_path"] = str(newest)
-                print(f"[Restore] Hintergrundbild wiederhergestellt: {newest}")
-
-
-# Asset-Verzeichnisse anlegen, veraltete Dateien aufräumen und Session-State wiederherstellen
 _ensure_asset_dirs()
-cleanup_stale_uploads()
-_restore_uploaded_assets()
 
 
-# Seiten-Config
-st.set_page_config(
-    page_title="Audio Visualizer Pro",
-    page_icon="🎵",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# =============================================================================
+# APP STATE
+# =============================================================================
 
-# Custom CSS für besseres Styling
-st.markdown("""
-<style>
-    .main {
-        background: linear-gradient(135deg, #0f0f1e 0%, #1a1a3e 50%, #16213e 100%);
-        color: #e0e0ff;
-    }
-    .stButton>button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        padding: 12px 24px;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-    }
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
-        background: linear-gradient(135deg, #768efa 0%, #865bb2 100%);
-    }
-    .stButton>button:active {
-        transform: translateY(0px);
-    }
-    .stProgress .st-bo {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-    }
-    .stSlider > div > div > div {
-        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-    }
-    .stSelectbox, .stTextInput>div>div>input {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    .stCheckbox > label {
-        color: #e0e0ff !important;
-    }
-    .stExpander {
-        background: rgba(255, 255, 255, 0.03);
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    h1, h2, h3, h4 {
-        color: #ffffff !important;
-        font-weight: 600 !important;
-    }
-    .preview-card {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 15px;
-        padding: 20px;
-        margin: 10px 0;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-    }
-    .success-box {
-        background: rgba(39, 174, 96, 0.15);
-        border-left: 4px solid #27ae60;
-        padding: 15px;
-        border-radius: 8px;
-        margin: 10px 0;
-        backdrop-filter: blur(10px);
-    }
-    .info-box {
-        background: rgba(52, 152, 219, 0.15);
-        border-left: 4px solid #3498db;
-        padding: 15px;
-        border-radius: 8px;
-        margin: 10px 0;
-        backdrop-filter: blur(10px);
-    }
-    .warning-box {
-        background: rgba(241, 196, 15, 0.15);
-        border-left: 4px solid #f1c40f;
-        padding: 15px;
-        border-radius: 8px;
-        margin: 10px 0;
-        backdrop-filter: blur(10px);
-    }
-    .gpu-card {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-        border: 1px solid rgba(102, 126, 234, 0.3);
-        border-radius: 12px;
-        padding: 16px;
-        margin: 8px 0;
-    }
-    .metric-box {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 10px;
-        padding: 12px;
-        text-align: center;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    /* Sidebar styling */
-    .css-1d391kg {
-        background: linear-gradient(180deg, #1a1a3e 0%, #0f0f1e 100%);
-    }
-    /* Radio buttons */
-    .stRadio > label {
-        color: #e0e0ff !important;
-    }
-    /* File uploader */
-    .stFileUploader > div > div {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 12px;
-        border: 2px dashed rgba(102, 126, 234, 0.5);
-    }
-</style>
-""", unsafe_allow_html=True)
+class AppState:
+    """Zentraler Zustand für alle UI-Parameter und Dateipfade."""
 
+    def __init__(self):
+        # Dateipfade (persistente Assets)
+        self.audio_path: str | None = None
+        self.background_path: str | None = None
+        self.font_path: str | None = None
+        self.output_dir: str = "output"
 
-def check_system_requirements():
-    """Prüft ob FFmpeg und essenzielle Abhängigkeiten verfügbar sind."""
-    issues = []
-    
-    # FFmpeg prüfen
-    try:
-        result = subprocess.run(['ffmpeg', '-version'], capture_output=True, timeout=5)
-        if result.returncode != 0:
-            issues.append("FFmpeg ist installiert, aber funktioniert nicht korrekt.")
-    except FileNotFoundError:
-        issues.append("FFmpeg nicht gefunden. Bitte installieren: https://ffmpeg.org/download.html")
-    except Exception as e:
-        issues.append(f"FFmpeg-Check fehlgeschlagen: {e}")
-    
-    return issues
+        # Audio-Analyse (gecached)
+        self.features = None
+        self.audio_duration: float = 0.0
 
+        # Visualizer-Auswahl
+        self.visualizer_type: str = "voice_flow"
+        self.available_visualizers = list_visualizers()
 
-# Color-Grading Presets
-COLOR_PRESETS = {
-    "Neutral (Kein Grading)": {"contrast": 1.0, "saturation": 1.0, "brightness": 0.0, "warmth": 0.0, "film_grain": 0.0},
-    "🎬 Cinematic Warm": {"contrast": 1.15, "saturation": 1.05, "brightness": -0.02, "warmth": 0.25, "film_grain": 0.15},
-    "🌃 Cyberpunk Cold": {"contrast": 1.25, "saturation": 1.3, "brightness": -0.05, "warmth": -0.35, "film_grain": 0.1},
-    "📼 Vintage Film": {"contrast": 0.9, "saturation": 0.75, "brightness": 0.02, "warmth": 0.4, "film_grain": 0.35},
-    "🕵️ Noir": {"contrast": 1.4, "saturation": 0.0, "brightness": -0.08, "warmth": 0.0, "film_grain": 0.4},
-    "🌅 Golden Hour": {"contrast": 1.1, "saturation": 1.15, "brightness": 0.05, "warmth": 0.5, "film_grain": 0.05},
-    "🎵 Concert Neon": {"contrast": 1.2, "saturation": 1.4, "brightness": -0.03, "warmth": 0.15, "film_grain": 0.08},
-}
+        # Parameter
+        self.viz_offset_x: float = 0.0
+        self.viz_offset_y: float = 0.0
+        self.viz_scale: float = 1.0
 
+        # Hintergrund
+        self.bg_blur: float = 0.0
+        self.bg_vignette: float = 0.0
+        self.bg_opacity: float = 0.3
 
-LOOKS = {
-    "podcast_clean": {
-        "name": "🎙️ Podcast Clean",
-        "description": "Dunkel, dezent, große lesbare Quotes. Perfekt für News und Interviews.",
-        "visualizer": "voice_flow",
-        "params": {"flow_speed": 0.4, "wave_depth": 0.5, "color_saturation": 0.7, "breathe_intensity": 0.4, "line_count": 5, "glow_strength": 0.6, "line_width": 0.003, "trail_length": 3, "trail_decay": 0.7, "brightness": 1.0},
-        "colors": {"primary": "#667EEA", "secondary": "#764BA2", "background": "#1A1A2E"},
-        "postprocess": {"contrast": 1.05, "saturation": 0.8, "brightness": 0.0, "warmth": 0.1, "film_grain": 0.05},
-        "quotes": {
-            "font_size": 56, "box_color": "#1a1a2e", "font_color": "#FFFFFF",
-            "box_padding": 36, "box_radius": 20, "box_margin_bottom": 100,
-            "max_width_ratio": 0.7, "fade_duration": 0.8, "line_spacing": 1.5,
-            "max_font_size": 72, "max_chars_per_line": 40,
-            "position": "bottom", "text_align": "center",
-            "display_duration": 8.0, "auto_scale_font": True,
-            "slide_animation": "none", "scale_in": False, "typewriter": False, "glow_pulse": False,
-        },
-        "background": {"opacity": 0.0, "blur": 0.0, "vignette": 0.0},
-    },
-    "podcast_cinematic": {
-        "name": "🎬 Podcast Cinematic",
-        "description": "Warm, Film-Grain, Vignette. Für Storytelling und Hörbücher.",
-        "visualizer": "typographic",
-        "params": {"text_size": 56, "animation_speed": 0.15, "bar_width": 4, "bar_spacing": 2, "line_width": 0.003, "trail_length": 0, "trail_decay": 0.7, "brightness": 1.0},
-        "colors": {"primary": "#E8A87C", "secondary": "#C38D9E", "background": "#0F0F1A"},
-        "postprocess": {"contrast": 1.15, "saturation": 0.9, "brightness": -0.02, "warmth": 0.35, "film_grain": 0.2},
-        "quotes": {
-            "font_size": 52, "box_color": "#1a1a2e", "font_color": "#F5F5F5",
-            "box_padding": 32, "box_radius": 16, "box_margin_bottom": 120,
-            "max_width_ratio": 0.75, "fade_duration": 1.0, "line_spacing": 1.4,
-            "max_font_size": 64, "max_chars_per_line": 38,
-            "position": "bottom", "text_align": "center",
-            "display_duration": 10.0, "auto_scale_font": True,
-            "slide_animation": "none", "scale_in": False, "typewriter": True, "glow_pulse": False,
-        },
-        "background": {"opacity": 0.0, "blur": 0.0, "vignette": 0.0},
-    },
-    "music_energy": {
-        "name": "🎵 Musik Energy",
-        "description": "Dynamisch, bunt, schnelle Visuals. Für EDM, Pop und Rock.",
-        "visualizer": "spectrum_bars",
-        "params": {"bar_count": 64, "smoothing": 0.3, "bar_width": 3, "glow_intensity": 0.6, "line_width": 0.003, "trail_length": 0, "trail_decay": 0.7, "brightness": 1.0},
-        "colors": {"primary": "#FF0055", "secondary": "#00CCFF", "background": "#0A0A0A"},
-        "postprocess": {"contrast": 1.1, "saturation": 1.1, "brightness": -0.02, "warmth": 0.05, "film_grain": 0.05},
-        "quotes": {
-            "font_size": 42, "box_color": "#0d0d1a", "font_color": "#FFFFFF",
-            "box_padding": 24, "box_radius": 12, "box_margin_bottom": 80,
-            "max_width_ratio": 0.8, "fade_duration": 0.5, "line_spacing": 1.25,
-            "max_font_size": 56, "max_chars_per_line": 45,
-            "position": "bottom", "text_align": "center",
-            "display_duration": 6.0, "auto_scale_font": True,
-            "slide_animation": "up", "scale_in": True, "typewriter": False, "glow_pulse": True,
-        },
-        "background": {"opacity": 0.0, "blur": 0.0, "vignette": 0.0},
-    },
-    "music_chill": {
-        "name": "🌊 Musik Chill",
-        "description": "Sanft, fließend, entspannt. Für Ambient, Folk und Indie.",
-        "visualizer": "liquid_blobs",
-        "params": {"blob_count": 5, "fluidity": 0.6, "line_width": 0.003, "trail_length": 0, "trail_decay": 0.7, "brightness": 1.0},
-        "colors": {"primary": "#4ECDC4", "secondary": "#96CEB4", "background": "#1A1A3E"},
-        "postprocess": {"contrast": 1.05, "saturation": 0.85, "brightness": 0.02, "warmth": 0.2, "film_grain": 0.1},
-        "quotes": {
-            "font_size": 48, "box_color": "#1a1a2e", "font_color": "#E8E8E8",
-            "box_padding": 28, "box_radius": 18, "box_margin_bottom": 100,
-            "max_width_ratio": 0.75, "fade_duration": 0.7, "line_spacing": 1.35,
-            "max_font_size": 64, "max_chars_per_line": 42,
-            "position": "bottom", "text_align": "center",
-            "display_duration": 8.0, "auto_scale_font": True,
-            "slide_animation": "none", "scale_in": False, "typewriter": False, "glow_pulse": False,
-        },
-        "background": {"opacity": 0.0, "blur": 0.0, "vignette": 0.0},
-    },
-    "meditation": {
-        "name": "🧘 Meditation",
-        "description": "Langsam, sanft, zentriert. Für Yoga und Meditation.",
-        "visualizer": "sacred_mandala",
-        "params": {"rotation_speed": 0.15, "layer_count": 5, "line_width": 0.003, "trail_length": 0, "trail_decay": 0.7, "brightness": 1.0},
-        "colors": {"primary": "#9D4EDD", "secondary": "#C77DFF", "background": "#0F0F1E"},
-        "postprocess": {"contrast": 1.0, "saturation": 0.75, "brightness": 0.0, "warmth": 0.15, "film_grain": 0.15},
-        "quotes": {
-            "font_size": 64, "box_color": "#0f0f1e", "font_color": "#F0F0F0",
-            "box_padding": 40, "box_radius": 24, "box_margin_bottom": 150,
-            "max_width_ratio": 0.65, "fade_duration": 1.2, "line_spacing": 1.6,
-            "max_font_size": 80, "max_chars_per_line": 35,
-            "position": "center", "text_align": "center",
-            "display_duration": 12.0, "auto_scale_font": True,
-            "slide_animation": "none", "scale_in": False, "typewriter": False, "glow_pulse": False,
-        },
-        "background": {"opacity": 0.0, "blur": 0.0, "vignette": 0.0},
-    },
-}
+        # Post-Process
+        self.pp_contrast: float = 1.0
+        self.pp_saturation: float = 1.0
+        self.pp_brightness: float = 0.0
+        self.pp_warmth: float = 0.0
+        self.pp_grain: float = 0.0
 
+        # Preview
+        self.preview_time_percent: float = 0.3
+        self.preview_fps: int = 30
+        self.preview_width: int = 854
+        self.preview_height: int = 480
 
-def get_available_visualizers():
-    """Lädt alle verfügbaren Visualizer."""
-    return list_visualizers()
+        # Render-Config
+        self.resolution: tuple[int, int] = (1920, 1080)
+        self.render_fps: int = 30
+        self.codec: str = "h264"
+        self.quality: str = "high"
 
+        # Status
+        self.is_analyzing: bool = False
+        self.is_rendering: bool = False
+        self.status_message: str = "Bereit."
 
-def get_config_presets():
-    """Lädt alle Config-Presets."""
-    config_dir = Path("config")
-    presets = {}
-    if config_dir.exists():
-        for json_file in config_dir.glob("*.json"):
-            try:
-                with open(json_file) as f:
-                    data = json.load(f)
-                    presets[json_file.stem] = {
-                        'file': str(json_file),
-                        'visual': data.get('visual', {}).get('type', 'unknown'),
-                        'description': data.get('description', '')
-                    }
-            except:
-                pass
-    return presets
+        # Preview-Cache
+        self._preview_params_hash: str = ""
+        self._preview_image: Image.Image | None = None
 
-
-def get_visualizer_info(visualizer_name: str) -> dict:
-    """Gibt Informationen über einen Visualizer zurück."""
-    info = {
-        'pulsing_core': {
-            'emoji': '🔴',
-            'description': 'Pulsierender Kreis mit Chroma-Farben',
-            'best_for': 'EDM, Pop',
-            'color': '#FF0055'
-        },
-        'spectrum_bars': {
-            'emoji': '📊',
-            'description': '40-Balken Equalizer',
-            'best_for': 'Rock, Hip-Hop',
-            'color': '#00CCFF'
-        },
-        'chroma_field': {
-            'emoji': '✨',
-            'description': 'Partikel-Feld basierend auf Tonart',
-            'best_for': 'Ambient, Jazz',
-            'color': '#9D4EDD'
-        },
-        'particle_swarm': {
-            'emoji': '🔥',
-            'description': 'Physik-basierte Partikel-Explosionen',
-            'best_for': 'Dubstep, Trap',
-            'color': '#FF6B35'
-        },
-        'typographic': {
-            'emoji': '📝',
-            'description': 'Minimalistisch mit Wellenform',
-            'best_for': 'Podcasts, Sprache',
-            'color': '#00F5FF'
-        },
-        'neon_oscilloscope': {
-            'emoji': '💠',
-            'description': 'Retro-futuristischer Oszilloskop',
-            'best_for': 'Synthwave, Cyberpunk',
-            'color': '#00F5FF'
-        },
-        'sacred_mandala': {
-            'emoji': '🕉️',
-            'description': 'Heilige Geometrie mit rotierenden Mustern',
-            'best_for': 'Meditation, Ambient',
-            'color': '#FF9E00'
-        },
-        'liquid_blobs': {
-            'emoji': '💧',
-            'description': 'Flüssige MetaBall-ähnliche Blobs',
-            'best_for': 'House, Techno',
-            'color': '#00D9FF'
-        },
-        'neon_wave_circle': {
-            'emoji': '⭕',
-            'description': 'Konzentrische Neon-Ringe mit Wellen',
-            'best_for': 'EDM, Techno',
-            'color': '#39FF14'
-        },
-        'frequency_flower': {
-            'emoji': '🌸',
-            'description': 'Organische Blumen mit Audio-reaktiven Blütenblättern',
-            'best_for': 'Indie, Folk, Pop',
-            'color': '#FFB7B2'
-        },
-        # Signature Pro Visualizer (v2.0)
-        'lumina_core': {
-            'emoji': '⚡',
-            'description': 'Raymarched Kern mit FBM-Noise, Beat-Explosionen und Chromatic Aberration',
-            'best_for': 'EDM, Dubstep, Trap',
-            'color': '#FF00AA'
-        },
-        'voice_flow': {
-            'emoji': '🌊',
-            'description': 'Organischer, atmender Flow - nie ablenkend',
-            'best_for': 'Podcasts, Meditation, Ambient',
-            'color': '#00E5FF'
-        },
-        'spectrum_genesis': {
-            'emoji': '🌌',
-            'description': 'Hybrid: Bars + Wellenform + SDF-Glow',
-            'best_for': 'Alle Genres, Hybrid-Audio',
-            'color': '#AA00FF'
+    def get_params(self) -> dict:
+        """Gibt die aktuellen Visualizer-Parameter zurück."""
+        return {
+            "offset_x": self.viz_offset_x,
+            "offset_y": self.viz_offset_y,
+            "scale": self.viz_scale,
         }
-    }
-    return info.get(visualizer_name, {
-        'emoji': '🎨',
-        'description': 'Visualizer',
-        'best_for': 'Alle Genres',
-        'color': '#ffffff'
-    })
 
-
-def render_preview(audio_path: str, visualizer: str, duration: float = 5.0):
-    """Rendert eine Vorschau."""
-    preview_dir = Path("output/previews")
-    preview_dir.mkdir(parents=True, exist_ok=True)
-    output_path = str(preview_dir / f"preview_{Path(audio_path).stem}_{visualizer}.mp4")
-    
-    cmd = [
-        sys.executable, 'main.py', 'render', audio_path,
-        '--visual', visualizer,
-        '--output', output_path,
-        '--preview',
-        '--preview-duration', str(duration)
-    ]
-    
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    
-    return process, output_path
-
-
-def cleanup_temp_files(*paths: str):
-    """
-    Löscht temporäre Intermediate-Dateien (JSON-Configs, Logs, etc.)
-    nach erfolgreichem Render. Akzeptiert beliebig viele Pfade.
-    """
-    for p in paths:
-        if p and os.path.exists(p):
-            try:
-                if os.path.isfile(p):
-                    os.unlink(p)
-                elif os.path.isdir(p):
-                    shutil.rmtree(p)
-                print(f"[Cleanup] Intermediate gelöscht: {p}")
-            except Exception as e:
-                print(f"[Cleanup] Fehler beim Löschen von {p}: {e}")
-
-
-def render_full(audio_path: str, visualizer: str, output_path: str, 
-                resolution: str = "1920x1080", fps: int = 60):
-    """Rendert das vollständige Video."""
-    cmd = [
-        sys.executable, 'main.py', 'render', audio_path,
-        '--visual', visualizer,
-        '--output', output_path,
-        '--resolution', resolution,
-        '--fps', str(fps)
-    ]
-    
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    
-    return process
-
-
-def render_with_config(audio_path: str, config_path: str, output_path: str,
-                        preview: bool = False, preview_duration: float = 5.0):
-    """Rendert mit Config-Datei."""
-    cmd = [
-        sys.executable, 'main.py', 'render', audio_path,
-        '--config', config_path,
-        '--output', output_path
-    ]
-    
-    if preview:
-        cmd.extend(['--preview', '--preview-duration', str(preview_duration)])
-    
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    
-    return process
-
-
-def render_parameter_sliders(visualizer_type: str) -> dict:
-    """Rendert Parameter-Slider fuer den ausgewaehlten Visualizer mit Session-State."""
-    params = {}
-    prefix = f"viz_param_{visualizer_type}_"
-    
-    st.markdown("#### 🔧 Parameter-Tuning")
-    
-    # Default-Werte pro Visualizer
-    defaults = {}
-    if visualizer_type == "pulsing_core":
-        defaults = {
-            'pulse_intensity': 0.8, 'glow_layers': 5, 'glow_radius': 25, 'ring_count': 4,
-            'easing': 'expo', 'ambient_glow': 0.5, 'reflection': True, 'use_chroma_colors': True
+    def get_postprocess(self) -> dict:
+        """Gibt die aktuellen Post-Process-Parameter zurück."""
+        return {
+            "contrast": self.pp_contrast,
+            "saturation": self.pp_saturation,
+            "brightness": self.pp_brightness,
+            "warmth": self.pp_warmth,
+            "film_grain": self.pp_grain,
         }
-    elif visualizer_type == "spectrum_bars":
-        defaults = {
-            'bar_count': 40, 'smoothing': 0.3, 'bar_width': 3, 'glow_intensity': 0.5
-        }
-    
-    # WICHTIG: Session-State vor den Widgets initialisieren, damit Slider ohne Default rendern koennen
-    for param_name, default_val in defaults.items():
-        key = f"{prefix}{param_name}"
-        if key not in st.session_state:
-            st.session_state[key] = default_val
-    
-    if visualizer_type == "pulsing_core":
-        col1, col2 = st.columns(2)
-        with col1:
-            params['pulse_intensity'] = st.slider("💓 Pulse Intensität", 0.0, 2.0, step=0.1, key=f"{prefix}pulse_intensity")
-            params['glow_layers'] = st.slider("✨ Glow Layer", 1, 10, step=1, key=f"{prefix}glow_layers")
-            params['glow_radius'] = st.slider("🌟 Glow Radius", 5, 50, step=5, key=f"{prefix}glow_radius")
-            params['ring_count'] = st.slider("⭕ Ring Anzahl", 1, 8, step=1, key=f"{prefix}ring_count")
-        with col2:
-            params['easing'] = st.selectbox("📈 Easing", ["expo", "cubic", "quad", "linear"], key=f"{prefix}easing")
-            params['ambient_glow'] = st.slider("🌅 Ambient Glow", 0.0, 1.0, step=0.1, key=f"{prefix}ambient_glow")
-            params['reflection'] = st.checkbox("🪞 Reflexion", key=f"{prefix}reflection")
-            params['use_chroma_colors'] = st.checkbox("🎨 Chroma-Farben", key=f"{prefix}use_chroma_colors")
-    elif visualizer_type == "spectrum_bars":
-        col1, col2 = st.columns(2)
-        with col1:
-            params['bar_count'] = st.slider("📊 Balken Anzahl", 10, 100, step=5, key=f"{prefix}bar_count")
-            params['smoothing'] = st.slider("🧈 Smoothing", 0.0, 1.0, step=0.05, key=f"{prefix}smoothing")
-        with col2:
-            params['bar_width'] = st.slider("📏 Balken Breite", 1, 10, step=1, key=f"{prefix}bar_width")
-            params['glow_intensity'] = st.slider("✨ Glow", 0.0, 1.0, step=0.1, key=f"{prefix}glow_intensity")
-    else:
-        st.info(f"🔧 Parameter-Tuning für '{visualizer_type}' wird demnächst hinzugefügt!")
-    
-    return params
 
-
-def render_gpu_parameter_sliders(gpu_viz: str) -> dict:
-    """Rendert GPU-Parameter-Slider dynamisch aus dem Visualizer PARAMS."""
-    params = {}
-    prefix = f"gpu_param_{gpu_viz}_"
-    
-    try:
-        viz_cls = get_visualizer(gpu_viz)
-        param_spec = viz_cls.PARAMS
-    except Exception:
-        st.info(f"🔧 Parameter-Tuning für '{gpu_viz}' wird demnächst hinzugefügt!")
-        return params
-    
-    # Session-State initialisieren
-    for param_name, (default, min_val, max_val, step) in param_spec.items():
-        key = f"{prefix}{param_name}"
-        if key not in st.session_state:
-            st.session_state[key] = default
-    
-    # Sliders erstellen
-    cols = st.columns(2)
-    col_idx = 0
-    for param_name, (default, min_val, max_val, step) in param_spec.items():
-        with cols[col_idx % 2]:
-            if isinstance(step, int) and isinstance(default, int):
-                params[param_name] = st.slider(
-                    f"{param_name.replace('_', ' ').title()}",
-                    min_val, max_val,
-                    step=step,
-                    key=f"{prefix}{param_name}"
-                )
-            else:
-                params[param_name] = st.slider(
-                    f"{param_name.replace('_', ' ').title()}",
-                    float(min_val), float(max_val),
-                    step=float(step),
-                    key=f"{prefix}{param_name}"
-                )
-        col_idx += 1
-    
-    return params
-
-
-def prepare_background(image_path: str, width: int, height: int, 
-                         blur: float = 0.0, vignette: float = 0.0):
-    """Laedt und bereitet ein Hintergrundbild vor."""
-    from PIL import ImageFilter, ImageDraw
-    
-    bg = Image.open(image_path).convert('RGB')
-    bg = bg.resize((width, height), Image.LANCZOS)
-    
-    if blur > 0:
-        bg = bg.filter(ImageFilter.GaussianBlur(radius=blur))
-    
-    if vignette > 0:
-        mask = Image.new('L', (width, height), 255)
-        draw = ImageDraw.Draw(mask)
-        center_x, center_y = width // 2, height // 2
-        max_dist = np.sqrt(center_x**2 + center_y**2)
-        
-        for r in range(int(max_dist), 0, -5):
-            alpha = int(255 * (1.0 - vignette * (1.0 - r / max_dist)))
-            alpha = max(0, min(255, alpha))
-            draw.ellipse(
-                [center_x - r, center_y - r, center_x + r, center_y + r],
-                fill=alpha
-            )
-        
-        black = Image.new('RGB', (width, height), (0, 0, 0))
-        mask_inv = Image.fromarray(255 - np.array(mask))
-        bg = Image.composite(black, bg, mask_inv)
-    
-    return bg
-
-
-def composite_with_background(frame: np.ndarray, bg_image, opacity: float = 0.3):
-    """Mischt einen Frame mit dem Hintergrundbild."""
-    
-    frame_img = Image.fromarray(frame).convert('RGB')
-    opacity = max(0.0, min(1.0, opacity))
-    blended = Image.blend(frame_img, bg_image, opacity)
-    return np.array(blended)
-
-
-def save_ai_config(ai_recommendation, resolution: str = "1920x1080", fps: int = 60):
-    """Speichert eine AIRecommendation als temporäre JSON-Config."""
-    config_obj = ai_recommendation.to_visual_config(
-        resolution=tuple(int(x) for x in resolution.split("x")),
-        fps=fps
-    )
-    config = {
-        "visual": {
-            "type": config_obj.type,
-            "params": config_obj.params,
-            "colors": config_obj.colors,
-            "resolution": list(config_obj.resolution),
-            "fps": config_obj.fps
-        },
-        "postprocess": {}
-    }
-    temp_config = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-    json.dump(config, temp_config, indent=2)
-    temp_config.close()
-    return temp_config.name
-
-
-def save_render_config(audio_path: str, output_path: str, visualizer: str,
-                       resolution: str = "1920x1080", fps: int = 60,
-                       quotes: list = None, preview: bool = False,
-                       preview_duration: float = 5.0,
-                       colors: dict = None, params: dict = None,
-                       background_image: str = None, background_blur: float = 0.0,
-                       background_vignette: float = 0.0, background_opacity: float = 0.3,
-                       postprocess: dict = None, turbo_mode: bool = False,
-                       frame_skip: int = 1) -> str:
-    """
-    Erstellt eine vollstaendige Render-Config inkl. Quotes als temporäre JSON.
-    
-    Args:
-        audio_path: Pfad zur Audio-Datei
-        output_path: Pfad zur Ausgabe-Datei
-        visualizer: Name des Visualizers
-        resolution: Aufloesung als String "WxH"
-        fps: Frames pro Sekunde
-        quotes: Liste von Quote-Dictionaries
-        preview: Preview-Modus
-        preview_duration: Preview-Dauer in Sekunden
-        colors: Farb-Config
-        params: Visualizer-Parameter
-        
-    Returns:
-        Pfad zur temporären Config-Datei
-    """
-    width, height = map(int, resolution.split("x"))
-    
-    config = {
-        "audio_file": audio_path,
-        "output_file": output_path,
-        "visual": {
-            "type": visualizer,
-            "resolution": [width, height],
-            "fps": fps,
-            "colors": colors or {"primary": "#FF0055", "secondary": "#00CCFF", "background": "#0A0A0A"},
-            "params": params or {}
-        },
-        "postprocess": postprocess or {
-            "contrast": 1.0,
-            "saturation": 1.0,
-            "grain": 0.0,
-            "vignette": 0.0
-        },
-        "background_image": background_image,
-        "background_blur": background_blur,
-        "background_vignette": background_vignette,
-        "background_opacity": background_opacity,
-        "turbo_mode": turbo_mode
-    }
-    
-    if quotes:
-        # Konvertiere Quote-Objekte zu Dictionaries fuer JSON-Serialisierung
-        quote_dicts = []
-        for q in quotes:
-            if hasattr(q, 'text'):
-                # Quote Dataclass Objekt
-                quote_dicts.append({
-                    "text": q.text,
-                    "start_time": q.start_time,
-                    "end_time": q.end_time,
-                    "confidence": q.confidence
-                })
-            elif isinstance(q, dict):
-                # Bereits ein Dictionary
-                quote_dicts.append({
-                    "text": q.get("text", q.get("quote", "")),
-                    "start_time": q.get("start_time", 0.0),
-                    "end_time": q.get("end_time", 0.0),
-                    "confidence": q.get("confidence", 1.0)
-                })
-        config["quotes"] = quote_dicts
-    
-    temp_config = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
-    json.dump(config, temp_config, indent=2)
-    temp_config.close()
-    return temp_config.name
-
-
-def hex_to_rgb(hex_str):
-    """Konvertiert Hex-Farbe zu RGB-Tuple. Fallback auf Weiss bei Fehler."""
-    try:
-        hex_str = str(hex_str).lstrip('#')
-        if len(hex_str) == 3:
-            hex_str = ''.join([c * 2 for c in hex_str])
-        if len(hex_str) != 6:
-            return (255, 255, 255)
-        return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
-    except Exception:
-        return (255, 255, 255)
-
-
-def apply_look(look_key, uploaded_file):
-    """Wendet einen Look auf den Session-State an."""
-    look = LOOKS[look_key]
-    st.session_state["selected_look"] = look_key
-    st.session_state["selected_visualizer"] = look["visualizer"]
-    st.session_state["ai_color_primary"] = look["colors"]["primary"]
-    st.session_state["ai_color_secondary"] = look["colors"]["secondary"]
-    st.session_state["ai_color_background"] = look["colors"]["background"]
-
-    viz = look["visualizer"]
-    prefix = f"gpu_param_{viz}_"
-    for param_name, value in look.get("params", {}).items():
-        st.session_state[f"{prefix}{param_name}"] = value
-
-    for k, v in look["postprocess"].items():
-        st.session_state[f"pp_{k}_state"] = v
-        # Widget-Key loeschen (nicht setzen) um Konflikt mit Slider zu vermeiden
-        widget_key = "pp_grain" if k == "film_grain" else f"pp_{k}"
-        if widget_key in st.session_state:
-            del st.session_state[widget_key]
-
-    if uploaded_file:
-        qck = f"quotes_{uploaded_file.name}_{getattr(uploaded_file, 'size', 0)}"
-        quote_map = {
-            "font_size": f"quote_font_size_{qck}",
-            "box_color": f"quote_box_color_{qck}",
-            "font_color": f"quote_font_color_{qck}",
-            "box_padding": f"quote_box_padding_{qck}",
-            "box_radius": f"quote_box_radius_{qck}",
-            "box_margin_bottom": f"quote_box_margin_{qck}",
-            "max_width_ratio": f"quote_max_width_{qck}",
-            "fade_duration": f"quote_fade_duration_{qck}",
-            "line_spacing": f"quote_line_spacing_{qck}",
-            "max_font_size": f"quote_max_font_{qck}",
-            "max_chars_per_line": f"quote_max_chars_{qck}",
-            "position": f"quote_pos_{qck}",
-            "text_align": f"quote_align_{qck}",
-            "display_duration": f"quote_duration_{qck}",
-            "auto_scale_font": f"quote_autoscale_{qck}",
-            "slide_animation": f"quote_slide_{qck}",
-            "scale_in": f"quote_scale_in_{qck}",
-            "typewriter": f"quote_typewriter_{qck}",
-            "glow_pulse": f"quote_glow_pulse_{qck}",
-        }
-        for k, v in look["quotes"].items():
-            if k in quote_map:
-                st.session_state[quote_map[k]] = v
-
-        defaults = {
-            f"quote_slide_dist_{qck}": 100,
-            f"quote_slide_out_{qck}": "none",
-            f"quote_slide_out_dist_{qck}": 100,
-            f"quote_min_font_{qck}": 16,
-            f"quote_tw_speed_{qck}": 15.0,
-            f"quote_tw_mode_{qck}": "char",
-            f"quote_glow_pulse_int_{qck}": 0.5,
-        }
-        for k, v in defaults.items():
-            st.session_state[k] = v
-
-    for k, v in look.get("background", {}).items():
-        st.session_state[f"bg_{k}"] = v
-
-    for wkey in ["viz_color_primary", "viz_color_secondary", "viz_color_background", "selected_visualizer_dropdown"]:
-        if wkey in st.session_state:
-            del st.session_state[wkey]
-
-
-
-
-def render_sidebar():
-    """Rendert die Sidebar-Navigation."""
-    with st.sidebar:
-        st.markdown("""
-        <div style="text-align: center; padding: 20px 0;">
-            <h1 style="font-size: 1.8rem; margin: 0;">🎵 Audio Visualizer</h1>
-            <p style="color: #888; margin: 5px 0 0 0;">Pro Edition</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        
-        # Navigation
-        st.markdown("### 📍 Navigation")
-        
-        page = st.radio(
-            "Seite wählen:",
-            ["🏠 Start", "🎨 Visualizer", "⚙️ Einstellungen", "📚 Hilfe"],
-            label_visibility="collapsed"
-        )
-        
-        st.markdown("---")
-        
-        # Status-Anzeige
-        if st.session_state.get("audio_path"):
-            st.markdown("### 📊 Status")
-            st.markdown(f"""
-            <div class="audio-info">
-                <p style="margin: 0; font-size: 0.9em;">
-                    <strong>🎵 Audio geladen</strong><br>
-                    {st.session_state.get("audio_name", "")}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            features = st.session_state.get("features")
-            if features:
-                st.markdown(f"""
-                <div style="font-size: 0.8em; color: #888;">
-                    ⏱️ {features.duration:.1f}s | 🎼 {features.tempo:.0f} BPM
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("Keine Audio-Datei geladen")
-        
-        st.markdown("---")
-        
-        # System-Info
-        st.markdown("<p style='color: #666; font-size: 0.75em; text-align: center;'>v2.0 | KI-optimiert</p>", unsafe_allow_html=True)
-        
-        return page
-
-
-def _get_gpu_viz():
-    """Holt aktuellen Visualizer aus dem Session-State."""
-    gpu_viz = st.session_state.get("selected_visualizer")
-    if gpu_viz and gpu_viz not in list_visualizers():
-        gpu_viz = "spectrum_bars"
-    return gpu_viz
-
-
-def _reconstruct_gpu_params(gpu_viz):
-    """Rekonstruiert gpu_params aus dem Session-State."""
-    if not gpu_viz:
-        return {}
-    prefix = f"gpu_param_{gpu_viz}_"
-    params = {}
-    try:
-        viz_cls = get_visualizer(gpu_viz)
-        param_spec = viz_cls.PARAMS
-        for param_name in param_spec:
-            key = f"{prefix}{param_name}"
-            if key in st.session_state:
-                params[param_name] = st.session_state[key]
-    except Exception:
-        pass
-    return params
-
-
-def render_start_page():
-    """Rendert die Startseite mit Audio-Upload und Look-Auswahl."""
-    st.markdown("""
-    <div style="text-align: left; padding: 1rem 0 0.5rem 0;">
-        <h1 style="font-size: 2rem; margin-bottom: 0;">🎵 Audio Visualizer Pro</h1>
-        <p style="font-size: 1.1rem; color: #888; margin-top: 0.3rem;">
-            Audio hochladen. Look wählen. Video exportieren.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("### 📁 Audio-Upload")
-    uploaded_file = st.file_uploader(
-        "Wähle eine Audio-Datei",
-        type=['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'],
-        help="Unterstützte Formate: MP3, WAV, FLAC, AAC, OGG, M4A"
-    )
-
-    if uploaded_file:
-        st.audio(uploaded_file, format=f'audio/{uploaded_file.name.split(".")[-1]}')
-
-        # Eindeutige ID fuer diese Datei
-        file_id = f"{uploaded_file.name}_{getattr(uploaded_file, 'size', 0)}"
-        temp_audio_key = f"temp_audio_{file_id}"
-        features_key = f"features_{file_id}"
-
-        # Persistente Speicherung des User-Assets (strictly separated from temp files)
-        if temp_audio_key not in st.session_state:
-            user_audio_path = ASSET_DIRS["audio"] / f"{file_id}_{uploaded_file.name}"
-            with open(user_audio_path, "wb") as f:
-                f.write(uploaded_file.getvalue())
-            st.session_state[temp_audio_key] = str(user_audio_path)
-
-        temp_audio_path = st.session_state[temp_audio_key]
-
-        # Store current audio info for cross-page access
-        st.session_state["audio_path"] = temp_audio_path
-        st.session_state["audio_name"] = uploaded_file.name
-        st.session_state["audio_size"] = getattr(uploaded_file, 'size', 0)
-        st.session_state["file_id"] = file_id
-        st.session_state["current_temp_audio_key"] = temp_audio_key
-    elif st.session_state.get("audio_path"):
-        # Audio wurde bereits hochgeladen und ist im Session-State (z.B. nach Refresh)
-        audio_path = st.session_state["audio_path"]
-        ext = audio_path.split(".")[-1] if "." in audio_path else "mp3"
-        st.audio(audio_path, format=f'audio/{ext}')
-        st.info(f"🎵 Audio geladen: {st.session_state.get('audio_name', 'Unbekannt')}")
-        st.session_state["current_features_key"] = features_key
-
-        # Features nur einmal analysieren und cachen
-        features_lock_key = f"{features_key}_analyzing"
-        
-        if features_key not in st.session_state and features_lock_key not in st.session_state:
-            st.session_state[features_lock_key] = True  # Lock setzen
-            analyzer = AudioAnalyzer()
-
-            with st.status("⏳ Audio wird analysiert...", expanded=True) as status:
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-
-                def update_progress(msg, step, total):
-                    pct = min(1.0, step / total)
-                    progress_bar.progress(pct, text=msg)
-                    status_text.text(f"Schritt {step} von {total}: {msg}")
-
-                features = analyzer.analyze(
-                    temp_audio_path,
-                    fps=30,
-                    progress_callback=update_progress
-                )
-
-                progress_bar.progress(1.0, text="Fertig!")
-                status.update(label="✅ Analyse abgeschlossen", state="complete", expanded=False)
-
-            st.session_state[features_key] = features
-            st.session_state["features"] = features
-            del st.session_state[features_lock_key]  # Lock freigeben
-        elif features_key in st.session_state:
-            features = st.session_state[features_key]
-            st.session_state["features"] = features
-        else:
-            # Analyse laeuft gerade in einem anderen Thread/Rerun
-            st.info("⏳ Analyse läuft bereits...")
-            features = None
-
-        if features:
-            st.markdown(f"""
-            <div class="preview-card" style="padding: 12px;">
-                <p style="margin: 2px 0;">🎵 <strong>Dauer:</strong> {features.duration:.1f}s</p>
-                <p style="margin: 2px 0;">⏱️ <strong>Tempo:</strong> {features.tempo:.0f} BPM</p>
-                <p style="margin: 2px 0;">🎼 <strong>Key:</strong> {features.key or 'Unbekannt'}</p>
-                <p style="margin: 2px 0;">🎹 <strong>Modus:</strong> {features.mode}</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            auto_look_key = f"auto_look_{file_id}"
-
-            if auto_look_key not in st.session_state:
-                st.session_state[auto_look_key] = True
-
-                if features.mode == 'speech':
-                    recommended_look = "podcast_clean"
-                elif features.mode == 'music' and features.tempo > 110:
-                    recommended_look = "music_energy"
-                elif features.mode == 'music' and features.tempo <= 110:
-                    recommended_look = "music_chill"
-                else:
-                    recommended_look = "podcast_clean"
-
-                apply_look(recommended_look, uploaded_file)
-                st.toast(f"🤖 Auto-Look: '{LOOKS[recommended_look]['name']}' ausgewählt", icon="✨")
-                st.rerun()
-
-    st.markdown("### ✨ Look wählen")
-
-    if st.button("🤖 Auto", key="look_auto", width='stretch', help="Wählt den passenden Look basierend auf deinem Audio"):
-        features = st.session_state.get("features")
-        if features:
-            if features.mode == 'speech':
-                recommended_look = "podcast_clean"
-            elif features.mode == 'music' and features.tempo > 110:
-                recommended_look = "music_energy"
-            elif features.mode == 'music' and features.tempo <= 110:
-                recommended_look = "music_chill"
-            else:
-                recommended_look = "podcast_clean"
-            # Use the stored uploaded_file info from session state if available
-            class FakeUploadedFile:
-                pass
-            fake_file = FakeUploadedFile()
-            fake_file.name = st.session_state.get("audio_name", "")
-            fake_file.size = st.session_state.get("audio_size", 0)
-            apply_look(recommended_look, fake_file)
-            st.rerun()
-        else:
-            st.warning("Lade zuerst eine Audio-Datei hoch.")
-
-    look_cols = st.columns(2)
-    look_keys = list(LOOKS.keys())
-    for idx, look_key in enumerate(look_keys):
-        with look_cols[idx % 2]:
-            look = LOOKS[look_key]
-            is_active = st.session_state.get("selected_look") == look_key
-            btn_type = "primary" if is_active else "secondary"
-            if st.button(
-                f"{look['name']}\n{look['description']}",
-                key=f"look_btn_{look_key}",
-                type=btn_type,
-                width='stretch'
-            ):
-                class FakeUploadedFile:
-                    pass
-                fake_file = FakeUploadedFile()
-                fake_file.name = st.session_state.get("audio_name", "")
-                fake_file.size = st.session_state.get("audio_size", 0)
-                apply_look(look_key, fake_file)
-                st.rerun()
-
-
-def render_visualizer_page():
-    """Rendert die Visualizer-Seite mit Parameter-Tuning, KI-Optimierung, Zitate und Hintergrund."""
-    temp_audio_path = st.session_state.get("audio_path")
-    features = st.session_state.get("features")
-    audio_name = st.session_state.get("audio_name", "")
-    audio_size = st.session_state.get("audio_size", 0)
-    
-    if not temp_audio_path or not features:
-        st.warning("⚠️ Bitte zuerst eine Audio-Datei auf der Startseite laden!")
-        return
-    
-    quotes_cache_key = f"quotes_{audio_name}_{audio_size}"
-    gpu_viz = _get_gpu_viz()
-    
-    st.markdown("### 🎨 Visualizer")
-    
-    # Visualizer selection
-    if gpu_viz:
-        available_visualizers = get_available_visualizers()
-        selected_visualizer = st.selectbox(
-            "Visualizer",
-            available_visualizers,
-            index=available_visualizers.index(gpu_viz) if gpu_viz in available_visualizers else 0,
-            format_func=lambda x: f"{get_visualizer_info(x)['emoji']} {x.replace('_', ' ').title()}",
-            key="selected_visualizer_dropdown"
-        )
-        st.session_state["selected_visualizer"] = selected_visualizer
-        gpu_viz = selected_visualizer
-
-        st.markdown("#### 🔧 Parameter")
-        gpu_params = render_gpu_parameter_sliders(gpu_viz)
-        
-        st.markdown("#### 🎨 Farben")
-        col_f1, col_f2, col_f3 = st.columns(3)
-        with col_f1:
-            viz_primary = st.color_picker("Primary", st.session_state.get("ai_color_primary", "#FF0055"), key="viz_color_primary")
-            st.session_state["ai_color_primary"] = viz_primary
-        with col_f2:
-            viz_secondary = st.color_picker("Secondary", st.session_state.get("ai_color_secondary", "#00CCFF"), key="viz_color_secondary")
-            st.session_state["ai_color_secondary"] = viz_secondary
-        with col_f3:
-            viz_background = st.color_picker("Background", st.session_state.get("ai_color_background", "#0A0A0A"), key="viz_color_background")
-            st.session_state["ai_color_background"] = viz_background
-
-        st.markdown("##### 📐 Visualizer Position & Skalierung")
-        viz_pos_col1, viz_pos_col2, viz_pos_col3 = st.columns(3)
-        with viz_pos_col1:
-            viz_offset_x = st.slider("X-Verschiebung", -500, 500, st.session_state.get("viz_offset_x", 0), key="viz_offset_x")
-        with viz_pos_col2:
-            viz_offset_y = st.slider("Y-Verschiebung", -500, 500, st.session_state.get("viz_offset_y", 0), key="viz_offset_y")
-        with viz_pos_col3:
-            viz_scale = st.slider("Viz-Skalierung", 0.5, 2.0, st.session_state.get("viz_scale", 1.0), 0.05, key="viz_scale")
-
-        st.markdown("#### 🎨 Color-Grading")
-        # Widget-Keys vorher bereinigen um Session-State Konflikte zu vermeiden
-        # (die *_state Keys bleiben als persistente Defaults erhalten)
-        for _pp_key in ["pp_contrast", "pp_saturation", "pp_brightness", "pp_warmth", "pp_grain"]:
-            if _pp_key in st.session_state:
-                del st.session_state[_pp_key]
-        pp_col1, pp_col2 = st.columns(2)
-        with pp_col1:
-            pp_contrast = st.slider("Kontrast", 0.5, 2.0, st.session_state.get("pp_contrast_state", 1.0), 0.05, key="pp_contrast")
-            pp_saturation = st.slider("Sättigung", 0.0, 2.0, st.session_state.get("pp_saturation_state", 1.0), 0.05, key="pp_saturation")
-            pp_brightness = st.slider("Helligkeit", -0.5, 0.5, st.session_state.get("pp_brightness_state", 0.0), 0.05, key="pp_brightness")
-        with pp_col2:
-            pp_warmth = st.slider("Wärme", -1.0, 1.0, st.session_state.get("pp_warmth_state", 0.0), 0.05, key="pp_warmth", help="Positiv = warm/gelb, Negativ = kalt/blau")
-            pp_grain = st.slider("Film Grain", 0.0, 1.0, st.session_state.get("pp_film_grain_state", 0.0), 0.05, key="pp_grain")
-            beat_sync = st.checkbox("🥁 Quotes auf Beats synchronisieren", value=False, key="beat_sync")
-
-        st.session_state["pp_contrast_state"] = pp_contrast
-        st.session_state["pp_saturation_state"] = pp_saturation
-        st.session_state["pp_brightness_state"] = pp_brightness
-        st.session_state["pp_warmth_state"] = pp_warmth
-        st.session_state["pp_film_grain_state"] = pp_grain
-
-        # KI Optimization
-        st.markdown("---")
-        st.markdown("##### 🤖 KI-Optimierung")
-        ai_col1, ai_col2 = st.columns([3, 1])
-        with ai_col2:
-            prefix = f"gpu_param_{gpu_viz}_"
-            if st.button("🤖 Optimieren", key=f"ai_optimize_{gpu_viz}"):
-                st.session_state[f"{prefix}_trigger_optimize"] = True
-                st.rerun()
-        with ai_col1:
-            st.caption("Die KI passt alle Einstellungen basierend auf deinem Audio an.")
-
-        st.text_input(
-            "💬 Dein Wunsch (optional)",
-            placeholder="z.B. Mach es schlichter und ruhiger...",
-            key="ai_user_prompt",
-            help="Beschreibe hier, wie die Visualisierung aussehen soll."
+    def preview_params_hash(self) -> str:
+        """Erzeugt einen Hash über alle Preview-relevanten Parameter."""
+        return (
+            f"{self.visualizer_type}_{self.audio_path}_{self.background_path}_"
+            f"{self.viz_offset_x:.3f}_{self.viz_offset_y:.3f}_{self.viz_scale:.3f}_"
+            f"{self.bg_blur:.1f}_{self.bg_vignette:.2f}_{self.bg_opacity:.2f}_"
+            f"{self.pp_contrast:.2f}_{self.pp_saturation:.2f}_{self.pp_brightness:.2f}_"
+            f"{self.pp_warmth:.2f}_{self.pp_grain:.2f}_{self.preview_time_percent:.2f}"
         )
 
-        if st.session_state.get(f"{prefix}_trigger_optimize", False):
-            st.session_state[f"{prefix}_trigger_optimize"] = False
-            with st.spinner("🤖 KI analysiert Audio und optimiert ALLE Einstellungen..."):
-                try:
-                    audio_path = st.session_state.get("audio_path")
-                    if not audio_path:
-                        st.error("Audio-Pfad nicht gefunden. Bitte Datei neu hochladen.")
-                        return
 
-                    features_key = st.session_state.get("current_features_key")
-                    if features_key in st.session_state and st.session_state[features_key] is not None:
-                        features_opt = st.session_state[features_key]
-                    else:
-                        analyzer = AudioAnalyzer()
-                        features_opt = analyzer.analyze(audio_path, fps=30)
+# =============================================================================
+# DEARPYGUI FRONTEND
+# =============================================================================
 
-                    feature_summary = {
-                        'duration': features_opt.duration,
-                        'tempo': features_opt.tempo,
-                        'mode': features_opt.mode,
-                        'rms_mean': float(features_opt.rms.mean()),
-                        'rms_std': float(features_opt.rms.std()),
-                        'onset_mean': float(features_opt.onset.mean()),
-                        'onset_std': float(features_opt.onset.std()),
-                        'spectral_mean': float(features_opt.spectral_centroid.mean()),
-                        'transient_mean': float(features_opt.transient.mean()) if hasattr(features_opt, 'transient') else 0.0,
-                        'voice_clarity_mean': float(features_opt.voice_clarity.mean()) if hasattr(features_opt, 'voice_clarity') else 0.0,
-                    }
+class AudioVisualizerGUI:
+    """Hauptklasse für die DearPyGui-Oberfläche."""
 
-                    viz_cls = get_visualizer(gpu_viz)
-                    fallback_params = {k: v[0] for k, v in viz_cls.PARAMS.items()}
-                    param_specs = viz_cls.PARAMS
+    def __init__(self):
+        self.state = AppState()
+        self._preview_texture_tag = "preview_texture"
+        self._preview_raw_data = np.zeros(
+            (self.state.preview_width * self.state.preview_height * 4,),
+            dtype=np.float32
+        )
+        self._last_preview_update = 0.0
+        self._preview_min_interval = 0.15  # Sekunden zwischen Preview-Updates
 
-                    current_params = {}
-                    for k in fallback_params:
-                        current_params[k] = st.session_state.get(f"{prefix}{k}", fallback_params[k])
+    # -------------------------------------------------------------------------
+    # UI Setup
+    # -------------------------------------------------------------------------
 
-                    current_colors = {
-                        "primary": st.session_state.get("ai_color_primary", "#FF0055"),
-                        "secondary": st.session_state.get("ai_color_secondary", "#00CCFF"),
-                        "background": st.session_state.get("ai_color_background", "#0A0A0A"),
-                    }
+    def setup_ui(self):
+        dpg.create_context()
+        dpg.configure_app(docking=False, init_file="dpg_layout.ini")
 
-                    user_prompt = st.session_state.get("ai_user_prompt", "")
+        with dpg.font_registry():
+            # Default-Font skalieren
+            default_font = dpg.add_font("C:/Windows/Fonts/segoeui.ttf", 16)
+            dpg.bind_font(default_font)
 
-                    gemini = GeminiIntegration()
-                    optimized = gemini.optimize_all_settings(
-                        gpu_viz, current_params, feature_summary, current_colors,
-                        param_specs=param_specs, user_prompt=user_prompt
-                    )
+        with dpg.window(
+            label="Audio Visualizer Pro",
+            tag="main_window",
+            width=1400,
+            height=900,
+            no_close=True,
+            no_collapse=True,
+        ):
+            dpg.add_menu_bar()
+            with dpg.menu(label="Datei"):
+                dpg.add_menu_item(label="Audio laden...", callback=self._show_audio_dialog)
+                dpg.add_menu_item(label="Hintergrundbild laden...", callback=self._show_bg_dialog)
+                dpg.add_separator()
+                dpg.add_menu_item(label="Beenden", callback=lambda: dpg.stop_dearpygui())
 
-                    for key, value in optimized.get("params", {}).items():
-                        full_key = f"{prefix}{key}"
-                        if full_key in st.session_state:
-                            del st.session_state[full_key]
-                        st.session_state[full_key] = value
+            with dpg.menu(label="Hilfe"):
+                dpg.add_menu_item(label="Über", callback=self._show_about)
 
-                    colors = optimized.get("colors", current_colors)
-                    st.session_state["ai_color_primary"] = colors.get("primary", "#FF0055")
-                    st.session_state["ai_color_secondary"] = colors.get("secondary", "#00CCFF")
-                    st.session_state["ai_color_background"] = colors.get("background", "#0A0A0A")
+            # Haupt-Layout: Zwei Spalten
+            with dpg.group(horizontal=True):
+                # --- LINKS: Control-Panel ---
+                self._build_control_panel()
 
-                    pp = optimized.get("postprocess", {})
-                    for k, v in pp.items():
-                        state_key = f"pp_{k}_state"
-                        widget_key = "pp_grain" if k == "film_grain" else f"pp_{k}"
-                        st.session_state[state_key] = v
-                        # Widget-Key loeschen (nicht setzen) um Konflikt mit Slider zu vermeiden
-                        if widget_key in st.session_state:
-                            del st.session_state[widget_key]
+                # --- RECHTS: Preview ---
+                self._build_preview_panel()
 
-                    bg = optimized.get("background", {})
-                    for k, v in bg.items():
-                        widget_key = f"bg_{k}"
-                        if widget_key in st.session_state:
-                            del st.session_state[widget_key]
-                        st.session_state[widget_key] = v
+        # File Dialogs
+        self._setup_file_dialogs()
 
-                    quotes_opt = optimized.get("quotes", {})
-                    if quotes_opt:
-                        quote_mappings = {
-                            "font_size": f"quote_font_size_{quotes_cache_key}",
-                            "box_color": f"quote_box_color_{quotes_cache_key}",
-                            "font_color": f"quote_font_color_{quotes_cache_key}",
-                            "position": f"quote_pos_{quotes_cache_key}",
-                            "display_duration": f"quote_duration_{quotes_cache_key}",
-                            "auto_scale_font": f"quote_autoscale_{quotes_cache_key}",
-                            "slide_animation": f"quote_slide_{quotes_cache_key}",
-                            "slide_out_animation": f"quote_slide_out_{quotes_cache_key}",
-                            "scale_in": f"quote_scale_in_{quotes_cache_key}",
-                            "typewriter": f"quote_typewriter_{quotes_cache_key}",
-                            "glow_pulse": f"quote_glow_pulse_{quotes_cache_key}",
-                            "box_padding": f"quote_box_padding_{quotes_cache_key}",
-                            "box_radius": f"quote_box_radius_{quotes_cache_key}",
-                            "box_margin_bottom": f"quote_box_margin_{quotes_cache_key}",
-                            "max_width_ratio": f"quote_max_width_{quotes_cache_key}",
-                            "fade_duration": f"quote_fade_duration_{quotes_cache_key}",
-                            "line_spacing": f"quote_line_spacing_{quotes_cache_key}",
-                            "max_font_size": f"quote_max_font_{quotes_cache_key}",
-                            "max_chars_per_line": f"quote_max_chars_{quotes_cache_key}",
-                        }
-                        for src_key, dst_key in quote_mappings.items():
-                            if src_key in quotes_opt:
-                                val = quotes_opt[src_key]
-                                if dst_key in st.session_state:
-                                    del st.session_state[dst_key]
-                                st.session_state[dst_key] = val
-
-                    st.success("✅ Alle Einstellungen optimiert! Aktualisiere...")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"KI-Optimierung fehlgeschlagen: {e}")
-    else:
-        st.info("Wähle zuerst einen Look auf der Startseite.")
-
-    # Quotes expander
-    with st.expander("💬 Zitate", expanded=False):
-        if temp_audio_path:
-            if st.button("🔮 Key-Zitate extrahieren", key="extract_quotes_btn"):
-                with st.spinner("Gemini analysiert dein Audio..."):
-                    try:
-                        audio_path = st.session_state.get("audio_path")
-                        if not audio_path:
-                            st.error("Audio-Pfad nicht gefunden. Bitte Datei neu hochladen.")
-                            return
-
-                        gemini = GeminiIntegration()
-                        quotes = gemini.extract_quotes(audio_path, audio_duration=features.duration)
-
-                        if features is not None:
-                            audio_duration = features.duration
-                            for q in quotes:
-                                q.start_time = max(0.0, min(q.start_time, audio_duration - 1.0))
-                                q.end_time = max(q.start_time + 1.0, min(q.end_time, audio_duration))
-
-                        st.session_state[quotes_cache_key] = quotes
-                    except Exception as e:
-                        error_msg = str(e)
-                        if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg:
-                            st.warning("⚠️ Gemini ist derzeit überlastet (503). Retry wurde bereits versucht.")
-                        else:
-                            st.error(f"Zitat-Extraktion fehlgeschlagen: {e}")
-                        st.info("💡 Du kannst Zitate manuell hinzufügen oder Demo-Zitate verwenden.")
-
-            # ---- Fallback: Demo-Zitate (wenn Gemini down ist) ----
-            if quotes_cache_key not in st.session_state or not st.session_state[quotes_cache_key]:
-                demo_col1, demo_col2 = st.columns(2)
-                with demo_col1:
-                    if st.button("🎲 Demo-Zitate erstellen", key=f"demo_quotes_{quotes_cache_key}"):
-                        duration = features.duration if features else 60.0
-                        demo_quotes = [
-                            Quote(text="Das Abenteuer beginnt jetzt.", start_time=min(5.0, duration * 0.05), end_time=min(13.0, duration * 0.1), confidence=0.95),
-                            Quote(text="Jeder Moment ist eine Chance.", start_time=min(duration * 0.3, duration - 15.0), end_time=min(duration * 0.3 + 8.0, duration - 5.0), confidence=0.90),
-                            Quote(text="Bleib dran, es lohnt sich.", start_time=min(duration * 0.6, duration - 10.0), end_time=min(duration * 0.6 + 8.0, duration - 2.0), confidence=0.88),
-                        ]
-                        st.session_state[quotes_cache_key] = demo_quotes
-                        st.success("✅ 3 Demo-Zitate erstellt! Du kannst sie unten bearbeiten.")
-                        st.rerun()
-                with demo_col2:
-                    if st.button("✏️ Manuell hinzufügen", key=f"manual_quote_toggle_{quotes_cache_key}"):
-                        st.session_state[f"show_manual_quote_{quotes_cache_key}"] = True
-                        st.rerun()
-
-            # ---- Manueller Quote-Editor ----
-            if st.session_state.get(f"show_manual_quote_{quotes_cache_key}", False):
-                st.markdown("##### ✏️ Manuell Zitate hinzufügen")
-                with st.form(key=f"manual_quote_form_{quotes_cache_key}"):
-                    mq_text = st.text_area("Zitat-Text", value="", placeholder="Gib dein Zitat hier ein...")
-                    mq_col1, mq_col2 = st.columns(2)
-                    with mq_col1:
-                        mq_start = st.number_input("Startzeit (Sek)", min_value=0.0, max_value=features.duration if features else 9999.0, value=0.0, step=1.0)
-                    with mq_col2:
-                        mq_end = st.number_input("Endzeit (Sek)", min_value=0.0, max_value=features.duration if features else 9999.0, value=min(8.0, features.duration if features else 8.0), step=1.0)
-                    submitted = st.form_submit_button("➕ Zitat hinzufügen")
-                    if submitted and mq_text.strip():
-                        existing = st.session_state.get(quotes_cache_key, [])
-                        existing.append(Quote(
-                            text=mq_text.strip(),
-                            start_time=max(0.0, mq_start),
-                            end_time=max(mq_start + 1.0, mq_end),
-                            confidence=1.0
-                        ))
-                        st.session_state[quotes_cache_key] = existing
-                        st.success("✅ Zitat hinzugefügt!")
-                        st.rerun()
-
-            st.markdown("##### ⚙️ Zitat-Einstellungen")
-            qe_col1, qe_col2 = st.columns(2)
-            with qe_col1:
-                quote_font_size = st.slider("Schriftgröße", 12, 96, st.session_state.get(f"quote_font_size_{quotes_cache_key}", 52), key=f"quote_font_size_{quotes_cache_key}")
-                quote_display_duration = st.slider("Anzeigedauer (Sekunden)", 2.0, 20.0, st.session_state.get(f"quote_duration_{quotes_cache_key}", 8.0), 0.5, key=f"quote_duration_{quotes_cache_key}")
-                quote_position = st.selectbox("Position", ["bottom", "center", "top"], index=["bottom", "center", "top"].index(st.session_state.get(f"quote_pos_{quotes_cache_key}", "bottom")), key=f"quote_pos_{quotes_cache_key}")
-            with qe_col2:
-                quote_text_align = st.selectbox("Text-Ausrichtung", ["center", "left", "right"], index=["center", "left", "right"].index(st.session_state.get(f"quote_align_{quotes_cache_key}", "center")), key=f"quote_align_{quotes_cache_key}")
-                quote_box_color = st.color_picker("Box-Farbe", st.session_state.get(f"quote_box_color_{quotes_cache_key}", "#1a1a2e"), key=f"quote_box_color_{quotes_cache_key}")
-                quote_font_color = st.color_picker("Schrift-Farbe", st.session_state.get(f"quote_font_color_{quotes_cache_key}", "#FFFFFF"), key=f"quote_font_color_{quotes_cache_key}")
-
-            st.markdown("##### 📐 Box & Layout")
-            box_col1, box_col2, box_col3 = st.columns(3)
-            with box_col1:
-                quote_box_padding = st.slider("Box-Padding", 0, 80, st.session_state.get(f"quote_box_padding_{quotes_cache_key}", 32), key=f"quote_box_padding_{quotes_cache_key}")
-                quote_box_radius = st.slider("Box-Radius (px)", 0, 50, st.session_state.get(f"quote_box_radius_{quotes_cache_key}", 16), key=f"quote_box_radius_{quotes_cache_key}")
-                quote_box_margin = st.slider("Box-Abstand Rand", 20, 300, st.session_state.get(f"quote_box_margin_{quotes_cache_key}", 100), key=f"quote_box_margin_{quotes_cache_key}")
-            with box_col2:
-                quote_max_width = st.slider("Max. Breite", 0.3, 1.0, st.session_state.get(f"quote_max_width_{quotes_cache_key}", 0.75), 0.05, key=f"quote_max_width_{quotes_cache_key}")
-                quote_fade_duration = st.slider("Fade-Dauer (Sek)", 0.1, 2.0, st.session_state.get(f"quote_fade_duration_{quotes_cache_key}", 0.6), 0.1, key=f"quote_fade_duration_{quotes_cache_key}")
-                quote_line_spacing = st.slider("Zeilenabstand", 0.8, 2.0, st.session_state.get(f"quote_line_spacing_{quotes_cache_key}", 1.35), 0.05, key=f"quote_line_spacing_{quotes_cache_key}")
-            with box_col3:
-                quote_min_font = st.slider("Min. Schriftgröße", 8, 36, st.session_state.get(f"quote_min_font_{quotes_cache_key}", 16), key=f"quote_min_font_{quotes_cache_key}")
-                quote_max_font = st.slider("Max. Schriftgröße", 20, 96, st.session_state.get(f"quote_max_font_{quotes_cache_key}", 72), key=f"quote_max_font_{quotes_cache_key}")
-                quote_max_chars = st.slider("Max. Zeichen/Zeile", 20, 80, st.session_state.get(f"quote_max_chars_{quotes_cache_key}", 40), key=f"quote_max_chars_{quotes_cache_key}")
-
-            st.markdown("##### ✨ Animationen")
-            anim_col1, anim_col2, anim_col3 = st.columns(3)
-            with anim_col1:
-                quote_auto_scale = st.checkbox("Auto-Skalierung", value=st.session_state.get(f"quote_autoscale_{quotes_cache_key}", True), key=f"quote_autoscale_{quotes_cache_key}")
-                quote_scale_in = st.checkbox("Scale-In", value=st.session_state.get(f"quote_scale_in_{quotes_cache_key}", False), key=f"quote_scale_in_{quotes_cache_key}")
-            with anim_col2:
-                slide_options = ["none", "up", "down", "left", "right"]
-                slide_val = st.session_state.get(f"quote_slide_{quotes_cache_key}", "none")
-                if slide_val not in slide_options:
-                    slide_val = "none"
-                quote_slide = st.selectbox("Slide-In", slide_options, index=slide_options.index(slide_val), key=f"quote_slide_{quotes_cache_key}")
-                quote_slide_dist = st.slider("Slide-In Distanz (px)", 0, 300, st.session_state.get(f"quote_slide_dist_{quotes_cache_key}", 100), key=f"quote_slide_dist_{quotes_cache_key}")
-                slide_out_options = ["none", "up", "down", "left", "right"]
-                slide_out_val = st.session_state.get(f"quote_slide_out_{quotes_cache_key}", "none")
-                if slide_out_val not in slide_out_options:
-                    slide_out_val = "none"
-                quote_slide_out = st.selectbox("Slide-Out", slide_out_options, index=slide_out_options.index(slide_out_val), key=f"quote_slide_out_{quotes_cache_key}")
-                quote_slide_out_dist = st.slider("Slide-Out Distanz (px)", 0, 300, st.session_state.get(f"quote_slide_out_dist_{quotes_cache_key}", 100), key=f"quote_slide_out_dist_{quotes_cache_key}")
-                quote_glow_pulse = st.checkbox("Glow-Pulse", value=st.session_state.get(f"quote_glow_pulse_{quotes_cache_key}", False), key=f"quote_glow_pulse_{quotes_cache_key}")
-                quote_glow_pulse_int = st.slider("Pulse-Stärke", 0.0, 1.0, st.session_state.get(f"quote_glow_pulse_int_{quotes_cache_key}", 0.5), key=f"quote_glow_pulse_int_{quotes_cache_key}")
-            with anim_col3:
-                quote_typewriter = st.checkbox("Typewriter-Effekt", value=st.session_state.get(f"quote_typewriter_{quotes_cache_key}", False), key=f"quote_typewriter_{quotes_cache_key}")
-                quote_tw_mode = st.selectbox("Typewriter-Modus", ["char", "word"], index=["char", "word"].index(st.session_state.get(f"quote_tw_mode_{quotes_cache_key}", "char")), key=f"quote_tw_mode_{quotes_cache_key}")
-                quote_tw_speed = st.slider("Typewriter-Geschw.", 5.0, 50.0, st.session_state.get(f"quote_tw_speed_{quotes_cache_key}", 15.0), 1.0, key=f"quote_tw_speed_{quotes_cache_key}")
-
-            uploaded_font = st.file_uploader("🔤 Eigene Schriftart (.ttf)", type=['ttf'], key=f"quote_font_{quotes_cache_key}")
-            quote_font_path = None
-            if uploaded_font:
-                user_font_path = ASSET_DIRS["fonts"] / uploaded_font.name
-                with open(user_font_path, "wb") as f:
-                    f.write(uploaded_font.getvalue())
-                quote_font_path = str(user_font_path)
-                st.session_state[f"quote_font_path_{quotes_cache_key}"] = quote_font_path
-                st.success(f"✅ Schriftart geladen: {uploaded_font.name}")
-            else:
-                quote_font_path = st.session_state.get(f"quote_font_path_{quotes_cache_key}", None)
-
-            st.markdown("##### 📐 Position & Skalierung")
-            pos_col1, pos_col2, pos_col3 = st.columns(3)
-            with pos_col1:
-                quote_offset_x = st.slider("X-Offset (px)", -500, 500, st.session_state.get(f"quote_offset_x_{quotes_cache_key}", 0), key=f"quote_offset_x_{quotes_cache_key}")
-            with pos_col2:
-                quote_offset_y = st.slider("Y-Offset (px)", -300, 300, st.session_state.get(f"quote_offset_y_{quotes_cache_key}", 0), key=f"quote_offset_y_{quotes_cache_key}")
-            with pos_col3:
-                quote_scale = st.slider("Skalierung", 0.5, 2.0, st.session_state.get(f"quote_scale_{quotes_cache_key}", 1.0), 0.05, key=f"quote_scale_{quotes_cache_key}")
-
-            if quotes_cache_key in st.session_state and st.session_state[quotes_cache_key]:
-                quotes = st.session_state[quotes_cache_key]
-                st.success(f"✅ {len(quotes)} Key-Zitate gefunden!")
-
-                selected_key = f"selected_{quotes_cache_key}"
-                if selected_key not in st.session_state:
-                    st.session_state[selected_key] = [True] * len(quotes)
-
-                edited_quotes = []
-                for i, quote in enumerate(quotes):
-                    start_min = int(quote.start_time // 60)
-                    start_sec = int(quote.start_time % 60)
-
-                    qc_col1, qc_col2 = st.columns([0.08, 0.92])
-                    with qc_col1:
-                        enabled = st.checkbox(
-                            "Aktiv",
-                            value=st.session_state[selected_key][i],
-                            key=f"quote_chk_{i}_{quotes_cache_key}"
-                        )
-                        st.session_state[selected_key][i] = enabled
-
-                    with qc_col2:
-                        edited_text = st.text_input(
-                            f"Zitat {i+1} ({start_min}:{start_sec:02d})",
-                            value=quote.text,
-                            key=f"quote_txt_{i}_{quotes_cache_key}"
-                        )
-
-                        if enabled:
-                            edited_quotes.append({
-                                'text': edited_text,
-                                'start_time': quote.start_time,
-                                'end_time': quote.end_time,
-                                'confidence': quote.confidence
-                            })
-
-                        st.caption(f"⏱️ {start_min}:{start_sec:02d} | Konfidenz: {quote.confidence*100:.0f}%")
-
-                render_quotes_key = f"render_quotes_{quotes_cache_key}"
-                st.session_state[render_quotes_key] = edited_quotes
-
-                if edited_quotes:
-                    st.info(f"📌 {len(edited_quotes)} Zitate sind aktiviert.")
-                else:
-                    st.warning("⚠️ Keine Zitate aktiviert.")
-            else:
-                st.caption("Noch keine Zitate extrahiert.")
-        else:
-            st.info("Lade zuerst eine Audio-Datei hoch.")
-
-    # Background expander
-    with st.expander("🖼️ Hintergrund", expanded=False):
-        if temp_audio_path:
-            uploaded_bg = st.file_uploader(
-                "Hintergrundbild hochladen (optional)",
-                type=['png', 'jpg', 'jpeg', 'webp'],
-                key="bg_uploader"
+        # Texture für Preview anlegen
+        with dpg.texture_registry(show=False):
+            dpg.add_raw_texture(
+                width=self.state.preview_width,
+                height=self.state.preview_height,
+                default_value=self._preview_raw_data,
+                format=dpg.mvFormat_Float_rgba,
+                tag=self._preview_texture_tag,
             )
 
-            if uploaded_bg:
-                bg_file_id = f"{uploaded_bg.name}_{getattr(uploaded_bg, 'size', 0)}"
-                user_bg_path = ASSET_DIRS["backgrounds"] / f"{bg_file_id}_{uploaded_bg.name}"
-                with open(user_bg_path, "wb") as f:
-                    f.write(uploaded_bg.getvalue())
-                st.session_state["bg_image_path"] = str(user_bg_path)
-                st.image(str(user_bg_path), caption="Hintergrundbild-Vorschau", width='stretch')
-            elif st.session_state.get("bg_image_path"):
-                # Hintergrundbild ist im Session-State (z.B. nach Refresh)
-                st.image(st.session_state["bg_image_path"], caption="Hintergrundbild-Vorschau", width='stretch')
+        dpg.create_viewport(
+            title="Audio Visualizer Pro",
+            width=1400,
+            height=900,
+            vsync=True,
+        )
+        dpg.setup_dearpygui()
+        dpg.show_viewport()
+        dpg.set_primary_window("main_window", True)
 
-            bg_blur = st.slider("🔮 Blur (Weichzeichnung)", 0.0, 20.0,
-                                st.session_state.get("bg_blur", 0.0), 0.5,
-                                key="bg_blur")
-            bg_vignette = st.slider("🌑 Vignette (Randabdunkelung)", 0.0, 1.0,
-                                    st.session_state.get("bg_vignette", 0.0), 0.05,
-                                    key="bg_vignette")
-            bg_opacity = st.slider("🎨 Hintergrund-Deckkraft", 0.0, 1.0,
-                                   st.session_state.get("bg_opacity", 0.3), 0.05,
-                                   key="bg_opacity")
-        else:
-            st.info("Lade zuerst eine Audio-Datei hoch.")
+    def _build_control_panel(self):
+        """Baut das linke Control-Panel."""
+        with dpg.child_window(
+            width=380,
+            height=-1,
+            border=True,
+            tag="control_panel",
+        ):
+            # --- Audio ---
+            dpg.add_text("🎵 Audio", color=(100, 180, 255))
+            dpg.add_separator()
+            dpg.add_button(
+                label="Audio laden...",
+                callback=self._show_audio_dialog,
+                width=-1,
+            )
+            dpg.add_text("Keine Audio-Datei geladen", tag="audio_status", wrap=360)
+            dpg.add_spacer(height=8)
 
+            # --- Visualizer ---
+            dpg.add_text("🎨 Visualizer", color=(100, 180, 255))
+            dpg.add_separator()
+            dpg.add_combo(
+                items=self.state.available_visualizers,
+                default_value=self.state.visualizer_type,
+                callback=self._on_visualizer_changed,
+                width=-1,
+                tag="viz_combo",
+            )
+            dpg.add_spacer(height=8)
 
-def render_settings_page():
-    """Rendert die Einstellungsseite mit Export, Preview und Render."""
-    temp_audio_path = st.session_state.get("audio_path")
-    features = st.session_state.get("features")
-    gpu_viz = _get_gpu_viz()
-    gpu_params = _reconstruct_gpu_params(gpu_viz)
-    
-    # Read post-processing from session state
-    pp_contrast = st.session_state.get("pp_contrast", 1.0)
-    pp_saturation = st.session_state.get("pp_saturation", 1.0)
-    pp_brightness = st.session_state.get("pp_brightness", 0.0)
-    pp_warmth = st.session_state.get("pp_warmth", 0.0)
-    pp_grain = st.session_state.get("pp_grain", 0.0)
-    beat_sync = st.session_state.get("beat_sync", False)
-    
-    # Read background from session state
-    bg_image_path = st.session_state.get("bg_image_path", None)
-    bg_blur = st.session_state.get("bg_blur", 0.0)
-    bg_vignette = st.session_state.get("bg_vignette", 0.0)
-    bg_opacity = st.session_state.get("bg_opacity", 0.3)
-    
-    # Read visualizer position & scale from session state
-    viz_offset_x = st.session_state.get("viz_offset_x", 0)
-    viz_offset_y = st.session_state.get("viz_offset_y", 0)
-    viz_scale = st.session_state.get("viz_scale", 1.0)
-    
-    audio_name = st.session_state.get("audio_name", "")
-    audio_size = st.session_state.get("audio_size", 0)
-    quotes_cache_key = f"quotes_{audio_name}_{audio_size}" if audio_name else None
-    
-    # Read quote position & scale from session state
-    quote_offset_x = st.session_state.get(f"quote_offset_x_{quotes_cache_key}", 0) if quotes_cache_key else 0
-    quote_offset_y = st.session_state.get(f"quote_offset_y_{quotes_cache_key}", 0) if quotes_cache_key else 0
-    quote_scale = st.session_state.get(f"quote_scale_{quotes_cache_key}", 1.0) if quotes_cache_key else 1.0
-    
-    st.markdown("### ⚙️ Einstellungen")
-    
-    if not temp_audio_path or not gpu_viz:
-        st.info("👆 Lade eine Audio-Datei hoch und wähle einen Look, um zu exportieren.")
-        return
-    
-    # Export settings
-    with st.expander("🔧 Technische Einstellungen", expanded=True):
-        tech_col1, tech_col2, tech_col3 = st.columns(3)
-        with tech_col1:
-            resolution = st.selectbox("Auflösung", ["1920x1080", "1280x720", "3840x2160", "854x480"], index=0, key="export_resolution")
-        with tech_col2:
-            fps = st.selectbox("FPS", [60, 30, 24], index=0, key="export_fps")
-        with tech_col3:
-            codec = st.selectbox("Codec", ["h264", "hevc", "prores"], index=0, key="export_codec")
-            quality = st.selectbox("Qualität", ["high", "medium", "low", "lossless"], index=0, key="export_quality")
+            # --- Parameter ---
+            dpg.add_text("🔧 Parameter", color=(100, 180, 255))
+            dpg.add_separator()
+            dpg.add_slider_float(
+                label="Offset X", min_value=-1.0, max_value=1.0,
+                default_value=0.0, callback=self._on_param_changed, tag="param_offset_x",
+            )
+            dpg.add_slider_float(
+                label="Offset Y", min_value=-1.0, max_value=1.0,
+                default_value=0.0, callback=self._on_param_changed, tag="param_offset_y",
+            )
+            dpg.add_slider_float(
+                label="Skalierung", min_value=0.5, max_value=2.0,
+                default_value=1.0, callback=self._on_param_changed, tag="param_scale",
+            )
+            dpg.add_spacer(height=8)
 
-        turbo_mode = st.checkbox("⚡ Turbo-Modus", value=False, key="export_turbo")
-        frame_skip = st.selectbox(
-            "🚀 Frame-Skip (Draft-Modus)",
-            options=[("Jeder Frame (Qualität)", 1), ("Jeder 2. Frame (2x schneller)", 2), ("Jeder 3. Frame (3x schneller)", 3)],
-            format_func=lambda x: x[0],
-            index=0,
-            key="export_frame_skip"
-        )[1]
-    
-    # Live Preview
-    st.markdown("---")
-    st.markdown("### 👁️ Live Preview")
-    
-    auto_preview = st.toggle("⚡ Auto-Preview", value=False, key="auto_preview_toggle",
-                             help="Automatisch neu rendern wenn Parameter sich ändern")
+            # --- Hintergrund ---
+            dpg.add_text("🖼️ Hintergrund", color=(100, 180, 255))
+            dpg.add_separator()
+            dpg.add_button(
+                label="Hintergrundbild laden...",
+                callback=self._show_bg_dialog,
+                width=-1,
+            )
+            dpg.add_slider_float(
+                label="Blur", min_value=0.0, max_value=20.0,
+                default_value=0.0, callback=self._on_param_changed, tag="param_bg_blur",
+            )
+            dpg.add_slider_float(
+                label="Vignette", min_value=0.0, max_value=1.0,
+                default_value=0.0, callback=self._on_param_changed, tag="param_bg_vignette",
+            )
+            dpg.add_slider_float(
+                label="Opacity", min_value=0.0, max_value=1.0,
+                default_value=0.3, callback=self._on_param_changed, tag="param_bg_opacity",
+            )
+            dpg.add_spacer(height=8)
 
-    preview_params_hash = hash((gpu_viz, str(sorted(gpu_params.items()) if gpu_params else []),
-                                bg_opacity, bg_vignette, bg_blur,
-                                pp_contrast, pp_saturation, pp_brightness, pp_warmth, pp_grain,
-                                viz_offset_x, viz_offset_y, viz_scale,
-                                quote_offset_x, quote_offset_y, quote_scale))
+            # --- Post-Process ---
+            dpg.add_text("✨ Post-Process", color=(100, 180, 255))
+            dpg.add_separator()
+            dpg.add_slider_float(
+                label="Kontrast", min_value=0.5, max_value=2.0,
+                default_value=1.0, callback=self._on_param_changed, tag="param_pp_contrast",
+            )
+            dpg.add_slider_float(
+                label="Sättigung", min_value=0.0, max_value=2.0,
+                default_value=1.0, callback=self._on_param_changed, tag="param_pp_saturation",
+            )
+            dpg.add_slider_float(
+                label="Helligkeit", min_value=-0.5, max_value=0.5,
+                default_value=0.0, callback=self._on_param_changed, tag="param_pp_brightness",
+            )
+            dpg.add_slider_float(
+                label="Warmth", min_value=-1.0, max_value=1.0,
+                default_value=0.0, callback=self._on_param_changed, tag="param_pp_warmth",
+            )
+            dpg.add_slider_float(
+                label="Film Grain", min_value=0.0, max_value=1.0,
+                default_value=0.0, callback=self._on_param_changed, tag="param_pp_grain",
+            )
+            dpg.add_spacer(height=8)
 
-    preview_needs_update = False
-    if auto_preview:
-        last_hash = st.session_state.get("last_preview_hash", None)
-        if last_hash != preview_params_hash:
-            preview_needs_update = True
+            # --- Preview Zeit ---
+            dpg.add_text("⏱️ Preview-Zeit", color=(100, 180, 255))
+            dpg.add_separator()
+            dpg.add_slider_float(
+                label="Position (%)", min_value=0.0, max_value=1.0,
+                default_value=0.3, callback=self._on_param_changed, tag="param_preview_time",
+            )
+            dpg.add_spacer(height=8)
 
-    preview_container = st.empty()
+            # --- Render ---
+            dpg.add_text("🎬 Export", color=(100, 180, 255))
+            dpg.add_separator()
+            dpg.add_combo(
+                label="Auflösung",
+                items=["1920x1080", "1280x720", "854x480"],
+                default_value="1920x1080",
+                callback=self._on_resolution_changed,
+                width=-1,
+                tag="res_combo",
+            )
+            dpg.add_input_text(
+                label="Output-Ordner",
+                default_value=self.state.output_dir,
+                callback=self._on_output_dir_changed,
+                width=-1,
+            )
+            dpg.add_button(
+                label="▶ Video exportieren",
+                callback=self._on_render_clicked,
+                width=-1,
+                tag="btn_render",
+            )
+            dpg.add_progress_bar(
+                default_value=0.0,
+                width=-1,
+                tag="render_progress",
+            )
+            dpg.add_spacer(height=8)
 
-    manual_preview = st.button("🔄 Preview aktualisieren", key="manual_preview_btn")
-    render_error = False
-    if manual_preview or preview_needs_update:
-        with st.spinner("Rendere GPU-Frame...") if not preview_needs_update else st.empty():
+            # --- Status ---
+            dpg.add_text("Status", color=(100, 180, 255))
+            dpg.add_separator()
+            dpg.add_text(self.state.status_message, tag="status_text", wrap=360)
+
+    def _build_preview_panel(self):
+        """Baut das rechte Preview-Panel."""
+        with dpg.child_window(
+            width=-1,
+            height=-1,
+            border=True,
+            tag="preview_panel",
+        ):
+            dpg.add_text("👁️ Live Preview", color=(100, 180, 255))
+            dpg.add_separator()
+            dpg.add_image(
+                self._preview_texture_tag,
+                width=self.state.preview_width,
+                height=self.state.preview_height,
+                tag="preview_image",
+            )
+
+    def _setup_file_dialogs(self):
+        """Richtet die Datei-Dialoge ein."""
+        with dpg.file_dialog(
+            directory_selector=False,
+            show=False,
+            callback=self._on_audio_selected,
+            id="audio_file_dialog",
+            width=700,
+            height=500,
+        ):
+            dpg.add_file_extension("Audio (.mp3 .wav .flac .aac .ogg .m4a){.mp3,.wav,.flac,.aac,.ogg,.m4a}")
+            dpg.add_file_extension(".*")
+
+        with dpg.file_dialog(
+            directory_selector=False,
+            show=False,
+            callback=self._on_background_selected,
+            id="bg_file_dialog",
+            width=700,
+            height=500,
+        ):
+            dpg.add_file_extension("Bilder (.png .jpg .jpeg .webp){.png,.jpg,.jpeg,.webp}")
+            dpg.add_file_extension(".*")
+
+    # -------------------------------------------------------------------------
+    # Callbacks
+    # -------------------------------------------------------------------------
+
+    def _show_audio_dialog(self, sender, app_data):
+        dpg.show_item("audio_file_dialog")
+
+    def _show_bg_dialog(self, sender, app_data):
+        dpg.show_item("bg_file_dialog")
+
+    def _show_about(self):
+        with dpg.window(label="Über", modal=True, width=400, height=200):
+            dpg.add_text("Audio Visualizer Pro v2.0")
+            dpg.add_text("GPU-beschleunigte Audio-Visualisierung")
+            dpg.add_separator()
+            dpg.add_button(label="Schließen", callback=lambda: dpg.delete_item(dpg.last_container()))
+
+    def _on_audio_selected(self, sender, app_data):
+        """Callback wenn eine Audio-Datei ausgewählt wurde."""
+        if app_data.get("selections"):
+            selections = list(app_data["selections"].values())
+            if selections:
+                path = selections[0]
+                self.state.audio_path = path
+                dpg.set_value("audio_status", f"Audio: {Path(path).name}")
+                self._analyze_audio()
+                self._request_preview_update()
+
+    def _on_background_selected(self, sender, app_data):
+        """Callback wenn ein Hintergrundbild ausgewählt wurde."""
+        if app_data.get("selections"):
+            selections = list(app_data["selections"].values())
+            if selections:
+                path = selections[0]
+                self.state.background_path = path
+                self._request_preview_update()
+
+    def _on_visualizer_changed(self, sender, app_data):
+        self.state.visualizer_type = dpg.get_value(sender)
+        self._request_preview_update()
+
+    def _on_param_changed(self, sender, app_data):
+        """Wird aufgerufen wenn ein Slider bewegt wird."""
+        tag = dpg.get_item_alias(sender) or sender
+
+        mapping = {
+            "param_offset_x": ("viz_offset_x", float),
+            "param_offset_y": ("viz_offset_y", float),
+            "param_scale": ("viz_scale", float),
+            "param_bg_blur": ("bg_blur", float),
+            "param_bg_vignette": ("bg_vignette", float),
+            "param_bg_opacity": ("bg_opacity", float),
+            "param_pp_contrast": ("pp_contrast", float),
+            "param_pp_saturation": ("pp_saturation", float),
+            "param_pp_brightness": ("pp_brightness", float),
+            "param_pp_warmth": ("pp_warmth", float),
+            "param_pp_grain": ("pp_grain", float),
+            "param_preview_time": ("preview_time_percent", float),
+        }
+
+        if tag in mapping:
+            attr, typ = mapping[tag]
+            setattr(self.state, attr, typ(dpg.get_value(sender)))
+            self._request_preview_update()
+
+    def _on_resolution_changed(self, sender, app_data):
+        res_str = dpg.get_value(sender)
+        w, h = map(int, res_str.split("x"))
+        self.state.resolution = (w, h)
+
+    def _on_output_dir_changed(self, sender, app_data):
+        self.state.output_dir = dpg.get_value(sender)
+
+    def _request_preview_update(self):
+        """Markiert die Preview für ein Update."""
+        self._last_preview_update = 0.0
+
+    # -------------------------------------------------------------------------
+    # Audio-Analyse
+    # -------------------------------------------------------------------------
+
+    def _analyze_audio(self):
+        """Analysiert die Audio-Datei im Hintergrund."""
+        if not self.state.audio_path or not os.path.exists(self.state.audio_path):
+            return
+
+        self.state.is_analyzing = True
+        self._set_status("Audio wird analysiert...")
+
+        def _analyze():
             try:
-                audio_path = temp_audio_path
-                if not audio_path:
-                    st.error("Audio-Pfad nicht gefunden. Bitte Datei neu hochladen.")
-                    render_error = True
-                else:
-                    pp_cfg = None
-                    if pp_contrast != 1.0 or pp_saturation != 1.0 or pp_brightness != 0.0 or pp_warmth != 0.0 or pp_grain > 0.0:
-                        pp_cfg = {
-                            "contrast": pp_contrast,
-                            "saturation": pp_saturation,
-                            "brightness": pp_brightness,
-                            "warmth": pp_warmth,
-                            "film_grain": pp_grain,
-                        }
-
-                    preview_quote_cfg = None
-                    preview_quotes = None
-                    if quotes_cache_key:
-                        edited_raw = st.session_state.get(f"render_quotes_{quotes_cache_key}", [])
-                        if edited_raw:
-                            preview_quotes = [Quote(**q) for q in edited_raw]
-                            preview_quote_cfg = QuoteOverlayConfig(
-                                enabled=True,
-                                font_size=st.session_state.get(f"quote_font_size_{quotes_cache_key}", 52),
-                                font_color=hex_to_rgb(st.session_state.get(f"quote_font_color_{quotes_cache_key}", "#FFFFFF")),
-                                box_color=hex_to_rgb(st.session_state.get(f"quote_box_color_{quotes_cache_key}", "#1a1a2e")) + (200,),
-                                box_padding=st.session_state.get(f"quote_box_padding_{quotes_cache_key}", 32),
-                                box_radius=st.session_state.get(f"quote_box_radius_{quotes_cache_key}", 16),
-                                box_margin_bottom=st.session_state.get(f"quote_box_margin_{quotes_cache_key}", 100),
-                                max_width_ratio=st.session_state.get(f"quote_max_width_{quotes_cache_key}", 0.75),
-                                fade_duration=st.session_state.get(f"quote_fade_duration_{quotes_cache_key}", 0.6),
-                                line_spacing=st.session_state.get(f"quote_line_spacing_{quotes_cache_key}", 1.35),
-                                max_chars_per_line=st.session_state.get(f"quote_max_chars_{quotes_cache_key}", 40),
-                                position=st.session_state.get(f"quote_pos_{quotes_cache_key}", "bottom"),
-                                text_align=st.session_state.get(f"quote_align_{quotes_cache_key}", "center"),
-                                display_duration=st.session_state.get(f"quote_duration_{quotes_cache_key}", 8.0),
-                                auto_scale_font=st.session_state.get(f"quote_autoscale_{quotes_cache_key}", True),
-                                min_font_size=st.session_state.get(f"quote_min_font_{quotes_cache_key}", 16),
-                                max_font_size=st.session_state.get(f"quote_max_font_{quotes_cache_key}", 72),
-                                slide_animation=st.session_state.get(f"quote_slide_{quotes_cache_key}", "none"),
-                                slide_distance=st.session_state.get(f"quote_slide_dist_{quotes_cache_key}", 100),
-                                slide_out_animation=st.session_state.get(f"quote_slide_out_{quotes_cache_key}", "none"),
-                                slide_out_distance=st.session_state.get(f"quote_slide_out_dist_{quotes_cache_key}", 100),
-                                scale_in=st.session_state.get(f"quote_scale_in_{quotes_cache_key}", False),
-                                typewriter=st.session_state.get(f"quote_typewriter_{quotes_cache_key}", False),
-                                typewriter_speed=st.session_state.get(f"quote_tw_speed_{quotes_cache_key}", 15.0),
-                                typewriter_mode=st.session_state.get(f"quote_tw_mode_{quotes_cache_key}", "char"),
-                                glow_pulse=st.session_state.get(f"quote_glow_pulse_{quotes_cache_key}", False),
-                                glow_pulse_intensity=st.session_state.get(f"quote_glow_pulse_int_{quotes_cache_key}", 0.5),
-                                offset_x=st.session_state.get(f"quote_offset_x_{quotes_cache_key}", 0),
-                                offset_y=st.session_state.get(f"quote_offset_y_{quotes_cache_key}", 0),
-                                scale=st.session_state.get(f"quote_scale_{quotes_cache_key}", 1.0),
-                            )
-
-                    preview_img = render_gpu_preview(
-                        audio_path=audio_path,
-                        visualizer_type=gpu_viz,
-                        params=gpu_params,
-                        width=480,
-                        height=270,
-                        background_image=bg_image_path,
-                        background_blur=bg_blur,
-                        background_vignette=bg_vignette,
-                        background_opacity=bg_opacity,
-                        postprocess=pp_cfg,
-                        quotes=preview_quotes,
-                        quote_config=preview_quote_cfg,
-                        viz_offset_x=viz_offset_x / (480 / 2.0),
-                        viz_offset_y=viz_offset_y / (270 / 2.0),
-                        viz_scale=viz_scale,
-                    )
-
-                    if preview_img is not None:
-                        st.session_state["last_preview_hash"] = preview_params_hash
-                        st.session_state["last_preview_img"] = preview_img
-                        preview_container.image(preview_img, caption=f"👁️ Live-Preview: {gpu_viz}", width='stretch')
-                    else:
-                        render_error = True
-                        preview_container.error("GPU-Preview konnte nicht gerendert werden.")
+                analyzer = AudioAnalyzer()
+                features = analyzer.analyze(self.state.audio_path, fps=self.state.preview_fps)
+                self.state.features = features
+                self.state.audio_duration = features.duration
+                self.state.is_analyzing = False
+                self._set_status(f"Audio analysiert: {features.duration:.1f}s @ {features.tempo:.0f} BPM")
             except Exception as e:
-                render_error = True
-                preview_container.error(f"GPU-Live-Preview Fehler: {e}")
+                self.state.is_analyzing = False
+                self._set_status(f"Analyse-Fehler: {e}")
 
-    if not render_error and not preview_needs_update and "last_preview_img" in st.session_state:
-        preview_container.image(st.session_state["last_preview_img"], caption=f"👁️ Live-Preview: {gpu_viz}", width='stretch')
-    
-    # Export buttons
-    st.markdown("---")
-    st.markdown("### 🎬 Export")
-    
-    export_col1, export_col2 = st.columns(2)
-    with export_col1:
-        preview_clicked = st.button("📹 Schnell-Vorschau (5s)", key="btn_preview", width='stretch')
-    with export_col2:
-        render_clicked = st.button("🎬 Video exportieren", key="btn_render", type="primary", width='stretch')
-    
-    if preview_clicked or render_clicked:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+        threading.Thread(target=_analyze, daemon=True).start()
+
+    # -------------------------------------------------------------------------
+    # Preview Rendering
+    # -------------------------------------------------------------------------
+
+    def _update_preview(self):
+        """Aktualisiert die Live-Preview."""
+        now = time.time()
+        if now - self._last_preview_update < self._preview_min_interval:
+            return
+        self._last_preview_update = now
+
+        if not self.state.audio_path or not os.path.exists(self.state.audio_path):
+            return
+        if self.state.is_analyzing:
+            return
+        if self.state.features is None:
+            return
+
+        params_hash = self.state.preview_params_hash()
+        if params_hash == self.state._preview_params_hash and self.state._preview_image is not None:
+            return  # Keine Änderung, nicht neu rendern
+
+        self.state._preview_params_hash = params_hash
 
         try:
-            audio_path = temp_audio_path
-            if not audio_path:
-                st.error("Audio-Pfad nicht gefunden. Bitte Datei neu hochladen.")
-                return
-
-            output_dir = Path("output")
-            output_dir.mkdir(parents=True, exist_ok=True)
-            output_filename = f"visualization_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
-            output_path = str(output_dir / output_filename)
-
-            w, h = map(int, resolution.split('x'))
-
-            status_text.text("Starte GPU-Rendering...")
-
-            renderer = GPUBatchRenderer(width=w, height=h, fps=fps)
-
-            preview_mode = preview_clicked
-
-            quote_font_path = None
-            if quotes_cache_key:
-                quote_font_path = st.session_state.get(f"quote_font_path_{quotes_cache_key}", None)
-
-            if quotes_cache_key:
-                render_quotes_key = f"render_quotes_{quotes_cache_key}"
-                edited_quotes_raw = st.session_state.get(render_quotes_key, [])
-                quotes_for_render = [Quote(**q) for q in edited_quotes_raw] if edited_quotes_raw else None
-
-                quote_config = QuoteOverlayConfig(
-                    enabled=True,
-                    font_size=st.session_state.get(f"quote_font_size_{quotes_cache_key}", 52),
-                    font_color=hex_to_rgb(st.session_state.get(f"quote_font_color_{quotes_cache_key}", "#FFFFFF")),
-                    box_color=hex_to_rgb(st.session_state.get(f"quote_box_color_{quotes_cache_key}", "#1a1a2e")) + (200,),
-                    box_padding=st.session_state.get(f"quote_box_padding_{quotes_cache_key}", 32),
-                    box_radius=st.session_state.get(f"quote_box_radius_{quotes_cache_key}", 16),
-                    box_margin_bottom=st.session_state.get(f"quote_box_margin_{quotes_cache_key}", 100),
-                    max_width_ratio=st.session_state.get(f"quote_max_width_{quotes_cache_key}", 0.75),
-                    fade_duration=st.session_state.get(f"quote_fade_duration_{quotes_cache_key}", 0.6),
-                    line_spacing=st.session_state.get(f"quote_line_spacing_{quotes_cache_key}", 1.35),
-                    max_chars_per_line=st.session_state.get(f"quote_max_chars_{quotes_cache_key}", 40),
-                    position=st.session_state.get(f"quote_pos_{quotes_cache_key}", "bottom"),
-                    text_align=st.session_state.get(f"quote_align_{quotes_cache_key}", "center"),
-                    display_duration=st.session_state.get(f"quote_duration_{quotes_cache_key}", 8.0),
-                    font_path=quote_font_path,
-                    auto_scale_font=st.session_state.get(f"quote_autoscale_{quotes_cache_key}", True),
-                    min_font_size=st.session_state.get(f"quote_min_font_{quotes_cache_key}", 16),
-                    max_font_size=st.session_state.get(f"quote_max_font_{quotes_cache_key}", 72),
-                    slide_animation=st.session_state.get(f"quote_slide_{quotes_cache_key}", "none"),
-                    slide_distance=st.session_state.get(f"quote_slide_dist_{quotes_cache_key}", 100),
-                    slide_out_animation=st.session_state.get(f"quote_slide_out_{quotes_cache_key}", "none"),
-                    slide_out_distance=st.session_state.get(f"quote_slide_out_dist_{quotes_cache_key}", 100),
-                    scale_in=st.session_state.get(f"quote_scale_in_{quotes_cache_key}", False),
-                    typewriter=st.session_state.get(f"quote_typewriter_{quotes_cache_key}", False),
-                    typewriter_speed=st.session_state.get(f"quote_tw_speed_{quotes_cache_key}", 15.0),
-                    typewriter_mode=st.session_state.get(f"quote_tw_mode_{quotes_cache_key}", "char"),
-                    glow_pulse=st.session_state.get(f"quote_glow_pulse_{quotes_cache_key}", False),
-                    glow_pulse_intensity=st.session_state.get(f"quote_glow_pulse_int_{quotes_cache_key}", 0.5),
-                    offset_x=st.session_state.get(f"quote_offset_x_{quotes_cache_key}", 0),
-                    offset_y=st.session_state.get(f"quote_offset_y_{quotes_cache_key}", 0),
-                    scale=st.session_state.get(f"quote_scale_{quotes_cache_key}", 1.0),
-                )
-            else:
-                quotes_for_render = None
-                quote_config = None
-
-            postprocess_cfg = None
-            if pp_contrast != 1.0 or pp_saturation != 1.0 or pp_brightness != 0.0 or pp_warmth != 0.0 or pp_grain > 0.0:
-                postprocess_cfg = {
-                    "contrast": pp_contrast,
-                    "saturation": pp_saturation,
-                    "brightness": pp_brightness,
-                    "warmth": pp_warmth,
-                    "film_grain": pp_grain,
-                }
-
-            renderer.render(
-                audio_path=audio_path,
-                visualizer_type=gpu_viz,
-                output_path=output_path,
-                params=gpu_params,
-                background_image=bg_image_path,
-                background_blur=bg_blur,
-                background_vignette=bg_vignette,
-                background_opacity=bg_opacity,
-                preview_mode=preview_mode,
-                preview_duration=5.0,
-                quotes=quotes_for_render,
-                quote_config=quote_config,
-                codec=codec,
-                quality=quality,
-                postprocess=postprocess_cfg,
-                sync_quotes_to_beats=beat_sync,
-                viz_offset_x=viz_offset_x / (w / 2.0),
-                viz_offset_y=viz_offset_y / (h / 2.0),
-                viz_scale=viz_scale,
+            img = render_gpu_preview(
+                audio_path=self.state.audio_path,
+                visualizer_type=self.state.visualizer_type,
+                params=self.state.get_params(),
+                width=self.state.preview_width,
+                height=self.state.preview_height,
+                fps=self.state.preview_fps,
+                preview_time_percent=self.state.preview_time_percent,
+                background_image=self.state.background_path,
+                background_blur=self.state.bg_blur,
+                background_vignette=self.state.bg_vignette,
+                background_opacity=self.state.bg_opacity,
+                postprocess=self.state.get_postprocess(),
             )
 
-            progress_bar.progress(1.0)
-            status_text.text("Fertig!")
-
-            if os.path.exists(output_path):
-                st.markdown("""
-                <div class="success-box">
-                    <strong>✅ Rendering erfolgreich!</strong><br>
-                    Dein Video ist bereit zum Download.
-                </div>
-                """, unsafe_allow_html=True)
-
-                with open(output_path, 'rb') as f:
-                    video_bytes = f.read()
-                    st.video(video_bytes)
-
-                st.download_button(
-                    label="📥 Video herunterladen",
-                    data=video_bytes,
-                    file_name=output_filename,
-                    mime="video/mp4",
-                )
-                # Temporäre Intermediate-Dateien bereinigen (nicht das Output-Video)
-                cleanup_temp_files()
-            else:
-                st.error("Rendering fehlgeschlagen: Output-Datei nicht gefunden.")
+            if img is not None:
+                self.state._preview_image = img
+                self._upload_texture(img)
 
         except Exception as e:
-            st.error("❌ GPU-Rendering fehlgeschlagen")
-            st.info(f"**Fehler:** {str(e)}")
-            st.info("💡 Tipp: Stelle sicher, dass FFmpeg korrekt installiert ist und eine GPU verfügbar.")
-            # Auch bei Fehler: Temporäre Intermediate-Dateien bereinigen
-            cleanup_temp_files()
+            print(f"[Preview] Fehler: {e}")
+
+    def _upload_texture(self, img: Image.Image):
+        """Lädt ein PIL-Image in die DPG-Texture."""
+        # Konvertiere zu RGBA und flachem float32-Array
+        img_rgba = img.convert("RGBA")
+        arr = np.array(img_rgba, dtype=np.float32) / 255.0
+        flat = arr.flatten()
+
+        # Stelle sicher, dass das Array die richtige Größe hat
+        expected_size = self.state.preview_width * self.state.preview_height * 4
+        if flat.size != expected_size:
+            # Resize falls nötig
+            img_rgba = img_rgba.resize(
+                (self.state.preview_width, self.state.preview_height),
+                Image.LANCZOS
+            )
+            arr = np.array(img_rgba, dtype=np.float32) / 255.0
+            flat = arr.flatten()
+
+        self._preview_raw_data[:] = flat[:]
+        dpg.set_value(self._preview_texture_tag, self._preview_raw_data)
+
+    # -------------------------------------------------------------------------
+    # Video Export
+    # -------------------------------------------------------------------------
+
+    def _on_render_clicked(self, sender, app_data):
+        """Startet den Video-Export im Hintergrund."""
+        if self.state.is_rendering:
+            self._set_status("Rendering läuft bereits...")
+            return
+        if not self.state.audio_path or not os.path.exists(self.state.audio_path):
+            self._set_status("Keine Audio-Datei geladen!")
+            return
+        if self.state.features is None:
+            self._set_status("Audio wird noch analysiert...")
+            return
+
+        self.state.is_rendering = True
+        dpg.configure_item("btn_render", label="⏳ Render läuft...")
+        dpg.set_value("render_progress", 0.0)
+        self._set_status("Starte Rendering...")
+
+        def _render():
+            try:
+                w, h = self.state.resolution
+                fps = self.state.render_fps
+
+                out_dir = Path(self.state.output_dir)
+                out_dir.mkdir(parents=True, exist_ok=True)
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = str(out_dir / f"visualization_{ts}.mp4")
+
+                renderer = GPUBatchRenderer(width=w, height=h, fps=fps)
+
+                renderer.render(
+                    audio_path=self.state.audio_path,
+                    visualizer_type=self.state.visualizer_type,
+                    output_path=output_path,
+                    params=self.state.get_params(),
+                    background_image=self.state.background_path,
+                    background_blur=self.state.bg_blur,
+                    background_vignette=self.state.bg_vignette,
+                    background_opacity=self.state.bg_opacity,
+                    postprocess=self.state.get_postprocess(),
+                    codec=self.state.codec,
+                    quality=self.state.quality,
+                    viz_offset_x=self.state.viz_offset_x,
+                    viz_offset_y=self.state.viz_offset_y,
+                    viz_scale=self.state.viz_scale,
+                )
+
+                renderer.release()
+
+                self.state.is_rendering = False
+                dpg.set_value("render_progress", 1.0)
+                dpg.configure_item("btn_render", label="▶ Video exportieren")
+                self._set_status(f"Fertig: {output_path}")
+
+            except Exception as e:
+                self.state.is_rendering = False
+                dpg.configure_item("btn_render", label="▶ Video exportieren")
+                dpg.set_value("render_progress", 0.0)
+                self._set_status(f"Render-Fehler: {e}")
+
+        threading.Thread(target=_render, daemon=True).start()
+
+    # -------------------------------------------------------------------------
+    # Hilfsmethoden
+    # -------------------------------------------------------------------------
+
+    def _set_status(self, msg: str):
+        """Aktualisiert die Status-Zeile."""
+        self.state.status_message = msg
+        dpg.set_value("status_text", msg)
+
+    # -------------------------------------------------------------------------
+    # Main Loop
+    # -------------------------------------------------------------------------
+
+    def run(self):
+        self.setup_ui()
+
+        try:
+            while dpg.is_dearpygui_running():
+                self._update_preview()
+                dpg.render_dearpygui_frame()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            dpg.destroy_context()
 
 
-def render_help_page():
-    """Rendert die Hilfeseite."""
-    st.markdown("""
-    <div style="text-align: left; padding: 1rem 0 0.5rem 0;">
-        <h1 style="font-size: 2rem; margin-bottom: 0;">📚 Hilfe</h1>
-        <p style="font-size: 1.1rem; color: #888; margin-top: 0.3rem;">
-            Tipps und Anleitung für Audio Visualizer Pro
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("### 🚀 Schnellstart")
-    st.markdown("""
-    1. **Audio hochladen**: Gehe zur Startseite und lade eine Audio-Datei hoch
-    2. **Look wählen**: Wähle einen passenden Look oder nutze den Auto-Look
-    3. **Visualizer anpassen**: Auf der Visualizer-Seite kannst du Parameter, Farben und Effekte feintunen
-    4. **Zitate extrahieren**: Nutze die KI, um Key-Zitate aus dem Audio zu extrahieren
-    5. **Vorschau**: Teste auf der Einstellungsseite mit der Live-Vorschau
-    6. **Render**: Exportiere das finale Video in deiner gewünschten Auflösung
-    """)
-    
-    st.markdown("### 🎨 Visualizer-Guide")
-    viz_info = get_visualizer_info()
-    for key, info in viz_info.items():
-        st.markdown(f"""
-        <div class="info-box" style="margin: 8px 0;">
-            <strong>{info['emoji']} {key.replace('_', ' ').title()}</strong> — {info['description']}<br>
-            <span style="color: #888; font-size: 0.9em;">Best for: {info['best_for']}</span>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("### 💡 Tipps für beste Ergebnisse")
-    st.markdown("""
-    - **Starte mit Vorschau**: Spart Zeit beim Testen
-    - **Wähle den richtigen Visualizer**: Bass-lastige Musik = Spectrum Bars
-    - **Farben anpassen**: Primärfarbe für Hauptelemente, Sekundär für Akzente
-    - **Post-Processing**: Vignette für Film-Look, Grain für Vintage-Stil
-    - **Qualität vs. Geschwindigkeit**: 60 FPS sieht flüssiger aus, braucht aber länger
-    - **KI-Optimierung**: Lass die KI die besten Einstellungen basierend auf deinem Audio finden
-    """)
-    
-    st.markdown("### ⚠️ Fehlerbehebung")
-    st.markdown("""
-    **"Audio-Analyse fehlgeschlagen"**
-    - Datei zu groß? Versuche eine kürzere Datei oder konvertiere zu MP3
-    - Ungültiges Format? Nutze MP3, WAV oder FLAC
-    
-    **"Rendering fehlgeschlagen"**
-    - FFmpeg installiert? Prüfe die Systemanforderungen
-    - Zu wenig Speicher? Schließe andere Programme
-    
-    **Langsame Performance**
-    - Nutze niedrigere Auflösung (720p statt 1080p)
-    - Reduziere FPS (30 statt 60)
-    - Nutze die Vorschau vor dem finalen Render
-    """)
-
-
-# ==================== MAIN APP ====================
-
-def main():
-    # Session-State Defaults
-    if "selected_look" not in st.session_state:
-        st.session_state["selected_look"] = None
-    if "last_uploaded_file" not in st.session_state:
-        st.session_state["last_uploaded_file"] = None
-
-    # System-Check
-    issues = check_system_requirements()
-    if issues:
-        for issue in issues:
-            st.warning(issue)
-
-    # Sidebar
-    page = render_sidebar()
-
-    # Hauptbereich
-    if page == "🏠 Start":
-        render_start_page()
-    elif page == "🎨 Visualizer":
-        render_visualizer_page()
-    elif page == "⚙️ Einstellungen":
-        render_settings_page()
-    elif page == "📚 Hilfe":
-        render_help_page()
-
-    # Footer
-    st.markdown("---")
-    st.markdown("""
-    <div style="text-align: center; color: #666; padding: 1rem;">
-        <p>Made with ❤️ | Audio Visualizer Pro</p>
-    </div>
-    """, unsafe_allow_html=True)
+# =============================================================================
+# ENTRY POINT
+# =============================================================================
 
 if __name__ == "__main__":
-    main()
+    app = AudioVisualizerGUI()
+    app.run()

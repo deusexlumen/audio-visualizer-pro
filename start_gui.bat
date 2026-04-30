@@ -16,18 +16,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: Prüfe ob Streamlit installiert ist
-python -c "import streamlit" >nul 2>&1
+:: Prüfe ob DearPyGui installiert ist
+python -c "import dearpygui" >nul 2>&1
 if errorlevel 1 (
     echo 📦 Installiere benötigte Pakete...
-    pip install streamlit -q
+    pip install dearpygui -q
 )
 
 echo ✅ Abhängigkeiten OK
 echo 🚀 Starte GUI...
 echo.
 
-:: Starte Streamlit
-streamlit run gui.py
+:: Starte DearPyGui
+python gui.py
 
 pause

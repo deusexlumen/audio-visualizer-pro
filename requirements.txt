@@ -25,7 +25,7 @@ pytest>=7.0.0
 soundfile>=0.11.0
 
 # GUI
-streamlit>=1.28.0
+dearpygui>=2.0
 
 # Gemini KI-Integration
 google-genai>=1.0.0

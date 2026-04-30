@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Launcher für die Audio Visualizer Pro GUI.
+Launcher für die Audio Visualizer Pro GUI (DearPyGui).
 Funktioniert auf Windows, macOS und Linux.
 """
 
@@ -9,20 +9,20 @@ import sys
 import os
 
 
-def check_streamlit():
-    """Prüft ob Streamlit installiert ist."""
+def check_dearpygui():
+    """Prüft ob DearPyGui installiert ist."""
     try:
-        import streamlit
+        import dearpygui
         return True
     except ImportError:
         return False
 
 
-def install_streamlit():
-    """Installiert Streamlit."""
-    print("📦 Streamlit wird installiert...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "streamlit", "-q"])
-    print("✅ Streamlit installiert!")
+def install_dearpygui():
+    """Installiert DearPyGui."""
+    print("📦 DearPyGui wird installiert...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "dearpygui", "-q"])
+    print("✅ DearPyGui installiert!")
 
 
 def main():
@@ -31,24 +31,19 @@ def main():
     print("=" * 50)
     print()
     
-    # Prüfe Streamlit
-    if not check_streamlit():
-        install_streamlit()
+    # Prüfe DearPyGui
+    if not check_dearpygui():
+        install_dearpygui()
     else:
         print("✅ Alle Abhängigkeiten sind installiert")
     
     print()
     print("🚀 Starte GUI...")
-    print("   Die Anwendung öffnet sich in deinem Browser")
-    print("   (Normalerweise unter http://localhost:8501)")
     print()
     
-    # Starte Streamlit
+    # Starte DearPyGui direkt
     try:
-        subprocess.call([
-            sys.executable, "-m", "streamlit", "run", "gui.py",
-            "--server.headless", "true"
-        ])
+        subprocess.call([sys.executable, "gui.py"])
     except KeyboardInterrupt:
         print()
         print("👋 GUI beendet")
