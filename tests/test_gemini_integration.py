@@ -181,3 +181,94 @@ class TestGeminiIntegration:
             
             with pytest.raises(FileNotFoundError):
                 gemini.transcribe_audio("nicht_existent.mp3")
+
+    def test_transcribe_audio_async_returns_future(self):
+        """Asynchrone Methode sollte ein Future zurueckgeben, das spaeter das Ergebnis liefert."""
+        import tempfile
+        with patch('src.gemini_integration.genai') as mock_genai:
+            from src.gemini_integration import GeminiIntegration
+            
+            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp:
+                tmp.write(b'dummy audio data')
+                tmp_path = tmp.name
+            
+            try:
+                mock_active_state = Mock()
+                mock_active_state.name = "ACTIVE"
+                mock_types = Mock()
+                mock_types.FileState.ACTIVE = mock_active_state
+                mock_genai.types = mock_types
+                
+                mock_client = Mock()
+                mock_file = Mock()
+                mock_file.state = mock_active_state
+                mock_file.name = "files/test-audio"
+                mock_client.files.upload.return_value = mock_file
+                mock_client.files.get.return_value = mock_file
+                
+                mock_response = Mock()
+                mock_response.text = "Async Transkript"
+                mock_client.models.generate_content.return_value = mock_response
+                
+                mock_genai.Client.return_value = mock_client
+                
+                gemini = GeminiIntegration(api_key="test-key")
+                future = gemini.transcribe_audio_async(tmp_path)
+                
+                # Muss ein concurrent.futures.Future sein
+                import concurrent.futures
+                assert isinstance(future, concurrent.futures.Future)
+                assert future.result() == "Async Transkript"
+            finally:
+                os.unlink(tmp_path)
+
+    def test_extract_quotes_async_returns_future(self):
+        """Asynchrone Zitat-Extraktion sollte ein Future zurueckgeben."""
+        import tempfile
+        with patch('src.gemini_integration.genai') as mock_genai:
+            from src.gemini_integration import GeminiIntegration
+            
+            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp:
+                tmp.write(b'dummy audio data')
+                tmp_path = tmp.name
+            
+            try:
+                mock_active_state = Mock()
+                mock_active_state.name = "ACTIVE"
+                mock_types = Mock()
+                mock_types.FileState.ACTIVE = mock_active_state
+                mock_genai.types = mock_types
+                
+                mock_client = Mock()
+                mock_file = Mock()
+                mock_file.state = mock_active_state
+                mock_file.name = "files/test-audio"
+                mock_client.files.upload.return_value = mock_file
+                mock_client.files.get.return_value = mock_file
+                
+                mock_response = Mock()
+                mock_response.text = '[{"text": "Async Zitat hier", "start_time": 1.0, "end_time": 5.0, "confidence": 0.9}]'
+                mock_client.models.generate_content.return_value = mock_response
+                
+                mock_genai.Client.return_value = mock_client
+                
+                gemini = GeminiIntegration(api_key="test-key")
+                future = gemini.extract_quotes_async(tmp_path, max_quotes=1)
+                
+                import concurrent.futures
+                assert isinstance(future, concurrent.futures.Future)
+                quotes = future.result()
+                assert len(quotes) == 1
+                assert quotes[0].text == "Async Zitat hier"
+            finally:
+                os.unlink(tmp_path)
+
+    def test_shutdown_executor(self):
+        """Shutdown sollte den ThreadPool sauber beenden."""
+        with patch('src.gemini_integration.genai') as mock_genai:
+            from src.gemini_integration import GeminiIntegration
+            mock_genai.Client.return_value = Mock()
+            
+            gemini = GeminiIntegration(api_key="test-key")
+            # Sollte ohne Exception durchlaufen
+            gemini.shutdown()

@@ -413,3 +413,25 @@ class GPUTextRenderer:
         
         self._vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_idx)
         # Blending wird vom Aufrufer verwaltet (State-Machine-Sicherheit)
+
+    def release(self):
+        """Gibt alle GPU-Ressourcen (Shader, VBOs, VAO, Atlas-Textur) frei.
+
+        Muss explizit aufgerufen werden, bevor ein neuer Atlas/Renderer
+        erzeugt wird, um Memory-Leaks im VRAM zu vermeiden.
+        """
+        if hasattr(self, '_vao') and self._vao is not None:
+            self._vao.release()
+            self._vao = None
+        if hasattr(self, '_instance_vbo') and self._instance_vbo is not None:
+            self._instance_vbo.release()
+            self._instance_vbo = None
+        if hasattr(self, '_quad_vbo') and self._quad_vbo is not None:
+            self._quad_vbo.release()
+            self._quad_vbo = None
+        if hasattr(self, '_prog') and self._prog is not None:
+            self._prog.release()
+            self._prog = None
+        if hasattr(self, 'texture') and self.texture is not None:
+            self.texture.release()
+            self.texture = None

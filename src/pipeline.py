@@ -148,23 +148,29 @@ class RenderPipeline:
             
             for render_idx in range(total_render_frames):
                 i = render_idx * frame_skip
-                
+
+                # === RENDER-LOOP PERFORMANCE-GARANTIE ===
+                # Dieser Loop darf NIEMALS auf Netzwerk-IO oder blockierende
+                # KI-Aufrufe warten. Alle Gemini/Transkription-Operationen muessen
+                # VOR dem Loop (via ThreadPoolExecutor/Async) abgeschlossen sein.
+                # Verletzung fuehrt zu Frame-Drops und AV-Desynchronisation.
+
                 frame = visualizer.render_frame(i)
-                
+
                 # Post-Processing anwenden (Bloom, Grain, Vignette, Chromatic Aberration, LUT)
                 frame = self.post_processor.apply(frame)
-                
+
                 # Hintergrundbild kompositieren (NumPy, sehr schnell)
                 if bg_array is not None:
                     frame = self._composite_background_fast(frame, bg_array)
-                
+
                 # Quote Overlays anwenden (zeitbasiert + frame-synchroner Buffer)
                 # STRIKT NACH allen Post-Processing-Effekten, damit Typografie nicht
                 # von Bloom, Grain oder Chromatic-Aberration verzerrt wird.
                 if self.quote_overlay is not None:
                     frame_time = i / features.fps
                     frame = self.quote_overlay.apply(frame, frame_time, frame_idx=i)
-                
+
                 # Direkt zu FFmpeg schreiben (kein Batching - war langsamer)
                 process.stdin.write(frame.tobytes())
                 
@@ -240,17 +246,38 @@ class RenderPipeline:
         return (img * vignette[:, :, np.newaxis]).astype(np.float32)
     
     def _composite_background_fast(self, frame: np.ndarray, bg_array: np.ndarray) -> np.ndarray:
-        """Mischt einen gerenderten Frame mit dem Hintergrundbild (NumPy, ~50x schneller als PIL)."""
+        """Mischt einen gerenderten Frame (RGB oder RGBA) mit dem Hintergrundbild.
+
+        Wenn der Frame 4 Kanäle hat, wird der Alpha-Kanal für pixelgenaues
+        Compositing verwendet. Der Rückgabewert ist immer RGB (3 Kanäle).
+        """
         opacity = self.config.background_opacity
         opacity = max(0.0, min(1.0, opacity))
-        
+
         if opacity <= 0.01:
-            return frame
-        if opacity >= 0.99:
-            return bg_array.astype(np.uint8)
-        
-        # Vektorisierte NumPy-Operation
-        result = frame.astype(np.float32) * (1.0 - opacity) + bg_array * opacity
+            if frame.shape[2] == 4:
+                # Alpha voranwenden, da kein Hintergrund sichtbar ist
+                return (
+                    frame[..., :3].astype(np.float32) * (frame[..., 3:4] / 255.0)
+                ).clip(0, 255).astype(np.uint8)
+            return frame.astype(np.uint8)
+
+        # Konvertiere zu float32 für präzise Berechnung
+        frame_f = frame.astype(np.float32)
+        bg_f = bg_array[..., :3].astype(np.float32)
+
+        # 1. Alpha-Kanal extrahieren
+        if frame_f.shape[2] == 4:
+            alpha = frame_f[..., 3:4] / 255.0
+            fg = frame_f[..., :3]
+        else:
+            alpha = 1.0
+            fg = frame_f
+
+        # 3. Pixelgenaues Alpha-Compositing
+        # 4. Globale background_opacity verrechnet (skaliert den Hintergrund-Anteil)
+        result = fg * alpha + bg_f * opacity * (1.0 - alpha)
+
         return np.clip(result, 0, 255).astype(np.uint8)
     
     def _mux_audio(self, video_path: str, audio_path: Path, output_path: str):

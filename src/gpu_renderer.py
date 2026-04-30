@@ -37,9 +37,9 @@ class GPUBatchRenderer:
         # Standalone OpenGL-Context erzeugen (Windows: default, Linux: ggf. egl)
         self.ctx = moderngl.create_standalone_context()
 
-        # Offscreen-Framebuffer fuer das Rendering
+        # Offscreen-Framebuffer fuer das Rendering (RGBA fuer Alpha-Kanal-Erhalt)
         self.fbo = self.ctx.framebuffer(
-            color_attachments=[self.ctx.texture((width, height), 3)]
+            color_attachments=[self.ctx.texture((width, height), 4)]
         )
         
         # Temporaerer FBO fuer Hintergrundbild
@@ -55,9 +55,9 @@ class GPUBatchRenderer:
         # Dummy schwarze Textur fuer Composite ohne Hintergrundbild (verhindert Memory-Leak)
         self._dummy_black_texture = self.ctx.texture((1, 1), 3, b'\x00\x00\x00')
         
-        # Post-Process FBO (zweiter Pass fuer Color-Grading)
+        # Post-Process FBO (zweiter Pass fuer Color-Grading, RGBA fuer Alpha-Erhalt)
         self.post_fbo = self.ctx.framebuffer(
-            color_attachments=[self.ctx.texture((width, height), 3)]
+            color_attachments=[self.ctx.texture((width, height), 4)]
         )
         self._init_postprocess()
         self._init_composite_shader()
@@ -435,7 +435,9 @@ class GPUBatchRenderer:
             
             void main() {
                 vec2 uv = v_uv;
-                vec3 col = texture(u_texture, uv).rgb;
+                vec4 tex = texture(u_texture, uv);
+                vec3 col = tex.rgb;
+                float alpha = tex.a;
                 
                 // Brightness
                 col += u_brightness;
@@ -468,7 +470,8 @@ class GPUBatchRenderer:
                 // Clamp
                 col = clamp(col, 0.0, 1.0);
                 
-                f_color = vec4(col, 1.0);
+                // Alpha-Kanal der Original-Textur erhalten!
+                f_color = vec4(col, alpha);
             }
             """,
         )
@@ -530,7 +533,8 @@ class GPUBatchRenderer:
                     viz_alpha = 1.0;
                 }
                 vec3 col = mix(bg, viz.rgb, viz_alpha);
-                f_color = vec4(col, 1.0);
+                // Alpha-Kanal des Visualizers erhalten (nicht hardcodieren)
+                f_color = vec4(col, viz_alpha);
             }
             """
         )
@@ -656,13 +660,15 @@ class GPUBatchRenderer:
                 in vec2 v_uv;
                 out vec4 f_color;
                 void main() {
-                    vec3 tex = texture(u_texture, v_uv).rgb;
+                    vec4 tex = texture(u_texture, v_uv);
+                    vec3 rgb = tex.rgb;
                     // Vignette: Abdunklung an den Raendern
                     vec2 center = v_uv - 0.5;
                     float dist = length(center) * 1.4142; // normalisiert auf 0..1
                     float vig = 1.0 - u_vignette * smoothstep(0.3, 1.0, dist);
-                    tex *= vig;
-                    f_color = vec4(tex * u_opacity, 1.0);
+                    rgb *= vig;
+                    // Alpha-Kanal der Original-Textur erhalten
+                    f_color = vec4(rgb * u_opacity, tex.a);
                 }
                 """
             )
@@ -688,10 +694,22 @@ class GPUBatchRenderer:
         self.ctx.disable(moderngl.BLEND)
     
     def _init_text_renderer(self):
-        """Lazy-Initialisierung des SDF Text-Renderers."""
+        """Lazy-Initialisierung des SDF Text-Renderers.
+
+        Gibt vorhandene Ressourcen explizit frei, bevor neue erzeugt werden,
+        um VRAM-Leaks bei wiederholter Initialisierung zu vermeiden.
+        """
         if hasattr(self, '_text_renderer') and self._text_renderer is not None:
             return
-        
+
+        # Defensives Cleanup: Falls vorherige Initialisierung abgebrochen wurde
+        if hasattr(self, '_text_renderer') and self._text_renderer:
+            self._text_renderer.release()
+            self._text_renderer = None
+        if hasattr(self, '_font_texture') and self._font_texture:
+            self._font_texture.release()
+            self._font_texture = None
+
         font_path = "C:/Windows/Fonts/arial.ttf"
         if not os.path.exists(font_path):
             # Fallback-Fonts probieren
@@ -1110,6 +1128,9 @@ class GPUBatchRenderer:
             if hasattr(self, "text_renderer") and self.text_renderer:
                 self.text_renderer.release()
                 self.text_renderer = None
+            if hasattr(self, "_font_texture") and self._font_texture:
+                self._font_texture.release()
+                self._font_texture = None
             if hasattr(self, "ctx") and self.ctx:
                 self.ctx.release()
                 self.ctx = None

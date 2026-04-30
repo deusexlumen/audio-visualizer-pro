@@ -11,6 +11,7 @@ import json
 import time
 import subprocess
 import tempfile
+import concurrent.futures
 from typing import List, Optional
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,6 +73,43 @@ class GeminiIntegration:
 
         self.client = genai.Client(api_key=self.api_key)
         self.model = "gemini-3.1-flash-lite-preview"
+        # ThreadPool fuer non-blocking API-Calls (verhindert Render-Loop-Stalls)
+        self._executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="gemini_"
+        )
+
+    def shutdown(self):
+        """Faehrt den internen ThreadPool sauber herunter."""
+        self._executor.shutdown(wait=True)
+
+    def transcribe_audio_async(self, audio_path: str) -> concurrent.futures.Future:
+        """Asynchrone Transkription. Gibt ein Future zurueck.
+
+        Der blockierende Netzwerk-Call laeuft in einem Hintergrund-Thread,
+        damit der Render-Loop nicht auf API-Latenz wartet.
+        """
+        return self._executor.submit(self.transcribe_audio, audio_path)
+
+    def extract_quotes_async(self, audio_path: str, audio_duration: float = None,
+                              max_quotes: int = None) -> concurrent.futures.Future:
+        """Asynchrone Zitat-Extraktion. Gibt ein Future zurueck."""
+        return self._executor.submit(
+            self.extract_quotes, audio_path, audio_duration, max_quotes
+        )
+
+    def optimize_all_settings_async(self, visualizer_type: str, current_params: dict,
+                                     audio_features: dict, colors: dict,
+                                     param_specs: dict = None,
+                                     user_prompt: str = None) -> concurrent.futures.Future:
+        """Asynchrone Parameter-Optimierung. Gibt ein Future zurueck."""
+        return self._executor.submit(
+            self.optimize_all_settings, visualizer_type, current_params,
+            audio_features, colors, param_specs, user_prompt
+        )
+
+    def generate_background_prompt_async(self, audio_features: dict) -> concurrent.futures.Future:
+        """Asynchrone Prompt-Generierung. Gibt ein Future zurueck."""
+        return self._executor.submit(self.generate_background_prompt, audio_features)
 
     def _upload_audio_with_retry(self, audio_path: str, max_retries: int = 3):
         """
