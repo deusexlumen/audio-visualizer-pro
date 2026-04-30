@@ -34,6 +34,55 @@ from src.gpu_renderer import GPUBatchRenderer, GPUPreviewRenderer
 from src.gpu_preview import render_gpu_preview
 from src.gpu_visualizers import get_visualizer, list_visualizers
 
+
+# =============================================================================
+# ASSET STORAGE LIFECYCLE MANAGEMENT
+# =============================================================================
+
+ASSET_DIRS = {
+    "audio": Path("assets/user_uploads"),
+    "backgrounds": Path("assets/backgrounds"),
+    "fonts": Path("assets/fonts"),
+}
+
+
+def _ensure_asset_dirs():
+    """Stellt sicher, dass alle Asset-Verzeichnisse existieren."""
+    for dir_path in ASSET_DIRS.values():
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+
+def cleanup_stale_uploads(max_age_days: int = 7):
+    """
+    Löscht User-Assets (Audio, Bilder, Fonts) und alte Output-Videos
+    älter als max_age_days. Wird beim Boot der GUI einmalig aufgerufen
+    (Watchdog-Konzept).
+    """
+    import time
+    now = time.time()
+    max_age_seconds = max_age_days * 86400
+
+    # Asset-Verzeichnisse + Output-Verzeichnisse bereinigen
+    dirs_to_clean = list(ASSET_DIRS.values()) + [Path("output"), Path("output/previews")]
+
+    for dir_path in dirs_to_clean:
+        if not dir_path.exists():
+            continue
+        for file_path in dir_path.iterdir():
+            if file_path.is_file():
+                try:
+                    if now - file_path.stat().st_mtime > max_age_seconds:
+                        file_path.unlink()
+                        print(f"[Cleanup] Gelöscht: {file_path}")
+                except Exception as e:
+                    print(f"[Cleanup] Fehler beim Löschen von {file_path}: {e}")
+
+
+# Asset-Verzeichnisse anlegen und veraltete Dateien aufräumen
+_ensure_asset_dirs()
+cleanup_stale_uploads()
+
+
 # Seiten-Config
 st.set_page_config(
     page_title="Audio Visualizer Pro",
@@ -394,7 +443,9 @@ def get_visualizer_info(visualizer_name: str) -> dict:
 
 def render_preview(audio_path: str, visualizer: str, duration: float = 5.0):
     """Rendert eine Vorschau."""
-    output_path = tempfile.mktemp(suffix='.mp4')
+    preview_dir = Path("output/previews")
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    output_path = str(preview_dir / f"preview_{Path(audio_path).stem}_{visualizer}.mp4")
     
     cmd = [
         sys.executable, 'main.py', 'render', audio_path,
@@ -412,6 +463,23 @@ def render_preview(audio_path: str, visualizer: str, duration: float = 5.0):
     )
     
     return process, output_path
+
+
+def cleanup_temp_files(*paths: str):
+    """
+    Löscht temporäre Intermediate-Dateien (JSON-Configs, Logs, etc.)
+    nach erfolgreichem Render. Akzeptiert beliebig viele Pfade.
+    """
+    for p in paths:
+        if p and os.path.exists(p):
+            try:
+                if os.path.isfile(p):
+                    os.unlink(p)
+                elif os.path.isdir(p):
+                    shutil.rmtree(p)
+                print(f"[Cleanup] Intermediate gelöscht: {p}")
+            except Exception as e:
+                print(f"[Cleanup] Fehler beim Löschen von {p}: {e}")
 
 
 def render_full(audio_path: str, visualizer: str, output_path: str, 
@@ -881,12 +949,12 @@ def render_start_page():
         temp_audio_key = f"temp_audio_{file_id}"
         features_key = f"features_{file_id}"
 
-        # Temporaere Datei nur einmal erstellen und im Session-State cachen
+        # Persistente Speicherung des User-Assets (strictly separated from temp files)
         if temp_audio_key not in st.session_state:
-            temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=f'.{uploaded_file.name.split(".")[-1]}')
-            temp_audio.write(uploaded_file.getvalue())
-            temp_audio.close()
-            st.session_state[temp_audio_key] = temp_audio.name
+            user_audio_path = ASSET_DIRS["audio"] / f"{file_id}_{uploaded_file.name}"
+            with open(user_audio_path, "wb") as f:
+                f.write(uploaded_file.getvalue())
+            st.session_state[temp_audio_key] = str(user_audio_path)
 
         temp_audio_path = st.session_state[temp_audio_key]
 
@@ -1342,10 +1410,10 @@ def render_visualizer_page():
             uploaded_font = st.file_uploader("🔤 Eigene Schriftart (.ttf)", type=['ttf'], key=f"quote_font_{quotes_cache_key}")
             quote_font_path = None
             if uploaded_font:
-                font_temp = tempfile.NamedTemporaryFile(delete=False, suffix='.ttf')
-                font_temp.write(uploaded_font.getvalue())
-                font_temp.close()
-                quote_font_path = font_temp.name
+                user_font_path = ASSET_DIRS["fonts"] / uploaded_font.name
+                with open(user_font_path, "wb") as f:
+                    f.write(uploaded_font.getvalue())
+                quote_font_path = str(user_font_path)
                 st.session_state[f"quote_font_path_{quotes_cache_key}"] = quote_font_path
                 st.success(f"✅ Schriftart geladen: {uploaded_font.name}")
             else:
@@ -1421,11 +1489,12 @@ def render_visualizer_page():
             )
 
             if uploaded_bg:
-                bg_temp = tempfile.NamedTemporaryFile(delete=False, suffix=f'.{uploaded_bg.name.split(".")[-1]}')
-                bg_temp.write(uploaded_bg.getvalue())
-                bg_temp.close()
-                st.session_state["bg_image_path"] = bg_temp.name
-                st.image(bg_temp.name, caption="Hintergrundbild-Vorschau", width='stretch')
+                bg_file_id = f"{uploaded_bg.name}_{getattr(uploaded_bg, 'size', 0)}"
+                user_bg_path = ASSET_DIRS["backgrounds"] / f"{bg_file_id}_{uploaded_bg.name}"
+                with open(user_bg_path, "wb") as f:
+                    f.write(uploaded_bg.getvalue())
+                st.session_state["bg_image_path"] = str(user_bg_path)
+                st.image(str(user_bg_path), caption="Hintergrundbild-Vorschau", width='stretch')
 
             bg_blur = st.slider("🔮 Blur (Weichzeichnung)", 0.0, 20.0,
                                 st.session_state.get("bg_blur", 0.0), 0.5,
@@ -1633,9 +1702,10 @@ def render_settings_page():
                 st.error("Audio-Pfad nicht gefunden. Bitte Datei neu hochladen.")
                 return
 
-            temp_dir = tempfile.mkdtemp()
+            output_dir = Path("output")
+            output_dir.mkdir(parents=True, exist_ok=True)
             output_filename = f"visualization_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
-            output_path = os.path.join(temp_dir, output_filename)
+            output_path = str(output_dir / output_filename)
 
             w, h = map(int, resolution.split('x'))
 
@@ -1744,6 +1814,8 @@ def render_settings_page():
                     file_name=output_filename,
                     mime="video/mp4",
                 )
+                # Temporäre Intermediate-Dateien bereinigen (nicht das Output-Video)
+                cleanup_temp_files()
             else:
                 st.error("Rendering fehlgeschlagen: Output-Datei nicht gefunden.")
 
@@ -1751,6 +1823,8 @@ def render_settings_page():
             st.error("❌ GPU-Rendering fehlgeschlagen")
             st.info(f"**Fehler:** {str(e)}")
             st.info("💡 Tipp: Stelle sicher, dass FFmpeg korrekt installiert ist und eine GPU verfügbar.")
+            # Auch bei Fehler: Temporäre Intermediate-Dateien bereinigen
+            cleanup_temp_files()
 
 
 def render_help_page():
