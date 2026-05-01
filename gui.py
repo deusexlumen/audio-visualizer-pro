@@ -333,14 +333,17 @@ class AudioVisualizerGUI:
 
         self._setup_file_dialogs()
 
-        dpg.create_viewport(
-            title="Audio Visualizer Pro",
-            width=1500,
-            height=980,
-            vsync=True,
-            small_icon=str(Path(__file__).parent / "assets" / "icon.ico") if (Path(__file__).parent / "assets" / "icon.ico").exists() else None,
-            large_icon=str(Path(__file__).parent / "assets" / "icon.ico") if (Path(__file__).parent / "assets" / "icon.ico").exists() else None,
-        )
+        viewport_kwargs = {
+            "title": "Audio Visualizer Pro",
+            "width": 1500,
+            "height": 980,
+            "vsync": True,
+        }
+        icon_path = Path(__file__).parent / "assets" / "icon.ico"
+        if icon_path.exists():
+            viewport_kwargs["small_icon"] = str(icon_path)
+            viewport_kwargs["large_icon"] = str(icon_path)
+        dpg.create_viewport(**viewport_kwargs)
         dpg.setup_dearpygui()
         dpg.show_viewport()
         dpg.set_primary_window("main_window", True)
