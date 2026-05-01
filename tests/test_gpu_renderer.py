@@ -217,8 +217,8 @@ class TestRenderFlow:
         mock_popen.assert_called_once()
         # Frames sollten geschrieben worden sein
         assert mock_process.stdin.write.call_count > 0
-        # stdin sollte geschlossen werden
-        mock_process.stdin.close.assert_called_once()
+        # stdin sollte geschlossen werden (kann 2x aufgerufen werden: worker + finally)
+        assert mock_process.stdin.close.call_count >= 1
         assert mock_process.wait.call_count >= 1
 
     @patch('src.gpu_renderer.moderngl.create_standalone_context')
@@ -257,7 +257,7 @@ class TestRenderFlow:
                     Path(output_file.name).unlink(missing_ok=True)
 
         # stdin sollte trotz Cancel geschlossen werden (finally-Block)
-        mock_process.stdin.close.assert_called_once()
+        assert mock_process.stdin.close.call_count >= 1
 
     @patch('src.gpu_renderer.moderngl.create_standalone_context')
     @patch('src.gpu_renderer.subprocess.Popen')

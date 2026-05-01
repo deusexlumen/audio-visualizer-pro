@@ -148,6 +148,11 @@ class AppState:
         self.codec: str = "h264"
         self.quality: str = "high"
         self.gpu_encode: bool = False
+        
+        # Farb-Parameter
+        self.color_mode: str = "chroma"
+        self.base_hue: float = 0.55
+        self.color_saturation: float = 0.7
 
         self.is_analyzing: bool = False
         self.is_rendering: bool = False
@@ -174,6 +179,9 @@ class AppState:
             "offset_x": self.viz_offset_x,
             "offset_y": self.viz_offset_y,
             "scale": self.viz_scale,
+            "color_mode": self.color_mode,
+            "base_hue": self.base_hue,
+            "color_saturation": self.color_saturation,
         }
         base.update(self.viz_extra_params)
         return base
@@ -537,6 +545,31 @@ class AudioVisualizerGUI:
             min_val=0.5, max_val=2.0, default_val=1.0,
             callback=self._on_param_changed,
             tooltip="Gesamtgröße des Visualizers",
+        )
+        dpg.add_spacer(height=6)
+        
+        dpg.add_text("Farbpalette", color=Theme.TEXT_SECONDARY)
+        dpg.add_combo(
+            items=["chroma (dynamisch)", "fixed (eine Farbe)", "monochrome", "warm", "cool"],
+            default_value="chroma (dynamisch)",
+            callback=self._on_color_mode_changed,
+            width=-1,
+            tag="param_color_mode",
+        )
+        self._add_tooltip("Farbgebung: chroma=Musik-getrieben, fixed=eine Farbe, warm/kuehl=dezente Palette")
+        self._styled_slider(
+            label="Farbton",
+            tag="param_base_hue",
+            min_val=0.0, max_val=1.0, default_val=0.55,
+            callback=self._on_param_changed,
+            tooltip="Grundfarbton fuer 'fixed' Modus (0=rot, 0.33=gruen, 0.66=blau)",
+        )
+        self._styled_slider(
+            label="Saettigung",
+            tag="param_color_saturation",
+            min_val=0.0, max_val=1.0, default_val=0.7,
+            callback=self._on_param_changed,
+            tooltip="Farbintensitaet (0=grau, 1=knallig)",
         )
 
     def _build_ki_section(self):
@@ -1020,6 +1053,8 @@ class AudioVisualizerGUI:
             "param_pp_warmth": ("pp_warmth", float),
             "param_pp_grain": ("pp_grain", float),
             "param_preview_time": ("preview_time_percent", float),
+            "param_base_hue": ("base_hue", float),
+            "param_color_saturation": ("color_saturation", float),
         }
         if tag in mapping:
             attr, typ = mapping[tag]
@@ -1037,6 +1072,19 @@ class AudioVisualizerGUI:
             dpg.set_value("preview_time_text", f"{pos:.1f}s / {total:.1f}s")
         else:
             dpg.set_value("preview_time_text", "--:-- / --:--")
+
+    def _on_color_mode_changed(self, sender, app_data):
+        val = dpg.get_value(sender)
+        # Map Anzeige-Name zu internem Wert
+        mode_map = {
+            "chroma (dynamisch)": "chroma",
+            "fixed (eine Farbe)": "fixed",
+            "monochrome": "monochrome",
+            "warm": "warm",
+            "cool": "cool",
+        }
+        self.state.color_mode = mode_map.get(val, "chroma")
+        self._request_preview_update()
 
     def _on_resolution_changed(self, sender, app_data):
         res_str = dpg.get_value(sender)

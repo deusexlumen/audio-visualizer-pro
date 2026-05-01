@@ -145,6 +145,13 @@ class BaseGPUVisualizer(abc.ABC):
         'trail_decay': (0.7, 0.1, 0.95, 0.05),
         'brightness': (1.0, 0.5, 2.0, 0.05),
     }
+    
+    # Farb-Parameter, die von allen GPU-Visualizern unterstuetzt werden
+    COLOR_PARAMS = {
+        'color_mode': 'chroma',   # 'chroma' | 'fixed' | 'monochrome' | 'warm' | 'cool'
+        'base_hue': 0.55,         # 0.0-1.0, nur fuer 'fixed'
+        'color_saturation': 0.7,  # 0.0-1.0
+    }
 
     # Override in subclasses: {param_name: (default, min, max, step)}
     PARAMS = {}
@@ -159,8 +166,9 @@ class BaseGPUVisualizer(abc.ABC):
         self.ctx = ctx
         self.width = width
         self.height = height
-        # Merge EFFECTS und PARAMS (PARAMS ueberschreiben EFFECTS bei Duplikaten)
+        # Merge EFFECTS, COLOR_PARAMS und PARAMS (PARAMS ueberschreiben bei Duplikaten)
         self.params = {k: v[0] for k, v in self.EFFECTS.items()}
+        self.params.update(self.COLOR_PARAMS)
         self.params.update({k: v[0] for k, v in self.PARAMS.items()})
         self._setup()
 
@@ -282,9 +290,38 @@ class BaseGPUVisualizer(abc.ABC):
                 "u_chroma": f["chroma"],
             }
 
-    @staticmethod
-    def _chroma_to_color(chroma: np.ndarray) -> tuple:
-        """Wandelt ein Chroma-Vektor in eine RGB-Farbe um."""
+    def _chroma_to_color(self, chroma: np.ndarray) -> tuple:
+        """Wandelt ein Chroma-Vektor in eine RGB-Farbe um.
+        
+        Beruecksichtigt color_mode Param:
+        - 'chroma': Dynamische Farbe aus Audio-Chroma (bunt)
+        - 'fixed': Feste Farbe aus base_hue
+        - 'monochrome': Graustufen
+        - 'warm': Warme Toene (Orange/Gelb)
+        - 'cool': Kuehle Toene (Blau/Cyan)
+        """
+        mode = self.params.get('color_mode', 'chroma')
+        saturation = self.params.get('color_saturation', 0.7)
+        
+        if mode == 'monochrome':
+            return (0.85, 0.85, 0.85)
+        elif mode == 'fixed':
+            hue = self.params.get('base_hue', 0.55)
+            return self._hsv_to_rgb(hue, saturation, 0.85)
+        elif mode == 'warm':
+            # Warme Palette: Orange/Gelb basierend auf RMS
+            chroma_arr = np.asarray(chroma).flatten()
+            strength = float(np.max(chroma_arr)) if chroma_arr.size > 0 else 0.5
+            hue = 0.08 + 0.06 * strength  # Orange bis Gelb
+            return self._hsv_to_rgb(hue, saturation, 0.8 + 0.2 * strength)
+        elif mode == 'cool':
+            # Kuehle Palette: Blau/Cyan
+            chroma_arr = np.asarray(chroma).flatten()
+            strength = float(np.max(chroma_arr)) if chroma_arr.size > 0 else 0.5
+            hue = 0.55 + 0.1 * strength  # Cyan bis Blau
+            return self._hsv_to_rgb(hue, saturation, 0.8 + 0.2 * strength)
+        
+        # Default: 'chroma' - dynamische Farbe aus Audio
         chroma = np.asarray(chroma).flatten()
         if chroma.size < 12:
             chroma = np.pad(chroma, (0, 12 - chroma.size))
@@ -301,7 +338,7 @@ class BaseGPUVisualizer(abc.ABC):
         saturation = 0.7 + 0.3 * strength
         value = 0.6 + 0.4 * strength
 
-        return BaseGPUVisualizer._hsv_to_rgb(hue, saturation, value)
+        return self._hsv_to_rgb(hue, saturation, value)
 
     @staticmethod
     def _hsv_to_rgb(h: float, s: float, v: float) -> tuple:

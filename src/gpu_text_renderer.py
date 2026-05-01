@@ -236,7 +236,11 @@ class GPUTextRenderer:
                 gl_Position = vec4(ndc, 0.0, 1.0);
 
                 // UV-Mapping basierend auf Quad-Position
-                v_uv = mix(in_uv.xy, in_uv.zw, in_vertex_pos * 0.5 + 0.5);
+                // Atlas-Daten sind row-major (PIL-Format), OpenGL Textur hat
+                // Ursprung unten-links -> Y-UV flippen
+                vec2 uv_pos = in_vertex_pos * 0.5 + 0.5;
+                uv_pos.y = 1.0 - uv_pos.y;
+                v_uv = mix(in_uv.xy, in_uv.zw, uv_pos);
                 v_color = in_color;
                 v_alpha = in_alpha;
             }

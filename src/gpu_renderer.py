@@ -331,8 +331,16 @@ class GPUBatchRenderer:
                             )
             finally:
                 frame_queue.put(None)
+                # Warte bis der Encode-Thread fertig ist (stdin schliesst sich)
+                # Bei 31k Frames kann das >10s dauern, besonders bei Software-Encoding
                 encode_done.wait(timeout=300)
-                encode_thread.join(timeout=10)
+                encode_thread.join(timeout=120)
+                # Sicherstellen dass FFmpeg stdin geschlossen ist, auch wenn
+                # der Thread haengen geblieben ist
+                try:
+                    process.stdin.close()
+                except Exception:
+                    pass
 
             process.wait()
 
@@ -388,8 +396,6 @@ class GPUBatchRenderer:
             img = img.filter(ImageFilter.GaussianBlur(radius=blur))
         
         data = np.array(img, dtype=np.uint8)
-        # OpenGL Textur-Ursprung ist unten-links, PIL ist oben-links
-        data = np.flipud(data)
         texture = self.ctx.texture((self.width, self.height), 3, data.tobytes())
         return texture
     
@@ -885,10 +891,12 @@ class GPUBatchRenderer:
                 in vec2 v_uv;
                 out vec4 f_color;
                 void main() {
-                    vec4 tex = texture(u_texture, v_uv);
+                    // PIL-Daten haben (0,0) oben-links, OpenGL unten-links
+                    vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
+                    vec4 tex = texture(u_texture, uv);
                     vec3 rgb = tex.rgb;
                     // Vignette: Abdunklung an den Raendern
-                    vec2 center = v_uv - 0.5;
+                    vec2 center = uv - 0.5;
                     float dist = length(center) * 1.4142; // normalisiert auf 0..1
                     float vig = 1.0 - u_vignette * smoothstep(0.3, 1.0, dist);
                     rgb *= vig;
