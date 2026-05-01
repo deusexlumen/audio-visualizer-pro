@@ -24,7 +24,7 @@ KI-gestützt. GPU-beschleunigt. Für Musikvideos, Podcasts & Creative Coding.</p
 <p>
   <img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
-  <img src="https://img.shields.io/badge/Tests-42%20Passing-success" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-134%20Passing-success" alt="Tests">
   <img src="https://img.shields.io/badge/GUI-Streamlit-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit">
   <img src="https://img.shields.io/badge/GPU-OpenGL-5586A4?logo=opengl&logoColor=white" alt="OpenGL">
   <img src="https://img.shields.io/badge/Video-FFmpeg-007808?logo=ffmpeg&logoColor=white" alt="FFmpeg">

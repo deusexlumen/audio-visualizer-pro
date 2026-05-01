@@ -49,7 +49,7 @@ audio_visualizer_pro/
 │   ├── __init__.py
 │   ├── analyzer.py         # AudioAnalyzer mit Caching
 │   ├── ai_matcher.py       # SmartMatcher - KI-gestützte Visualizer-Empfehlung
-│   ├── pipeline.py         # RenderPipeline, PreviewPipeline
+│   ├── gpu_renderer.py     # GPUBatchRenderer, GPUPreviewRenderer (GPU-beschleunigt)
 │   ├── types.py            # Pydantic Models (AudioFeatures, VisualConfig, etc.)
 │   ├── postprocess.py      # PostProcessor für Color Grading
 │   ├── quote_overlay.py    # QuoteOverlayRenderer für Key-Zitat Text-Overlays
@@ -70,7 +70,7 @@ audio_visualizer_pro/
 │   │   └── 10_frequency_flower.py
 │   └── renderers/
 │       ├── __init__.py
-│       └── pil_renderer.py # PILRenderer für Frame-Generierung
+│       └── (entfernt in v2.0 — GPU-Renderer ersetzt PIL-Pipeline)
 ├── gui.py                  # Streamlit-GUI für One-Click-Bedienung
 └── tests/
     ├── __init__.py
@@ -159,8 +159,8 @@ pytest tests/test_analyzer.py -v
    - Registrierung via `@register_visualizer("name")`
    - `render_frame(frame_idx)` gibt RGB-Array zurück
 
-3. **Rendering** (`pipeline.py`):
-   - `RenderPipeline` steuert den kompletten Flow
+3. **Rendering** (`gpu_renderer.py`):
+   - `GPUBatchRenderer` steuert den kompletten GPU-beschleunigten Flow
    - FFmpeg-Subprozess für Video-Encoding
    - Quote Overlays werden zeitbasiert auf Frames angewendet
    - Audio-Muxing zum Schluss
@@ -271,7 +271,7 @@ dummy_features = AudioFeatures(
 1. **Vorschau zuerst**: Nutze `--preview` für schnelles Testen (5 Sekunden, 480p)
 2. **Caching**: Audio-Analyse wird automatisch gecached (`.cache/audio_features/`)
 3. **Niedrigere FPS**: 30fps statt 60fps für schnelleres Rendering
-4. **Niedrigere Auflösung**: PreviewPipeline nutzt automatisch 480p
+4. **Niedrigere Auflösung**: GPUPreviewRenderer nutzt automatisch 480p
 
 ## Wichtige Dateien für KI-Agents
 
@@ -285,7 +285,7 @@ dummy_features = AudioFeatures(
 | `src/ai_matcher.py` | KI-Empfehlungslogik (Smart Matcher) |
 | `src/quote_overlay.py` | Text-Overlay Rendering für Quotes |
 | `src/gemini_integration.py` | Gemini KI Integration |
-| `src/pipeline.py` | Render-Flow verstehen |
+| `src/gpu_renderer.py` | Render-Flow verstehen |
 
 ## Sprache und Kommentare
 

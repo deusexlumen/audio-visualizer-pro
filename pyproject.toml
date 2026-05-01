@@ -75,7 +75,6 @@ addopts = "-v --tb=short"
 
 [tool.coverage.run]
 omit = [
-    "src/pipeline.py",
     "src/renderers/*",
 ]
 
