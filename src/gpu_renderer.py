@@ -204,21 +204,9 @@ class GPUBatchRenderer:
             ffmpeg_cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             bufsize=8 * 1024 * 1024,  # 8MB Buffer fuer schnelleres Schreiben
         )
-
-        # stderr-Reader Thread: Verhindert, dass FFmpeg blockiert,
-        # wenn der stderr-Pipe-Buffer voll wird.
-        stderr_lines = []
-        def _stderr_reader():
-            try:
-                for line in process.stderr:
-                    stderr_lines.append(line)
-            except Exception:
-                pass
-        stderr_thread = threading.Thread(target=_stderr_reader, daemon=True)
-        stderr_thread.start()
 
         try:
             # Quote-Renderer initialisieren falls noetig
@@ -319,12 +307,12 @@ class GPUBatchRenderer:
                     if _DEBUG and i == 0:
                         self._save_debug(target_fbo, "debug_step6_final.png")
                     
-                    # FFmpeg-Health-Check VOR dem put (kein Blockieren mehr dank unbegrenzter Queue)
+                    # FFmpeg-Health-Check VOR dem put
                     if process.poll() is not None:
-                        stderr_text = "".join(stderr_lines)[-800:] if stderr_lines else ""
+                        enc = ffmpeg_cmd[ffmpeg_cmd.index("-c:v") + 1] if "-c:v" in ffmpeg_cmd else "unknown"
                         raise RuntimeError(
                             f"FFmpeg ist unerwartet beendet (Code {process.returncode}). "
-                            f"Fehler: {stderr_text}"
+                            f"Pruefe ob der Encoder '{enc}' verfuegbar ist (ffmpeg -encoders)."
                         )
                     
                     if encode_error[0] is not None:

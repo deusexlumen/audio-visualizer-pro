@@ -1,5 +1,25 @@
 # Session Notes – Audio Visualizer Pro
 
+## 2026-05-01 – FFmpeg Deadlock Fix + GPU-Encoding Stabilisierung
+
+**Commit:** `788d2cb` auf `master`
+
+**Problem:**
+Beim GPU-Rendering hing der Render-Prozess unendlich (Deadlock). Ursache war ein voller stderr-Puffer von FFmpeg bei `stderr=subprocess.PIPE`. FFmpeg blockierte beim Schreiben auf stderr, las keine stdin-Daten mehr, der Producer-Consumer-Thread hing an `frame_queue.put()`.
+
+**Fix in `src/gpu_renderer.py`:**
+1. `stderr=subprocess.DEVNULL` statt `stderr=subprocess.PIPE`
+2. FFmpeg Health-Check via `process.poll()` pro Frame – falls FFmpeg vorzeitig beendet, sofortige Exception mit Exit-Code
+3. Bessere Fehler-Meldung für den User
+
+**Test-Updates in `tests/test_gpu_renderer.py`:**
+- CRF 18→20, preset veryslow→slow (angepasst an aktuelle FFmpeg-Presets)
+- `poll()` Mock hinzugefügt für alle Render-Flow-Tests
+
+**Status:** ✅ Alle 134 Tests passing. E2E-Render-Test in ~10s.
+
+---
+
 ## 2026-04-21 – Fixes committed & gepusht + State-of-the-Art README
 
 **Commit:** `ba2f258` auf `master`
