@@ -11,10 +11,24 @@ import tempfile
 import subprocess
 from PIL import Image, ImageFilter, ImageDraw
 
+import warnings
+
+warnings.warn(
+    "src.pipeline is deprecated. The PIL-based RenderPipeline is no longer maintained. "
+    "Use src.gpu_renderer.GPUBatchRenderer instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 from .analyzer import AudioAnalyzer
 from .visuals.registry import VisualizerRegistry
 from .types import ProjectConfig, AudioFeatures
-from .renderers.pil_renderer import PILRenderer
+
+try:
+    from .renderers.pil_renderer import PILRenderer
+except ImportError:
+    PILRenderer = None  # PIL renderer module removed in v2.0
+
 from .postprocess import PostProcessor
 from .quote_overlay import QuoteOverlayRenderer, QuoteOverlayConfig
 

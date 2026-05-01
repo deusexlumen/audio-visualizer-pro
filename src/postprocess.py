@@ -7,6 +7,7 @@ Nachbearbeitung der gerenderten Frames mit verschiedenen Effekten.
 import numpy as np
 from PIL import Image, ImageFilter, ImageEnhance
 from typing import Dict, Optional, Tuple
+from pathlib import Path
 import colorsys
 
 
@@ -50,9 +51,13 @@ class PostProcessor:
             for line in lines:
                 line = line.strip()
                 if line and not line.startswith('#') and not line.startswith('LUT'):
-                    values = [float(v) for v in line.split()]
-                    if len(values) == 3:
-                        lut_data.append(values)
+                    try:
+                        values = [float(v) for v in line.split()]
+                        if len(values) == 3:
+                            lut_data.append(values)
+                    except ValueError:
+                        # Header-Zeilen wie TITLE ignorieren
+                        pass
             
             return np.array(lut_data) if lut_data else None
             

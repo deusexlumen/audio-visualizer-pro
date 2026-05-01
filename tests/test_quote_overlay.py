@@ -181,6 +181,115 @@ class TestQuoteOverlayRenderer:
         result = renderer.apply(frame, time_seconds=3.0)
         np.testing.assert_array_equal(result, frame)
 
+    def test_add_quote_threadsafe(self):
+        """add_quote sollte Zitate thread-saf hinzufuegen."""
+        renderer = QuoteOverlayRenderer()
+        q = Quote(text="Neues Zitat", start_time=5.0, end_time=8.0, confidence=0.9)
+        renderer.add_quote(q)
+        assert len(renderer.quotes) == 1
+        assert renderer._dirty is True
+
+    def test_set_latency_offset(self):
+        """set_latency_offset sollte Offset setzen und dirty flag."""
+        renderer = QuoteOverlayRenderer()
+        renderer.set_latency_offset(0.5)
+        assert renderer.config.latency_offset == 0.5
+        assert renderer._dirty is True
+
+    def test_build_frame_index(self):
+        """build_frame_index sollte Frame-Index korrekt aufbauen."""
+        quotes = [
+            Quote(text="Test", start_time=1.0, end_time=3.0, confidence=1.0),
+        ]
+        renderer = QuoteOverlayRenderer(quotes)
+        renderer.build_frame_index(frame_count=90, fps=30)
+        
+        assert renderer._frame_count == 90
+        assert renderer._fps == 30
+        assert renderer._dirty is False
+        # Frame 60 (2.0s) sollte das Zitat enthalten
+        assert len(renderer._frame_index[60]) == 1
+        # Frame 0 sollte leer sein
+        assert len(renderer._frame_index[0]) == 0
+
+    def test_frame_idx_lookup_fast_path(self):
+        """Frame-Index Lookup sollte schneller Pfad sein."""
+        quotes = [
+            Quote(text="Test", start_time=1.0, end_time=3.0, confidence=1.0),
+        ]
+        renderer = QuoteOverlayRenderer(quotes)
+        renderer.build_frame_index(frame_count=90, fps=30)
+        
+        frame = create_test_frame()
+        # Frame 60 = 2.0s -> Zitat aktiv
+        result = renderer.apply(frame, time_seconds=2.0, frame_idx=60)
+        assert np.any(result != frame)
+        
+        # Frame 0 = 0.0s -> kein Zitat
+        result = renderer.apply(frame, time_seconds=0.0, frame_idx=0)
+        np.testing.assert_array_equal(result, frame)
+
+    def test_position_top(self):
+        """Position 'top' sollte Box oben platzieren."""
+        frame = create_test_frame()
+        quotes = [Quote(text="Top Text", start_time=1.0, end_time=5.0, confidence=1.0)]
+        config = QuoteOverlayConfig(position="top")
+        renderer = QuoteOverlayRenderer(quotes, config)
+        result = renderer.apply(frame, time_seconds=3.0)
+        assert result.shape == frame.shape
+        assert np.any(result != frame)
+
+    def test_position_center(self):
+        """Position 'center' sollte Box mittig platzieren."""
+        frame = create_test_frame()
+        quotes = [Quote(text="Center Text", start_time=1.0, end_time=5.0, confidence=1.0)]
+        config = QuoteOverlayConfig(position="center")
+        renderer = QuoteOverlayRenderer(quotes, config)
+        result = renderer.apply(frame, time_seconds=3.0)
+        assert result.shape == frame.shape
+        assert np.any(result != frame)
+
+    def test_text_align_right(self):
+        """Text-Align 'right' sollte funktionieren."""
+        frame = create_test_frame()
+        quotes = [Quote(text="Right", start_time=1.0, end_time=5.0, confidence=1.0)]
+        config = QuoteOverlayConfig(text_align="right")
+        renderer = QuoteOverlayRenderer(quotes, config)
+        result = renderer.apply(frame, time_seconds=3.0)
+        assert result.shape == frame.shape
+        assert np.any(result != frame)
+
+    def test_text_align_left(self):
+        """Text-Align 'left' sollte funktionieren."""
+        frame = create_test_frame()
+        quotes = [Quote(text="Left", start_time=1.0, end_time=5.0, confidence=1.0)]
+        config = QuoteOverlayConfig(text_align="left")
+        renderer = QuoteOverlayRenderer(quotes, config)
+        result = renderer.apply(frame, time_seconds=3.0)
+        assert result.shape == frame.shape
+        assert np.any(result != frame)
+
+    def test_alpha_near_zero_returns_original(self):
+        """Wenn Fade-Alpha nahe 0, sollte Original-Frame zurueckgegeben werden."""
+        frame = create_test_frame()
+        quotes = [Quote(text="Test", start_time=1.0, end_time=5.0, confidence=1.0)]
+        config = QuoteOverlayConfig(fade_duration=2.0)
+        renderer = QuoteOverlayRenderer(quotes, config)
+        # Direkt am Anfang (0.001s nach Start) -> alpha nahe 0
+        result = renderer.apply(frame, time_seconds=1.001)
+        np.testing.assert_array_equal(result, frame)
+
+    def test_custom_font_path_fallback(self):
+        """Nicht existierender Font-Pfad sollte Fallback ausloesen."""
+        import tempfile
+        frame = create_test_frame()
+        quotes = [Quote(text="Test", start_time=1.0, end_time=5.0, confidence=1.0)]
+        config = QuoteOverlayConfig(font_path="/nonexistent/font.ttf")
+        renderer = QuoteOverlayRenderer(quotes, config)
+        result = renderer.apply(frame, time_seconds=3.0)
+        assert result.shape == frame.shape
+        assert np.any(result != frame)
+
 
 class TestQuoteOverlayConfig:
     
