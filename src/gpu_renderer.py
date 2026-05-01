@@ -82,6 +82,7 @@ class GPUBatchRenderer:
         sync_quotes_to_beats: bool = False,
         codec: str = "h264",
         quality: str = "high",
+        gpu_encode: bool = False,
         postprocess: dict = None,
         viz_offset_x: float = 0.0,
         viz_offset_y: float = 0.0,
@@ -143,6 +144,8 @@ class GPUBatchRenderer:
         )
         print(f"[GPU] Visualizer: {visualizer_type}")
         print(f"[GPU] Aufloesung: {self.width}x{self.height}")
+        if gpu_encode:
+            print("[GPU] GPU-Encoding aktiviert (NVENC/AMF/QSV)")
 
         # Quotes optional zu Beats synchronisieren
         if sync_quotes_to_beats and quotes and len(features.beat_frames) > 0:
@@ -194,7 +197,7 @@ class GPUBatchRenderer:
 
         # FFmpeg fuer Video-Encoding starten
         ffmpeg_cmd = self._build_ffmpeg_cmd(
-            temp_video.name, codec, quality
+            temp_video.name, codec, quality, gpu_encode=gpu_encode
         )
 
         process = subprocess.Popen(
@@ -378,8 +381,11 @@ class GPUBatchRenderer:
         texture = self.ctx.texture((self.width, self.height), 3, data.tobytes())
         return texture
     
-    def _build_ffmpeg_cmd(self, output_path: str, codec: str, quality: str):
+    def _build_ffmpeg_cmd(self, output_path: str, codec: str, quality: str, gpu_encode: bool = False):
         """Baut den FFmpeg-Befehl basierend auf Codec und Qualitaet auf.
+        
+        Unterstuetzt GPU-Encoding (NVENC, AMF, QSV) fuer massiv schnelleres
+        Encoding (~5-10x gegenueber Software-Encoding).
         
         NEU: 'high' und 'lossless' verwenden yuv444p (kein Chroma-Subsampling)
         fuer scharfe Kanten und knallige Farben. 'medium'/'low' bleiben bei
@@ -395,7 +401,17 @@ class GPUBatchRenderer:
         
         q = quality_profiles.get(quality, quality_profiles["high"])
         
-        if codec == "hevc" or codec == "h265":
+        # GPU-Encoding: Automatisch besten verfuegbaren Encoder waehlen
+        gpu_encoder = None
+        if gpu_encode:
+            gpu_encoder = self._detect_gpu_encoder(codec)
+        
+        if gpu_encoder:
+            # GPU-Encoding Parameter
+            video_codec = gpu_encoder
+            pix_fmt = "yuv420p"  # GPU-Encoder unterstuetzen meist nur yuv420p
+            extra_args = self._build_gpu_encoder_args(gpu_encoder, quality, q)
+        elif codec == "hevc" or codec == "h265":
             video_codec = "libx265"
             pix_fmt = q.get("pix_fmt", "yuv420p")
             extra_args = ["-tag:v", "hvc1"]
@@ -419,18 +435,133 @@ class GPUBatchRenderer:
             "-i", "-",
             "-c:v", video_codec,
             "-pix_fmt", pix_fmt,
-            "-preset", q["preset"],
         ]
         
-        if codec != "prores":
+        if not gpu_encoder:
+            cmd.extend(["-preset", q["preset"]])
+        
+        if codec != "prores" and not gpu_encoder:
             cmd.extend(["-crf", q["crf"]])
-        else:
+        elif codec == "prores":
             cmd.extend(["-b:v", q["bitrate"]])
         
         cmd.extend(extra_args)
         cmd.append(output_path)
         
         return cmd
+    
+    def _detect_gpu_encoder(self, codec: str) -> str | None:
+        """Erkennt den besten verfuegbaren GPU-Encoder.
+        
+        Reihenfolge: NVENC (NVIDIA) > AMF (AMD) > QSV (Intel)
+        """
+        # Cache: Einmalig pro Sitzung pruefen
+        if not hasattr(self, '_gpu_encoder_cache'):
+            self._gpu_encoder_cache = {}
+        
+        cache_key = f"{codec}_gpu"
+        if cache_key in self._gpu_encoder_cache:
+            return self._gpu_encoder_cache[cache_key]
+        
+        suffix = "hevc" if codec in ("hevc", "h265") else "h264"
+        
+        encoders_to_check = [
+            f"{suffix}_nvenc",   # NVIDIA NVENC
+            f"{suffix}_amf",     # AMD AMF
+            f"{suffix}_qsv",     # Intel QuickSync
+        ]
+        
+        detected = None
+        for enc in encoders_to_check:
+            if self._ffmpeg_has_encoder(enc):
+                detected = enc
+                print(f"[GPU] GPU-Encoder erkannt: {enc}")
+                break
+        
+        self._gpu_encoder_cache[cache_key] = detected
+        return detected
+    
+    def _ffmpeg_has_encoder(self, encoder_name: str) -> bool:
+        """Prueft ob FFmpeg einen bestimmten Encoder unterstuetzt."""
+        try:
+            result = subprocess.run(
+                ["ffmpeg", "-encoders"],
+                capture_output=True, text=True, timeout=10
+            )
+            return encoder_name in result.stdout
+        except Exception:
+            return False
+    
+    def _build_gpu_encoder_args(self, encoder: str, quality: str, q: dict) -> list:
+        """Baut GPU-spezifische FFmpeg-Argumente."""
+        if "nvenc" in encoder:
+            # NVIDIA NVENC: p1=schnellste, p7=langsamste
+            nvenc_presets = {
+                "low": "p1",
+                "medium": "p4",
+                "high": "p5",
+                "lossless": "p7",
+            }
+            nvenc_cq = {
+                "low": "32",
+                "medium": "26",
+                "high": "22",
+                "lossless": "18",
+            }
+            preset = nvenc_presets.get(quality, "p4")
+            cq = nvenc_cq.get(quality, "26")
+            return [
+                "-preset", preset,
+                "-cq", cq,
+                "-profile:v", "high",
+                "-movflags", "+faststart",
+            ]
+        
+        elif "amf" in encoder:
+            # AMD AMF: speed, balanced, quality
+            amf_quality = {
+                "low": "speed",
+                "medium": "balanced",
+                "high": "quality",
+                "lossless": "quality",
+            }
+            amf_qp = {
+                "low": "32",
+                "medium": "26",
+                "high": "22",
+                "lossless": "18",
+            }
+            q_setting = amf_quality.get(quality, "balanced")
+            qp = amf_qp.get(quality, "26")
+            return [
+                "-quality", q_setting,
+                "-qp_p", qp,
+                "-movflags", "+faststart",
+            ]
+        
+        elif "qsv" in encoder:
+            # Intel QuickSync
+            qsv_presets = {
+                "low": "veryfast",
+                "medium": "fast",
+                "high": "medium",
+                "lossless": "slow",
+            }
+            qsv_quality = {
+                "low": "28",
+                "medium": "23",
+                "high": "20",
+                "lossless": "18",
+            }
+            preset = qsv_presets.get(quality, "fast")
+            global_q = qsv_quality.get(quality, "23")
+            return [
+                "-preset", preset,
+                "-global_quality", global_q,
+                "-movflags", "+faststart",
+            ]
+        
+        return ["-movflags", "+faststart"]
     
     def _init_postprocess(self):
         """Initialisiert den Post-Process Shader fuer Color-Grading."""

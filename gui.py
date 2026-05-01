@@ -147,6 +147,7 @@ class AppState:
         self.render_fps: int = 30
         self.codec: str = "h264"
         self.quality: str = "high"
+        self.gpu_encode: bool = False
 
         self.is_analyzing: bool = False
         self.is_rendering: bool = False
@@ -164,6 +165,9 @@ class AppState:
 
         self._preview_params_hash: str = ""
         self._preview_image: Image.Image | None = None
+
+    def get_gpu_encode(self) -> bool:
+        return self.gpu_encode
 
     def get_params(self) -> dict:
         base = {
@@ -703,6 +707,14 @@ class AudioVisualizerGUI:
             tag="res_combo",
         )
         dpg.add_spacer(height=6)
+        dpg.add_checkbox(
+            label="⚡ GPU-Encoding (NVENC/AMF/QSV)",
+            default_value=self.state.gpu_encode,
+            callback=self._on_gpu_encode_changed,
+            tag="chk_gpu_encode",
+        )
+        self._add_tooltip("Nutzt die Grafikkarte fuer Video-Encoding (~5-10x schneller)")
+        dpg.add_spacer(height=6)
         dpg.add_text("Output", color=Theme.TEXT_SECONDARY)
         dpg.add_input_text(
             label="",
@@ -1035,6 +1047,9 @@ class AudioVisualizerGUI:
     def _on_output_dir_changed(self, sender, app_data):
         self.state.output_dir = dpg.get_value(sender)
 
+    def _on_gpu_encode_changed(self, sender, app_data):
+        self.state.gpu_encode = dpg.get_value(sender)
+
     def _on_quotes_enabled_changed(self, sender, app_data):
         self.state.quotes_enabled = dpg.get_value(sender)
         self._request_preview_update()
@@ -1279,6 +1294,7 @@ class AudioVisualizerGUI:
                     quote_config=render_quote_cfg,
                     codec=self.state.codec,
                     quality=self.state.quality,
+                    gpu_encode=self.state.gpu_encode,
                     viz_offset_x=self.state.viz_offset_x,
                     viz_offset_y=self.state.viz_offset_y,
                     viz_scale=self.state.viz_scale,
