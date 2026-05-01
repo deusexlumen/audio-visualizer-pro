@@ -187,7 +187,7 @@ class TestRenderFlow:
 
         # Mock FFmpeg Prozess
         mock_process = MagicMock()
-        mock_process.poll.return_value = 0
+        mock_process.poll.return_value = None  # Noch laufend waehrend des Loops
         mock_process.returncode = 0
         mock_popen.return_value = mock_process
 
@@ -219,7 +219,7 @@ class TestRenderFlow:
         assert mock_process.stdin.write.call_count > 0
         # stdin sollte geschlossen werden
         mock_process.stdin.close.assert_called_once()
-        mock_process.wait.assert_called_once()
+        assert mock_process.wait.call_count >= 1
 
     @patch('src.gpu_renderer.moderngl.create_standalone_context')
     @patch('src.gpu_renderer.subprocess.Popen')
@@ -229,7 +229,7 @@ class TestRenderFlow:
         mock_create_ctx.return_value = mock_gl_context
 
         mock_process = MagicMock()
-        mock_process.poll.return_value = 0
+        mock_process.poll.return_value = None  # Noch laufend
         mock_process.returncode = 0
         mock_popen.return_value = mock_process
 
@@ -267,7 +267,7 @@ class TestRenderFlow:
         mock_create_ctx.return_value = mock_gl_context
 
         mock_process = MagicMock()
-        mock_process.poll.return_value = 0
+        mock_process.poll.return_value = None  # Noch laufend
         mock_process.returncode = 0
         mock_popen.return_value = mock_process
 

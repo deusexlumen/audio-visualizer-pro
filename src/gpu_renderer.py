@@ -204,9 +204,21 @@ class GPUBatchRenderer:
             ffmpeg_cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             bufsize=8 * 1024 * 1024,  # 8MB Buffer fuer schnelleres Schreiben
         )
+
+        # stderr-Reader Thread: Verhindert, dass FFmpeg blockiert,
+        # wenn der stderr-Pipe-Buffer voll wird.
+        stderr_lines = []
+        def _stderr_reader():
+            try:
+                for line in process.stderr:
+                    stderr_lines.append(line)
+            except Exception:
+                pass
+        stderr_thread = threading.Thread(target=_stderr_reader, daemon=True)
+        stderr_thread.start()
 
         try:
             # Quote-Renderer initialisieren falls noetig
@@ -219,8 +231,8 @@ class GPUBatchRenderer:
             # === PRODUCER-CONSUMER: Render und Encode parallel ===
             # Der Render-Thread rendert Frames in eine Queue.
             # Ein separater Thread schreibt sie zu FFmpeg stdin.
-            # Das verhindert, dass der Render-Thread auf FFmpeg blockiert.
-            frame_queue = queue.Queue(maxsize=3)
+            # Queue OHNE maxsize: put() blockiert nie, FFmpeg ist der einzige Engpass.
+            frame_queue = queue.Queue()
             encode_done = threading.Event()
             encode_error = [None]
             _DEBUG = False  # Auf True setzen fuer Debug-Screenshots
@@ -234,6 +246,7 @@ class GPUBatchRenderer:
                         process.stdin.write(item)
                 except Exception as e:
                     encode_error[0] = e
+                    print(f"[GPU] Encode-Fehler: {e}")
                 finally:
                     try:
                         process.stdin.close()
@@ -306,6 +319,17 @@ class GPUBatchRenderer:
                     if _DEBUG and i == 0:
                         self._save_debug(target_fbo, "debug_step6_final.png")
                     
+                    # FFmpeg-Health-Check VOR dem put (kein Blockieren mehr dank unbegrenzter Queue)
+                    if process.poll() is not None:
+                        stderr_text = "".join(stderr_lines)[-800:] if stderr_lines else ""
+                        raise RuntimeError(
+                            f"FFmpeg ist unerwartet beendet (Code {process.returncode}). "
+                            f"Fehler: {stderr_text}"
+                        )
+                    
+                    if encode_error[0] is not None:
+                        raise RuntimeError(f"Encode-Thread-Fehler: {encode_error[0]}")
+                    
                     frame_queue.put(pixels)
 
                     if i % 30 == 0 or i == frame_count - 1:
@@ -320,7 +344,7 @@ class GPUBatchRenderer:
             finally:
                 frame_queue.put(None)
                 encode_done.wait(timeout=300)
-                encode_thread.join(timeout=30)
+                encode_thread.join(timeout=10)
 
             process.wait()
 
