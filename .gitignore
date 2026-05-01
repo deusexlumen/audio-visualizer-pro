@@ -57,5 +57,12 @@ Thumbs.db
 # Debug-Screenshots
 debug_step*.png
 
+# Test artifacts
+.coverage
+test_output.txt
+
+# GUI layout cache
+dpg_layout.ini
+
 # Secrets
 .env

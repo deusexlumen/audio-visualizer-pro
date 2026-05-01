@@ -412,7 +412,7 @@ Alle GPU-Visualizer unterstützen diese universellen Effekt-Parameter, die über
 ## 🧪 Tests
 
 ```bash
-# Alle Tests ausführen (42 Tests)
+# Alle Tests ausführen (134 Tests)
 pytest tests/ -v
 
 # Spezifische Test-Suites
@@ -447,7 +447,6 @@ audio_visualizer_pro/
 │   ├── 📄 gpu_renderer.py          # OpenGL GPU Render-Pipeline
 │   ├── 📄 gpu_preview.py           # Schneller Live-Preview (Einzel-Frame)
 │   ├── 📄 gpu_text_renderer.py     # GPU-beschleunigte Schrift-Rendering
-│   ├── 📄 pipeline.py              # Haupt-Orchestrator
 │   ├── 📄 postprocess.py           # Color Grading & Effekte
 │   ├── 📄 types.py                 # Pydantic Models & Schemas
 │   ├── 📄 beat_sync.py             # Beat-Synchronisation
@@ -470,7 +469,7 @@ audio_visualizer_pro/
 │       ├── speech_focus.py
 │       └── voice_flow.py
 │
-├── 📂 tests/                       # 42 Unit- & Integration-Tests
+├── 📂 tests/                       # 134 Unit- & Integration-Tests
 ├── 📄 gui.py                       # Streamlit-Web-Interface
 ├── 📄 main.py                      # CLI Entry Point (click)
 ├── 📄 start_gui.py                 # GUI-Start-Skript
