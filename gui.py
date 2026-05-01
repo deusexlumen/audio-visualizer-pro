@@ -151,10 +151,16 @@ class AppState:
         self.is_analyzing: bool = False
         self.is_rendering: bool = False
         self.is_ki_optimizing: bool = False
+        self.is_extracting_quotes: bool = False
         self.status_message: str = "Bereit."
         self.ki_status: str = ""
         self.ki_suggested_colors: dict = {}
         self.ki_prompt: str = ""
+
+        # Quotes
+        self.quotes: list = []
+        self.quotes_enabled: bool = False
+        self.quote_config: QuoteOverlayConfig = QuoteOverlayConfig(enabled=True)
 
         self._preview_params_hash: str = ""
         self._preview_image: Image.Image | None = None
@@ -183,7 +189,8 @@ class AppState:
             f"{self.viz_offset_x:.3f}_{self.viz_offset_y:.3f}_{self.viz_scale:.3f}_"
             f"{self.bg_blur:.1f}_{self.bg_vignette:.2f}_{self.bg_opacity:.2f}_"
             f"{self.pp_contrast:.2f}_{self.pp_saturation:.2f}_{self.pp_brightness:.2f}_"
-            f"{self.pp_warmth:.2f}_{self.pp_grain:.2f}_{self.preview_time_percent:.2f}"
+            f"{self.pp_warmth:.2f}_{self.pp_grain:.2f}_{self.preview_time_percent:.2f}_"
+            f"{self.quotes_enabled}_{len(self.quotes)}"
         )
 
 
@@ -404,6 +411,16 @@ class AudioVisualizerGUI:
             )
             dpg.add_spacer(height=10)
 
+            # --- QUOTES CARD ---
+            self._build_card(
+                title="Zitate",
+                accent=(255, 105, 180),  # Hot Pink
+                icon="💬",
+                content_tag="quotes_card_content",
+                build_fn=self._build_quotes_section,
+            )
+            dpg.add_spacer(height=10)
+
             # --- HINTERGRUND CARD ---
             self._build_card(
                 title="Hintergrund",
@@ -537,6 +554,60 @@ class AudioVisualizerGUI:
         self._add_tooltip("Nutzt Gemini KI, um Parameter an das Audio anzupassen")
         dpg.add_text("", tag="ki_status_text", wrap=360, color=Theme.TEXT_SECONDARY)
         dpg.add_text("", tag="ki_colors_text", wrap=360, color=Theme.STATUS_OK)
+
+    def _build_quotes_section(self):
+        dpg.add_checkbox(
+            label="Zitate aktivieren",
+            default_value=self.state.quotes_enabled,
+            callback=self._on_quotes_enabled_changed,
+            tag="chk_quotes_enabled",
+        )
+        dpg.add_spacer(height=6)
+        dpg.add_button(
+            label="🔮 Key-Zitate extrahieren",
+            callback=self._on_extract_quotes_clicked,
+            width=-1,
+            tag="btn_extract_quotes",
+        )
+        dpg.add_button(
+            label="🎲 Demo-Zitate erstellen",
+            callback=self._on_demo_quotes_clicked,
+            width=-1,
+        )
+        dpg.add_text("", tag="quotes_status_text", wrap=360, color=Theme.TEXT_SECONDARY)
+        dpg.add_spacer(height=6)
+
+        # Quote-Liste (wird dynamisch aktualisiert)
+        dpg.add_text("Zitate:", color=Theme.TEXT_SECONDARY)
+        dpg.add_child_window(
+            width=-1, height=120, border=True, tag="quotes_list_window"
+        )
+        dpg.add_spacer(height=6)
+
+        # Grundlegende Quote-Config
+        dpg.add_text("Einstellungen", color=Theme.TEXT_SECONDARY)
+        dpg.add_combo(
+            label="Position",
+            items=["bottom", "center", "top"],
+            default_value=self.state.quote_config.position,
+            callback=self._on_quote_config_changed,
+            width=-1,
+            tag="quote_position",
+        )
+        self._styled_slider(
+            label="Schriftgröße",
+            tag="quote_font_size",
+            min_val=16, max_val=96, default_val=self.state.quote_config.font_size,
+            callback=self._on_quote_config_changed,
+            tooltip="Schriftgröße der Zitate",
+        )
+        self._styled_slider(
+            label="Anzeigedauer (s)",
+            tag="quote_display_duration",
+            min_val=2.0, max_val=20.0, default_val=self.state.quote_config.display_duration,
+            callback=self._on_quote_config_changed,
+            tooltip="Wie lange ein Zitat angezeigt wird",
+        )
 
     def _build_background_section(self):
         dpg.add_button(
@@ -964,6 +1035,96 @@ class AudioVisualizerGUI:
     def _on_output_dir_changed(self, sender, app_data):
         self.state.output_dir = dpg.get_value(sender)
 
+    def _on_quotes_enabled_changed(self, sender, app_data):
+        self.state.quotes_enabled = dpg.get_value(sender)
+        self._request_preview_update()
+
+    def _on_extract_quotes_clicked(self, sender, app_data):
+        if self.state.is_extracting_quotes:
+            return
+        if not self.gemini:
+            dpg.set_value("quotes_status_text", "KI nicht verfügbar. Prüfe API-Key.")
+            dpg.configure_item("quotes_status_text", color=Theme.STATUS_ERR)
+            return
+        if not self.state.audio_path or not os.path.exists(self.state.audio_path):
+            dpg.set_value("quotes_status_text", "Lade zuerst eine Audio-Datei.")
+            dpg.configure_item("quotes_status_text", color=Theme.STATUS_ERR)
+            return
+        if self.state.features is None:
+            dpg.set_value("quotes_status_text", "Audio wird noch analysiert...")
+            dpg.configure_item("quotes_status_text", color=Theme.STATUS_WARN)
+            return
+
+        self.state.is_extracting_quotes = True
+        dpg.configure_item("btn_extract_quotes", label="⏳ Extrahiere...")
+        dpg.set_value("quotes_status_text", "Gemini analysiert Audio...")
+        dpg.configure_item("quotes_status_text", color=Theme.TEXT_SECONDARY)
+
+        def _extract():
+            try:
+                quotes = self.gemini.extract_quotes(
+                    self.state.audio_path,
+                    audio_duration=self.state.features.duration
+                )
+                # Zeit begrenzen
+                for q in quotes:
+                    q.start_time = max(0.0, min(q.start_time, self.state.features.duration - 1.0))
+                    q.end_time = max(q.start_time + 1.0, min(q.end_time, self.state.features.duration))
+                self.state.quotes = quotes
+                self.state.is_extracting_quotes = False
+                dpg.configure_item("btn_extract_quotes", label="🔮 Key-Zitate extrahieren")
+                dpg.set_value("quotes_status_text", f"{len(quotes)} Zitate extrahiert!")
+                dpg.configure_item("quotes_status_text", color=Theme.STATUS_OK)
+                self._refresh_quotes_list()
+                self._request_preview_update()
+            except Exception as e:
+                self.state.is_extracting_quotes = False
+                dpg.configure_item("btn_extract_quotes", label="🔮 Key-Zitate extrahieren")
+                dpg.set_value("quotes_status_text", f"Fehler: {e}")
+                dpg.configure_item("quotes_status_text", color=Theme.STATUS_ERR)
+
+        threading.Thread(target=_extract, daemon=True).start()
+
+    def _on_demo_quotes_clicked(self, sender, app_data):
+        duration = self.state.audio_duration if self.state.features else 60.0
+        self.state.quotes = [
+            Quote(text="Das Abenteuer beginnt jetzt.", start_time=min(5.0, duration * 0.05), end_time=min(13.0, duration * 0.1), confidence=0.95),
+            Quote(text="Jeder Moment ist eine Chance.", start_time=min(duration * 0.3, duration - 15.0), end_time=min(duration * 0.3 + 8.0, duration - 5.0), confidence=0.90),
+            Quote(text="Bleib dran, es lohnt sich.", start_time=min(duration * 0.6, duration - 10.0), end_time=min(duration * 0.6 + 8.0, duration - 2.0), confidence=0.88),
+        ]
+        dpg.set_value("quotes_status_text", f"{len(self.state.quotes)} Demo-Zitate erstellt!")
+        dpg.configure_item("quotes_status_text", color=Theme.STATUS_OK)
+        self._refresh_quotes_list()
+        self._request_preview_update()
+
+    def _refresh_quotes_list(self):
+        """Aktualisiert die Anzeige der Quote-Liste."""
+        # Lösche alte Items im Quotes-List-Window
+        # DPG hat keine einfache Möglichkeit, alle Children zu löschen,
+        # also ersetzen wir den Inhalt durch neues Setzen
+        if not self.state.quotes:
+            dpg.set_value("quotes_status_text", "Noch keine Zitate.")
+            return
+
+        # Da DPG nicht einfach Children löschen kann ohne tags,
+        # aktualisieren wir nur den Status-Text
+        lines = []
+        for i, q in enumerate(self.state.quotes):
+            start_m = int(q.start_time // 60)
+            start_s = int(q.start_time % 60)
+            lines.append(f"{i+1}. [{start_m}:{start_s:02d}] {q.text[:40]}{'...' if len(q.text) > 40 else ''}")
+        dpg.set_value("quotes_status_text", "\n".join(lines))
+
+    def _on_quote_config_changed(self, sender, app_data):
+        tag = dpg.get_item_alias(sender) or sender
+        if tag == "quote_position":
+            self.state.quote_config.position = dpg.get_value(sender)
+        elif tag == "quote_font_size":
+            self.state.quote_config.font_size = int(dpg.get_value(sender))
+        elif tag == "quote_display_duration":
+            self.state.quote_config.display_duration = float(dpg.get_value(sender))
+        self._request_preview_update()
+
     def _request_preview_update(self):
         self._last_preview_update = 0.0
 
@@ -1019,6 +1180,8 @@ class AudioVisualizerGUI:
         self.state._preview_params_hash = params_hash
 
         try:
+            preview_quotes = self.state.quotes if self.state.quotes_enabled else None
+            preview_quote_cfg = self.state.quote_config if self.state.quotes_enabled else None
             img = render_gpu_preview(
                 audio_path=self.state.audio_path,
                 visualizer_type=self.state.visualizer_type,
@@ -1032,6 +1195,8 @@ class AudioVisualizerGUI:
                 background_vignette=self.state.bg_vignette,
                 background_opacity=self.state.bg_opacity,
                 postprocess=self.state.get_postprocess(),
+                quotes=preview_quotes,
+                quote_config=preview_quote_cfg,
             )
             if img is not None:
                 self.state._preview_image = img
@@ -1097,6 +1262,8 @@ class AudioVisualizerGUI:
                     self._render_queue.put({"type": "progress", "frame": frame, "total": total})
 
                 renderer = GPUBatchRenderer(width=w, height=h, fps=fps)
+                render_quotes = self.state.quotes if self.state.quotes_enabled else None
+                render_quote_cfg = self.state.quote_config if self.state.quotes_enabled else None
                 renderer.render(
                     audio_path=self.state.audio_path,
                     visualizer_type=self.state.visualizer_type,
@@ -1108,6 +1275,8 @@ class AudioVisualizerGUI:
                     background_vignette=self.state.bg_vignette,
                     background_opacity=self.state.bg_opacity,
                     postprocess=self.state.get_postprocess(),
+                    quotes=render_quotes,
+                    quote_config=render_quote_cfg,
                     codec=self.state.codec,
                     quality=self.state.quality,
                     viz_offset_x=self.state.viz_offset_x,

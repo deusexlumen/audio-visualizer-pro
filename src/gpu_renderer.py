@@ -148,12 +148,19 @@ class GPUBatchRenderer:
             quotes = sync_fn(quotes, features.beat_frames, self.fps)
             print(f"[GPU] {len(quotes)} Quotes auf Beats synchronisiert")
         
-        # Beat-Intensitaet berechnen
+        # Beat-Intensitaet berechnen (vektorisiert, ~100x schneller als Python-Schleife)
         beat_intensity = np.zeros(frame_count, dtype=np.float32)
         if len(features.beat_frames) > 0:
-            from .beat_sync import get_beat_intensity
-            for i in range(frame_count):
-                beat_intensity[i] = get_beat_intensity(i, features.beat_frames, decay_frames=max(3, int(self.fps * 0.1)))
+            decay_frames = max(3, int(self.fps * 0.1))
+            for bf in features.beat_frames:
+                if bf >= frame_count:
+                    continue
+                end = min(bf + decay_frames + 1, frame_count)
+                if end > bf:
+                    dists = np.arange(end - bf, dtype=np.float32)
+                    vals = 1.0 - dists / decay_frames
+                    vals = np.clip(vals, 0.0, 1.0)
+                    beat_intensity[bf:end] = np.maximum(beat_intensity[bf:end], vals)
         
         # Visualizer-Instanz erzeugen
         viz_cls = get_visualizer(visualizer_type)
@@ -278,10 +285,10 @@ class GPUBatchRenderer:
                 
                 process.stdin.write(pixels)
 
-                if i % 10 == 0 or i == frame_count - 1:
+                if i % 30 == 0 or i == frame_count - 1:
                     if progress_callback:
                         progress_callback(i + 1, frame_count)
-                    if i % 100 == 0 or i == frame_count - 1:
+                    if i % 120 == 0 or i == frame_count - 1:
                         progress_pct = (i + 1) / frame_count * 100
                         print(
                             f"[GPU] {progress_pct:.1f}% ({i + 1}/{frame_count})",
@@ -344,6 +351,8 @@ class GPUBatchRenderer:
             img = img.filter(ImageFilter.GaussianBlur(radius=blur))
         
         data = np.array(img, dtype=np.uint8)
+        # OpenGL Textur-Ursprung ist unten-links, PIL ist oben-links
+        data = np.flipud(data)
         texture = self.ctx.texture((self.width, self.height), 3, data.tobytes())
         return texture
     
