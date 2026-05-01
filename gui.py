@@ -1040,9 +1040,13 @@ class AudioVisualizerGUI:
 
     def _on_resolution_changed(self, sender, app_data):
         res_str = dpg.get_value(sender)
-        # Entferne Label-Teil
-        w, h = map(int, res_str.split("x")[0].strip().split("×")[0].split(" ")[0].split("x"))
-        self.state.resolution = (w, h)
+        # Extrahiert die erste WIDTHxHEIGHT Kombination aus dem String
+        import re
+        match = re.search(r"(\d+)[x×](\d+)", res_str)
+        if match:
+            self.state.resolution = (int(match.group(1)), int(match.group(2)))
+        else:
+            self.state.resolution = (1920, 1080)
 
     def _on_output_dir_changed(self, sender, app_data):
         self.state.output_dir = dpg.get_value(sender)
