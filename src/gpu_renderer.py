@@ -370,7 +370,8 @@ class GPUBatchRenderer:
             from PIL import Image
             raw = fbo_obj.read(components=3)
             arr = np.frombuffer(raw, dtype=np.uint8).reshape((self.height, self.width, 3))
-            arr = np.flipud(arr)  # OpenGL Origin unten links
+            # ModernGL fbo.read() gibt Daten bereits top-to-bottom (PIL-kompatibel)
+            # KEIN np.flipud noetig
             Image.fromarray(arr, mode='RGB').save(filename)
             print(f"[GPU] DEBUG: {filename} gespeichert ({self.width}x{self.height})")
         except Exception as e:
@@ -396,6 +397,8 @@ class GPUBatchRenderer:
             img = img.filter(ImageFilter.GaussianBlur(radius=blur))
         
         data = np.array(img, dtype=np.uint8)
+        # OpenGL Textur-Ursprung ist unten-links, PIL ist oben-links
+        data = np.flipud(data)
         texture = self.ctx.texture((self.width, self.height), 3, data.tobytes())
         return texture
     
@@ -891,12 +894,10 @@ class GPUBatchRenderer:
                 in vec2 v_uv;
                 out vec4 f_color;
                 void main() {
-                    // PIL-Daten haben (0,0) oben-links, OpenGL unten-links
-                    vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
-                    vec4 tex = texture(u_texture, uv);
+                    vec4 tex = texture(u_texture, v_uv);
                     vec3 rgb = tex.rgb;
                     // Vignette: Abdunklung an den Raendern
-                    vec2 center = uv - 0.5;
+                    vec2 center = v_uv - 0.5;
                     float dist = length(center) * 1.4142; // normalisiert auf 0..1
                     float vig = 1.0 - u_vignette * smoothstep(0.3, 1.0, dist);
                     rgb *= vig;
