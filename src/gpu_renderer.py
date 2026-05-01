@@ -485,9 +485,9 @@ class GPUBatchRenderer:
         
         detected = None
         for enc in encoders_to_check:
-            if self._ffmpeg_has_encoder(enc):
+            if self._ffmpeg_has_encoder(enc) and self._test_encoder_works(enc):
                 detected = enc
-                print(f"[GPU] GPU-Encoder erkannt: {enc}")
+                print(f"[GPU] GPU-Encoder verifiziert: {enc}")
                 break
         
         self._gpu_encoder_cache[cache_key] = detected
@@ -501,6 +501,45 @@ class GPUBatchRenderer:
                 capture_output=True, text=True, timeout=10
             )
             return encoder_name in result.stdout
+        except Exception:
+            return False
+    
+    def _test_encoder_works(self, encoder_name: str) -> bool:
+        """Echter Funktionstest: Versucht einen 1-Frame Encode mit dem Encoder.
+        
+        Manche Encoder sind in der Liste, funktionieren aber nicht weil
+        die GPU fehlt (z.B. NVENC ohne nvcuda.dll).
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.1",
+                    "-c:v", encoder_name,
+                    "-frames:v", "1",
+                    "-f", "null", "-"
+                ],
+                capture_output=True, text=True, timeout=15
+            )
+            stderr_lower = result.stderr.lower()
+            # GPU-Fehler sind eindeutig; andere Fehler (z.B. Access Violation
+            # beim Prozess-Exit auf Windows) sind nicht aussagekraeftig
+            gpu_error_indicators = [
+                "cannot load nvcuda",
+                "cannot load amfrt",
+                "error creating a mfx",
+                "error while opening encoder",
+                "operation not permitted",
+            ]
+            for indicator in gpu_error_indicators:
+                if indicator in stderr_lower:
+                    return False
+            # Wenn mindestens ein Frame geschrieben wurde, gilt der Encoder
+            # als funktionstuechtig (auch bei komischen Exit-Codes)
+            if "frame=" in stderr_lower or "frame=" in result.stdout.lower():
+                return True
+            # Fallback: nur bei sauberem Exit-Code akzeptieren
+            return result.returncode == 0
         except Exception:
             return False
     
