@@ -124,7 +124,7 @@ class TestBuildFFmpegCmd:
         assert "libx264" in cmd
         assert "yuv444p" in cmd
         assert "-crf" in cmd
-        assert "18" in cmd
+        assert "20" in cmd
 
     @patch('src.gpu_renderer.moderngl.create_standalone_context')
     def test_build_ffmpeg_cmd_h264_low(self, mock_create_ctx, mock_gl_context):
@@ -171,7 +171,7 @@ class TestBuildFFmpegCmd:
         cmd = renderer._build_ffmpeg_cmd("out.mp4", "h264", "lossless")
 
         assert "0" in cmd
-        assert "veryslow" in cmd
+        assert "slow" in cmd
         assert "yuv444p" in cmd
 
 

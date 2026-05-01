@@ -7,8 +7,10 @@ Wesentlich schneller als der alte Python/PIL-basierte Renderer.
 """
 
 import os
+import queue
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 import moderngl
@@ -200,6 +202,7 @@ class GPUBatchRenderer:
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            bufsize=8 * 1024 * 1024,  # 8MB Buffer fuer schnelleres Schreiben
         )
 
         try:
@@ -210,93 +213,112 @@ class GPUBatchRenderer:
             # Frame-Index fuer Quote-Buffer bauen (O(1) Lookups im Render-Loop)
             self._build_quote_frame_index(quotes, quote_config, frame_count)
 
-            # Haupt-Render-Loop — IDENTISCH zur Preview (direktes Rendering)
-            # Visualizer wird in viz_fbo gerendert und dann mit Offset/Scale geblittet.
-            for i in range(frame_count):
-                # Cancel-Check: Wenn User abgebrochen hat, sofort raus
-                if cancel_event is not None and cancel_event.is_set():
-                    print("[GPU] Render abgebrochen durch User.")
-                    break
+            # === PRODUCER-CONSUMER: Render und Encode parallel ===
+            # Der Render-Thread rendert Frames in eine Queue.
+            # Ein separater Thread schreibt sie zu FFmpeg stdin.
+            # Das verhindert, dass der Render-Thread auf FFmpeg blockiert.
+            frame_queue = queue.Queue(maxsize=3)
+            encode_done = threading.Event()
+            encode_error = [None]
+            _DEBUG = False  # Auf True setzen fuer Debug-Screenshots
 
-                time = i / self.fps
-                
-                # --- Einzel-Pass: Direkt in finalen FBO rendern ---
-                self.fbo.use()
-                self.ctx.clear(0.05, 0.05, 0.05)
-                
-                # DEBUG: Schritt 1 nach clear
-                if i == 0:
-                    self._save_debug(self.fbo, "debug_step1_after_clear.png")
-                
-                # Hintergrundbild (falls vorhanden)
-                if bg_texture is not None:
-                    self._render_background(bg_texture, background_opacity, background_vignette)
-                    if i == 0:
-                        self._save_debug(self.fbo, "debug_step2_after_bg.png")
-                
-                # Visualizer in temporären viz_fbo rendern
-                self.viz_fbo.use()
-                self.ctx.clear(0.0, 0.0, 0.0, 0.0)
-                viz.render(features_dict, time)
-                if i == 0:
-                    self._save_debug(self.viz_fbo, "debug_step3_after_viz.png")
-                
-                # Visualizer von viz_fbo auf main fbo blitten (mit Offset/Scale)
-                self.fbo.use()
-                self._blit_viz_to_fbo(
-                    self.viz_fbo.color_attachments[0],
-                    offset_x=viz_offset_x,
-                    offset_y=viz_offset_y,
-                    scale=viz_scale,
-                )
-                if i == 0:
-                    self._save_debug(self.fbo, "debug_step3b_after_viz_blit.png")
-                
-                # Post-Process (Color-Grading) anwenden falls konfiguriert
-                # WICHTIG: Muss VOR den Quote-Overlays passieren, damit Text nicht
-                # von Bloom/Glitch/Grain verzerrt wird.
-                if postprocess:
-                    self._apply_postprocess(
-                        self.fbo.color_attachments[0],
-                        contrast=postprocess.get("contrast", 1.0),
-                        saturation=postprocess.get("saturation", 1.0),
-                        brightness=postprocess.get("brightness", 0.0),
-                        warmth=postprocess.get("warmth", 0.0),
-                        film_grain=postprocess.get("film_grain", 0.0),
-                        time=time,
+            def _encode_worker():
+                try:
+                    while True:
+                        item = frame_queue.get()
+                        if item is None:
+                            break
+                        process.stdin.write(item)
+                except Exception as e:
+                    encode_error[0] = e
+                finally:
+                    try:
+                        process.stdin.close()
+                    except Exception:
+                        pass
+                    encode_done.set()
+
+            encode_thread = threading.Thread(target=_encode_worker, daemon=True)
+            encode_thread.start()
+
+            try:
+                # Haupt-Render-Loop
+                for i in range(frame_count):
+                    if cancel_event is not None and cancel_event.is_set():
+                        print("[GPU] Render abgebrochen durch User.")
+                        break
+
+                    time = i / self.fps
+                    
+                    self.fbo.use()
+                    self.ctx.clear(0.05, 0.05, 0.05)
+                    
+                    if _DEBUG and i == 0:
+                        self._save_debug(self.fbo, "debug_step1_after_clear.png")
+                    
+                    if bg_texture is not None:
+                        self._render_background(bg_texture, background_opacity, background_vignette)
+                        if _DEBUG and i == 0:
+                            self._save_debug(self.fbo, "debug_step2_after_bg.png")
+                    
+                    self.viz_fbo.use()
+                    self.ctx.clear(0.0, 0.0, 0.0, 0.0)
+                    viz.render(features_dict, time)
+                    if _DEBUG and i == 0:
+                        self._save_debug(self.viz_fbo, "debug_step3_after_viz.png")
+                    
+                    self.fbo.use()
+                    self._blit_viz_to_fbo(
+                        self.viz_fbo.color_attachments[0],
+                        offset_x=viz_offset_x,
+                        offset_y=viz_offset_y,
+                        scale=viz_scale,
                     )
-                    if i == 0:
-                        self._save_debug(self.post_fbo, "debug_step4_after_postprocess.png")
-                    target_fbo = self.post_fbo
-                else:
-                    target_fbo = self.fbo
-                
-                # Quote-Overlays auf GPU rendern (STRIKT NACH Post-Processing)
-                if quotes and quote_config and quote_config.enabled:
-                    target_fbo.use()
-                    self._render_quotes_gpu(time, quotes, quote_config, frame_idx=i)
-                    if i == 0:
-                        self._save_debug(target_fbo, "debug_step5_after_quotes.png")
-                
-                # Pixel aus dem finalen FBO lesen
-                pixels = target_fbo.read(components=3)
-                if i == 0:
-                    self._save_debug(target_fbo, "debug_step6_final.png")
-                
-                process.stdin.write(pixels)
-
-                if i % 30 == 0 or i == frame_count - 1:
-                    if progress_callback:
-                        progress_callback(i + 1, frame_count)
-                    if i % 120 == 0 or i == frame_count - 1:
-                        progress_pct = (i + 1) / frame_count * 100
-                        print(
-                            f"[GPU] {progress_pct:.1f}% ({i + 1}/{frame_count})",
-                            flush=True,
+                    if _DEBUG and i == 0:
+                        self._save_debug(self.fbo, "debug_step3b_after_viz_blit.png")
+                    
+                    if postprocess:
+                        self._apply_postprocess(
+                            self.fbo.color_attachments[0],
+                            contrast=postprocess.get("contrast", 1.0),
+                            saturation=postprocess.get("saturation", 1.0),
+                            brightness=postprocess.get("brightness", 0.0),
+                            warmth=postprocess.get("warmth", 0.0),
+                            film_grain=postprocess.get("film_grain", 0.0),
+                            time=time,
                         )
+                        if _DEBUG and i == 0:
+                            self._save_debug(self.post_fbo, "debug_step4_after_postprocess.png")
+                        target_fbo = self.post_fbo
+                    else:
+                        target_fbo = self.fbo
+                    
+                    if quotes and quote_config and quote_config.enabled:
+                        target_fbo.use()
+                        self._render_quotes_gpu(time, quotes, quote_config, frame_idx=i)
+                        if _DEBUG and i == 0:
+                            self._save_debug(target_fbo, "debug_step5_after_quotes.png")
+                    
+                    pixels = target_fbo.read(components=3)
+                    if _DEBUG and i == 0:
+                        self._save_debug(target_fbo, "debug_step6_final.png")
+                    
+                    frame_queue.put(pixels)
 
-            # FFmpeg-Input sauber schliessen und warten
-            process.stdin.close()
+                    if i % 30 == 0 or i == frame_count - 1:
+                        if progress_callback:
+                            progress_callback(i + 1, frame_count)
+                        if i % 120 == 0 or i == frame_count - 1:
+                            progress_pct = (i + 1) / frame_count * 100
+                            print(
+                                f"[GPU] {progress_pct:.1f}% ({i + 1}/{frame_count})",
+                                flush=True,
+                            )
+            finally:
+                frame_queue.put(None)
+                encode_done.wait(timeout=300)
+                encode_thread.join(timeout=30)
+
             process.wait()
 
             if process.returncode != 0:
@@ -367,8 +389,8 @@ class GPUBatchRenderer:
         quality_profiles = {
             "low": {"preset": "ultrafast", "crf": "28", "bitrate": "4M", "pix_fmt": "yuv420p"},
             "medium": {"preset": "fast", "crf": "23", "bitrate": "8M", "pix_fmt": "yuv420p"},
-            "high": {"preset": "medium", "crf": "18", "bitrate": "16M", "pix_fmt": "yuv444p"},
-            "lossless": {"preset": "veryslow", "crf": "0", "bitrate": "50M", "pix_fmt": "yuv444p"},
+            "high": {"preset": "fast", "crf": "20", "bitrate": "16M", "pix_fmt": "yuv444p"},
+            "lossless": {"preset": "slow", "crf": "0", "bitrate": "50M", "pix_fmt": "yuv444p"},
         }
         
         q = quality_profiles.get(quality, quality_profiles["high"])
