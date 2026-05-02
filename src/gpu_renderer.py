@@ -20,7 +20,7 @@ from .analyzer import AudioAnalyzer
 from .types import AudioFeatures, Quote
 from .gpu_visualizers import get_visualizer
 from .gpu_text_renderer import SDFFontAtlas, GPUTextRenderer
-from .quote_overlay import QuoteOverlayConfig
+from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
 
 
 class GPUBatchRenderer:
@@ -370,8 +370,7 @@ class GPUBatchRenderer:
             from PIL import Image
             raw = fbo_obj.read(components=3)
             arr = np.frombuffer(raw, dtype=np.uint8).reshape((self.height, self.width, 3))
-            # ModernGL fbo.read() gibt Daten bereits top-to-bottom (PIL-kompatibel)
-            # KEIN np.flipud noetig
+            # ModernGL fbo.read() gibt Daten top-to-bottom (PIL-kompatibel)
             Image.fromarray(arr, mode='RGB').save(filename)
             print(f"[GPU] DEBUG: {filename} gespeichert ({self.width}x{self.height})")
         except Exception as e:
@@ -397,8 +396,8 @@ class GPUBatchRenderer:
             img = img.filter(ImageFilter.GaussianBlur(radius=blur))
         
         data = np.array(img, dtype=np.uint8)
-        # OpenGL Textur-Ursprung ist unten-links, PIL ist oben-links
-        data = np.flipud(data)
+        # KEIN np.flipud mehr noetig — ModernGL Textur-Upload und Shader-UVs
+        # sind konsistent mit PIL-TopDown-Orientierung
         texture = self.ctx.texture((self.width, self.height), 3, data.tobytes())
         return texture
     
@@ -1073,9 +1072,11 @@ class GPUBatchRenderer:
         return 1.0
 
     def _render_quotes_gpu(self, time: float, quotes: list, config, frame_idx: int = None):
-        """Rendert Quote-Overlays als GPU-Text mit Auto-Scale, Slide-In, Scale-In, Glow-Pulse und Typewriter."""
-        import textwrap
+        """Rendert Quote-Overlays via PIL-basiertem QuoteOverlayRenderer.
         
+        Liest den aktuellen FBO, wendet den bewaehrten PIL-Renderer an
+        und schreibt das Ergebnis zurueck. Robuster als der SDF-Ansatz.
+        """
         quote = self._get_active_quote(time, quotes, config.display_duration, frame_idx)
         if quote is None:
             return
@@ -1084,237 +1085,20 @@ class GPUBatchRenderer:
         if alpha <= 0.01:
             return
         
-        # ---- Typewriter: Berechne sichtbaren Text ----
-        display_text = quote.text
-        typewriter_alpha = 1.0
-        visible_chars = len(quote.text)
-        if config.typewriter:
-            elapsed = time - quote.start_time
-            if config.typewriter_mode == "word":
-                # Wort-fuer-Wort: Zeige nur vollstaendige Woerter
-                words = quote.text.split(' ')
-                visible_words = int(elapsed * config.typewriter_speed / 3)  # langsamer: 3 Buchstaben ~ 1 Wort
-                visible_words = min(visible_words, len(words))
-                display_text = ' '.join(words[:visible_words])
-                visible_chars = len(display_text)
-                if visible_words < len(words):
-                    blink = 0.5 + 0.5 * np.sin(elapsed * 10.0)
-                    typewriter_alpha = blink
-            else:
-                # Buchstabe-fuer-Buchstabe
-                visible_chars = int(elapsed * config.typewriter_speed)
-                display_text = quote.text[:visible_chars]
-                if visible_chars < len(quote.text):
-                    blink = 0.5 + 0.5 * np.sin(elapsed * 15.0)
-                    typewriter_alpha = blink
+        # FBO in RGBA-Array lesen (ModernGL gibt bottom-up, PIL braucht top-down)
+        pixels = self.fbo.read(components=4)
+        arr_rgba = np.frombuffer(pixels, dtype=np.uint8).reshape((self.height, self.width, 4)).copy()
+        arr_rgba = np.flipud(arr_rgba)  # bottom-up -> top-down
         
-        # Text umbrechen
-        lines = textwrap.wrap(display_text, width=config.max_chars_per_line,
-                              break_long_words=False, replace_whitespace=False)
-        if not lines:
-            return
+        # PIL-Renderer auf RGB-Teil anwenden
+        arr_rgb = arr_rgba[:, :, :3].copy()
+        renderer = QuoteOverlayRenderer(quotes=[quote], config=config)
+        arr_rgb = renderer.apply(arr_rgb, time, frame_idx)
         
-        # ---- Auto-Font-Skalierung ----
-        font_size = config.font_size
-        max_box_w = self.width * config.max_width_ratio
-        
-        if config.auto_scale_font:
-            font_size = min(config.max_font_size, font_size)
-            # SDF-Text ist proportional, Faktor ~0.6-0.7 fuer gute Schaetzung
-            char_width_factor = 0.62
-            longest_line_chars = max(len(line) for line in lines)
-            
-            max_attempts = 50
-            for _ in range(max_attempts):
-                line_width = longest_line_chars * font_size * char_width_factor
-                line_height = font_size * config.line_spacing
-                total_h = len(lines) * line_height + config.box_padding * 2
-                total_w = line_width + config.box_padding * 2
-                
-                if total_w <= max_box_w and total_h <= self.height * 0.35:
-                    break
-                font_size = max(config.min_font_size, font_size - 1)
-                if font_size <= config.min_font_size:
-                    break
-        
-        line_height = font_size * config.line_spacing
-        total_text_height = len(lines) * line_height
-        max_line_width = max(len(line) for line in lines) * font_size * 0.62
-        
-        padding = config.box_padding
-        box_w = min(max(max_line_width, self.width * 0.25) + padding * 2, max_box_w)
-        box_h = total_text_height + padding * 2
-        
-        # ---- Position + Slide-In Animation ----
-        box_x = (self.width - box_w) / 2.0
-        if config.position == "bottom":
-            box_y = self.height - box_h - config.box_margin_bottom
-        elif config.position == "top":
-            box_y = config.box_margin_bottom
-        else:  # center
-            box_y = (self.height - box_h) / 2.0
-        
-        # Fade-In Fortschritt (0.0 -> 1.0)
-        fade_in_progress = min(1.0, (time - quote.start_time) / max(config.fade_duration, 0.01))
-        
-        # ---- Scale-In Animation ----
-        scale = 1.0
-        if config.scale_in:
-            ease = 1.0 - (1.0 - fade_in_progress) ** 3  # cubic ease-out
-            scale = 0.8 + 0.2 * ease
-        
-        slide_offset_x = 0.0
-        slide_offset_y = 0.0
-        
-        if config.slide_animation != "none":
-            ease = 1.0 - (1.0 - fade_in_progress) ** 2
-            remaining = 1.0 - ease
-            dist = config.slide_distance
-            if config.slide_animation == "up":
-                slide_offset_y = dist * remaining
-            elif config.slide_animation == "down":
-                slide_offset_y = -dist * remaining
-            elif config.slide_animation == "left":
-                slide_offset_x = dist * remaining
-            elif config.slide_animation == "right":
-                slide_offset_x = -dist * remaining
-        
-        # ---- Slide-Out Animation (Fade-Out Phase) ----
-        effective_end = min(quote.end_time, quote.start_time + config.display_duration)
-        if time > effective_end - config.fade_duration and config.slide_out_animation != "none":
-            fade_out_progress = (effective_end - time) / max(config.fade_duration, 0.01)
-            fade_out_progress = max(0.0, min(1.0, fade_out_progress))
-            # ease-in quadratic: startet langsam, beschleunigt zum Ende
-            ease_out = (1.0 - fade_out_progress) ** 2
-            dist = config.slide_out_distance
-            if config.slide_out_animation == "up":
-                slide_offset_y -= dist * ease_out
-            elif config.slide_out_animation == "down":
-                slide_offset_y += dist * ease_out
-            elif config.slide_out_animation == "left":
-                slide_offset_x -= dist * ease_out
-            elif config.slide_out_animation == "right":
-                slide_offset_x += dist * ease_out
-        
-        # Skalierte Box-Dimensionen
-        scaled_box_w = box_w * scale
-        scaled_box_h = box_h * scale
-        scaled_box_x = box_x + slide_offset_x + (box_w - scaled_box_w) / 2.0
-        scaled_box_y = box_y + slide_offset_y + (box_h - scaled_box_h) / 2.0
-        
-        # Config-Offset und -Skalierung anwenden
-        config_scale = getattr(config, 'scale', 1.0)
-        offset_x = getattr(config, 'offset_x', 0)
-        offset_y = getattr(config, 'offset_y', 0)
-        
-        if config_scale != 1.0:
-            scale = scale * config_scale
-            scaled_box_w = box_w * scale
-            scaled_box_h = box_h * scale
-            scaled_box_x = box_x + slide_offset_x + offset_x + (box_w - scaled_box_w) / 2.0
-            scaled_box_y = box_y + slide_offset_y + offset_y + (box_h - scaled_box_h) / 2.0
-        else:
-            scaled_box_x += offset_x
-            scaled_box_y += offset_y
-        
-        # === Box-Hintergrund rendern ===
-        # Sicherstellen, dass box_color ein 4-Tuple mit RGBA-Werten ist
-        raw_color = config.box_color
-        if isinstance(raw_color, str):
-            # Hex-String ohne Alpha
-            hex_str = raw_color.lstrip('#')
-            r = int(hex_str[0:2], 16)
-            g = int(hex_str[2:4], 16)
-            b = int(hex_str[4:6], 16)
-            box_color = [r, g, b, 200]
-        else:
-            box_color = list(raw_color)
-            if len(box_color) < 4:
-                box_color = list(box_color) + [200]
-        
-        box_r = box_color[0] / 255.0
-        box_g = box_color[1] / 255.0
-        box_b = box_color[2] / 255.0
-        box_a = (box_color[3] / 255.0) * alpha
-        
-        box_data = np.array([[
-            scaled_box_x + scaled_box_w / 2.0, scaled_box_y + scaled_box_h / 2.0,
-            scaled_box_w / 2.0, scaled_box_h / 2.0,
-            box_r, box_g, box_b, box_a
-        ]], dtype=np.float32)
-        
-        self.ctx.enable(moderngl.BLEND)
-        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-        
-        # Radius als Faktor der kleineren Box-Haelfte (0.0 - 0.5)
-        min_half_size = min(scaled_box_w, scaled_box_h) / 2.0
-        radius_factor = min(0.45, config.box_radius / min_half_size) if min_half_size > 1 else 0.15
-        try:
-            self._box_prog["u_radius"].value = radius_factor
-        except Exception:
-            pass  # Falls uniform nicht existiert, scharfe Ecken
-        self._box_prog["u_resolution"].value = (self.width, self.height)
-        self._box_vbo.write(box_data.tobytes())
-        self._box_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=1)
-        
-        # === Text rendern ===
-        # Blending explizit erzwingen vor dem Text-Pass.
-        # Vorhergehende Post-Process-/FBO-Passes koennten GL_BLEND
-        # oder die Blend-Funktion ueberschrieben haben.
-        self.ctx.enable(moderngl.BLEND)
-        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-        
-        text_color = (
-            config.font_color[0] / 255.0,
-            config.font_color[1] / 255.0,
-            config.font_color[2] / 255.0,
-        )
-        
-        # Text vertikal in der Box zentrieren
-        text_block_height = len(lines) * line_height * scale
-        text_start_y = scaled_box_y + (scaled_box_h - text_block_height) / 2.0 + line_height * scale * 0.15
-        
-        # ---- Glow-Pulse ----
-        glow_intensity = 0.25
-        if config.glow_pulse:
-            pulse = np.sin(fade_in_progress * np.pi) * config.glow_pulse_intensity
-            glow_intensity = 0.25 + pulse
-        
-        for i, line in enumerate(lines):
-            line_y = text_start_y + i * line_height * scale
-            
-            # Alignment mit korrekter Breitenberechnung
-            line_w_approx = len(line) * font_size * 0.62 * scale
-            if config.text_align == "center":
-                line_x = scaled_box_x + scaled_box_w / 2.0
-            elif config.text_align == "right":
-                line_x = scaled_box_x + scaled_box_w - padding * scale - line_w_approx / 2.0
-            else:  # left
-                line_x = scaled_box_x + padding * scale + line_w_approx / 2.0
-            
-            # Typewriter: Letzter sichtbarer Teil blinkt
-            line_alpha = alpha
-            if config.typewriter and display_text != quote.text:
-                if i == len(lines) - 1:
-                    line_alpha = alpha * typewriter_alpha
-            
-            self._text_renderer.render_text(
-                line, line_x, line_y,
-                size=float(font_size * scale),
-                color=text_color,
-                alpha=line_alpha,
-                align="center" if config.text_align == "center" else "left",
-                glow=glow_intensity,
-                glow_color=text_color,  # Glow in Textfarbe fuer weichen Halo
-                smoothing=0.25,
-                outline_width=0.10,      # 10% Outline fuer scharfe Lesbarkeit
-                outline_color=(0.0, 0.0, 0.0),  # Schwarze Kontur
-                shadow_offset=(2.5, 2.5),       # 2.5px Drop-Shadow
-                shadow_color=(0.0, 0.0, 0.0),
-                shadow_alpha=0.45,
-            )
-        
-        self.ctx.disable(moderngl.BLEND)
+        # Zurueck in RGBA einfuegen und in OpenGL bottom-up konvertieren
+        arr_rgba[:, :, :3] = arr_rgb
+        arr_rgba = np.flipud(arr_rgba)
+        self.fbo.color_attachments[0].write(arr_rgba.tobytes())
 
     def _mux_audio(self, video_path: str, audio_path: str, output_path: str):
         """Kombiniert Video-Stream mit Original-Audio.

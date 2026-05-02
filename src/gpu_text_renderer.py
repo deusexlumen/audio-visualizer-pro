@@ -71,6 +71,8 @@ class SDFFontAtlas:
         self._generate_atlas()
         # Konvertiere float32 -> uint8 fuer die Textur (normalized)
         data_u8 = (np.clip(self.texture_data, 0.0, 1.0) * 255).astype(np.uint8)
+        # PIL ist top-down, OpenGL erwartet bottom-up
+        data_u8 = np.flipud(data_u8)
         tex = ctx.texture((self.atlas_width, self.atlas_height), 1,
                           data_u8.tobytes(), dtype="f1")
         tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
@@ -132,17 +134,19 @@ class SDFFontAtlas:
             # In Atlas einfuegen
             atlas[atlas_y:atlas_y + target_h, atlas_x:atlas_x + target_w] = sdf_small
 
-            # Metadaten speichern (in Ziel-SDF-Koordinaten)
-            scale_down = 1.0 / render_scale
+            # Metadaten speichern (in font_size-Koordinaten, NICHT skaliert)
+            # font.getbbox() und font.getlength() geben bereits Werte fuer
+            # self.font_size (z.B. 64px) zurueck, nicht fuer render_size.
+            # Die Skalierung auf Zielgroesse erfolgt spaeter in render_text().
             self.glyphs[char] = GlyphInfo(
                 char=char,
                 x=atlas_x,
                 y=atlas_y,
                 w=target_w,
                 h=target_h,
-                bearing_x=int(l * scale_down),
-                bearing_y=int(-t * scale_down),
-                advance=int(advance * scale_down),
+                bearing_x=int(l),
+                bearing_y=int(-t),
+                advance=int(advance),
             )
 
         self.texture_data = atlas
@@ -262,29 +266,31 @@ class GPUTextRenderer:
                 float sdf = texture(u_atlas, v_uv).r;
 
                 // Weiche Kanten: smoothstep um die Mitte (0.5)
-                float alpha = smoothstep(0.5 - u_smoothing, 0.5 + u_smoothing, sdf);
+                // SDF: 0.0 = innen (sichtbar), 1.0 = aussen (unsichtbar)
+                float alpha = 1.0 - smoothstep(0.5 - u_smoothing, 0.5 + u_smoothing, sdf);
 
                 // Outline (Kontur um die Glyphe)
                 float outline = 0.0;
                 if (u_outline_width > 0.0) {
                     float outline_edge = 0.5 - u_outline_width;
                     outline = smoothstep(outline_edge - u_smoothing, outline_edge + u_smoothing, sdf);
-                    outline = max(0.0, outline - alpha);
+                    outline = max(0.0, outline - (1.0 - alpha));
                 }
 
                 // Drop-Shadow (versetztes SDF-Sampling im Atlas)
                 float shadow = 0.0;
                 if (length(u_shadow_offset) > 0.0) {
                     float shadow_sdf = texture(u_atlas, v_uv + u_shadow_offset).r;
-                    shadow = smoothstep(0.5 - u_smoothing, 0.5 + u_smoothing, shadow_sdf);
+                    shadow = 1.0 - smoothstep(0.5 - u_smoothing, 0.5 + u_smoothing, shadow_sdf);
                     // Shadow nur dort, wo weder Fill noch Outline ist
                     shadow = max(0.0, shadow - alpha - outline) * u_shadow_alpha;
                 }
 
-                // Glow: Bereich unterhalb der Kante mit exponentiellem Abfall
+                // Glow: Bereich ausserhalb der Kante mit exponentiellem Abfall
                 float glow = 0.0;
                 if (u_glow > 0.0) {
-                    glow = exp(-sdf * sdf * 8.0) * u_glow;
+                    float outer_sdf = 1.0 - sdf;
+                    glow = exp(-outer_sdf * outer_sdf * 8.0) * u_glow;
                 }
 
                 vec3 final_color = v_color * alpha

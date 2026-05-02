@@ -1,5 +1,64 @@
 # Session Notes – Audio Visualizer Pro
 
+## 2026-05-02 – Dark-Glassmorphism GUI Redesign (Phase 3)
+
+**Problem:**
+User beschwerte sich ueber GUI: "haesslich, unuebersichtlich". Altes Design hatte 7+ verschiedene Akzentfarben, ueberall Emojis, immer ausgeklappte Cards, kleines Preview (~27% des Fensters).
+
+**Aenderungen in `gui.py`:**
+
+### Theme
+- **EINE** Akzentfarbe statt 7+: Cyan-Indigo `(96, 176, 255)`
+- Dunklere Basis: `(10, 12, 18)` mit kaltem Blau-Stich
+- Dezenter: kleinere Rounding-Werte (4-6 statt 6-10), weniger Padding
+- Einheitliche Status-Farben (pastell, nicht knallig)
+
+### Layout
+- **60/40 Split**: Preview links (60%), Controls rechts (40%)
+- Preview-Breite waechst von ~1100px auf ~1000px (besser fuer 854x480 Preview)
+- Controls: 400px -> 500px (mehr Platz fuer Parameter)
+
+### Kollabierbare Cards
+- `dpg.tree_node()` statt statischer `child_window`
+- Subtile 2px Accent-Leiste oben (statt 3px bunt)
+- Default-Zustaende: Audio, Visualizer, Hintergrund, Preview, Export = offen
+- KI, Zitate, Post-Process = zugeklappt
+
+### Minimalismus
+- **KEINE Emojis** mehr in Labels/Buttons
+- Einfache Text-Labels: "Video exportieren" statt "▶ Video exportieren"
+- Kompakte Status-Bar: ein farbiges Wort pro Status (Audio, Analyse, Render, KI)
+
+**Status:** ✅ Alle 134 Tests passing.
+
+---
+
+## 2026-05-02 – Quote-Rendering Fix (SDF → PIL Fallback)
+
+**Problem:**
+GPU-Quote-Overlay wurde falsch gerendert: Text auf dem Kopf, falsche Skalierung, falsche Zeichen. Urspruenglich wurde SDF (Signed Distance Field) GPU-Text-Renderer verwendet, der aber mehrere interagierende Bugs hatte:
+1. Doppelte Glyph-Skalierung (atlas.scale_down + render scale)
+2. Falsche line_height Berechnung (Multiplikation statt Addition)
+3. Invertierte SDF-Alpha-Logik im Fragment Shader
+4. Potenzielle Atlas-UV-Mismatch
+
+**Entscheidung (2-Strikes-Regel):** Nach 2 Runden partieller Fixes wurde SDF-Renderer aufgegeben. Stattdessen: PIL-basierter `QuoteOverlayRenderer` als Fallback in `_render_quotes_gpu()`.
+
+**Implementierung in `src/gpu_renderer.py`:**
+1. `fbo.read()` gibt **bottom-up** zurück (nicht top-down!)
+2. `np.flipud()` vor PIL: bottom-up → top-down
+3. `QuoteOverlayRenderer.apply()` rendert Text korrekt
+4. `np.flipud()` vor `texture.write()`: top-down → bottom-up
+5. Blit-Shader schreibt Textur zurück in FBO
+
+**Auch gefixt:**
+- `src/gpu_preview.py`: `np.flipud` entfernt (war falsch)
+- `src/gpu_renderer.py::_load_background_texture()`: `np.flipud` entfernt
+
+**Status:** ✅ Alle 134 Tests passing. Text "Hello GPU World!" korrekt orientiert verifiziert.
+
+---
+
 ## 2026-05-01 – FFmpeg Deadlock Fix + GPU-Encoding Stabilisierung
 
 **Commit:** `788d2cb` auf `master`

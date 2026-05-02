@@ -48,36 +48,34 @@ from src.gemini_integration import GeminiIntegration
 # =============================================================================
 
 class Theme:
-    """Zentrales Design-System fuer alle visuellen Elemente."""
+    """Dark-Glassmorphism Design-System. Ein einziges dezentes Accent."""
 
-    # Basis-Farben
-    BG_DEEPEST    = (10, 14, 23)       # Fenster-Hintergrund
-    BG_CARD       = (18, 24, 38)       # Card-Hintergrund
-    BG_CARD_HOVER = (24, 32, 52)       # Card-Hover
-    BG_INPUT      = (14, 20, 34)       # Input-Felder
-    BORDER        = (36, 48, 72)       # Rahmen
-    BORDER_ACTIVE = (60, 80, 120)      # Aktiver Rahmen
-    TEXT_PRIMARY  = (230, 235, 245)    # Haupttext
-    TEXT_SECONDARY= (150, 160, 180)    # Sekundaertext
-    TEXT_MUTED    = (100, 110, 130)    # Gedämpfter Text
+    # Basis — fast schwarz mit kaltem Blau-Stich
+    BG_DEEPEST     = (10, 12, 18)
+    BG_CARD        = (18, 22, 32)
+    BG_CARD_HOVER  = (26, 30, 44)
+    BG_INPUT       = (14, 18, 28)
+    BORDER         = (45, 55, 75)
+    BORDER_ACTIVE  = (80, 130, 200)
+    TEXT_PRIMARY   = (225, 232, 245)
+    TEXT_SECONDARY = (140, 155, 175)
+    TEXT_MUTED     = (90, 105, 125)
 
-    # Akzentfarben pro Kategorie (RGB)
-    AUDIO         = (79, 195, 247)     # Cyan
-    VISUALIZER    = (124, 77, 255)     # Violett
-    KI            = (0, 230, 118)      # Grün
-    BACKGROUND    = (255, 145, 0)      # Orange
-    POSTPROCESS   = (255, 82, 82)      # Rot/Rose
-    EXPORT        = (255, 215, 64)     # Amber
-    PREVIEW       = (105, 240, 174)    # Mint
-    STATUS_OK     = (0, 230, 118)      # Grün
-    STATUS_WARN   = (255, 215, 64)     # Gelb
-    STATUS_ERR    = (255, 82, 82)      # Rot
+    # EINZIGE Akzentfarbe — Cyan-Indigo
+    ACCENT         = (96, 176, 255)
+    ACCENT_DIM     = (64, 128, 200)
+    ACCENT_GLOW    = (96, 176, 255, 40)
 
-    # Slider-Farben (RGB)
-    SLIDER_GRAB      = (100, 180, 255)
-    SLIDER_GRAB_HOVER= (130, 200, 255)
-    SLIDER_BG        = (30, 40, 60)
-    SLIDER_BG_HOVER  = (40, 55, 80)
+    # Status (dezente Pastell-Töne)
+    STATUS_OK      = (80, 200, 130)
+    STATUS_WARN    = (230, 190, 80)
+    STATUS_ERR     = (220, 90, 90)
+
+    # Slider
+    SLIDER_GRAB       = ACCENT
+    SLIDER_GRAB_HOVER = (130, 200, 255)
+    SLIDER_BG         = (28, 36, 52)
+    SLIDER_BG_HOVER   = (38, 48, 68)
 
     @classmethod
     def hex_to_rgb(cls, hex_str: str) -> tuple[int, int, int]:
@@ -237,7 +235,7 @@ class AudioVisualizerGUI:
     # -------------------------------------------------------------------------
 
     def _setup_theme(self):
-        """Erstellt ein professionelles Dark-Neon-Theme."""
+        """Dark-Glassmorphism Theme — scharfe Kanten, ein Accent."""
         with dpg.theme(tag="global_theme"):
             with dpg.theme_component(dpg.mvAll):
                 # Fenster
@@ -251,18 +249,18 @@ class AudioVisualizerGUI:
                 # Buttons
                 dpg.add_theme_color(dpg.mvThemeCol_Button, Theme.BG_CARD)
                 dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, Theme.BG_CARD_HOVER)
-                dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (40, 55, 85))
-                dpg.add_theme_style(dpg.mvStyleVar_FrameRounding, 6)
-                dpg.add_theme_style(dpg.mvStyleVar_FramePadding, 8, 6)
+                dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, Theme.ACCENT_DIM)
+                dpg.add_theme_style(dpg.mvStyleVar_FrameRounding, 4)
+                dpg.add_theme_style(dpg.mvStyleVar_FramePadding, 6, 5)
 
                 # Inputs / Slider
                 dpg.add_theme_color(dpg.mvThemeCol_FrameBg, Theme.BG_INPUT)
-                dpg.add_theme_color(dpg.mvThemeCol_FrameBgHovered, (24, 34, 52))
-                dpg.add_theme_color(dpg.mvThemeCol_FrameBgActive, (30, 45, 70))
+                dpg.add_theme_color(dpg.mvThemeCol_FrameBgHovered, (22, 28, 42))
+                dpg.add_theme_color(dpg.mvThemeCol_FrameBgActive, (30, 40, 60))
                 dpg.add_theme_color(dpg.mvThemeCol_SliderGrab, Theme.SLIDER_GRAB)
                 dpg.add_theme_color(dpg.mvThemeCol_SliderGrabActive, Theme.SLIDER_GRAB_HOVER)
-                dpg.add_theme_style(dpg.mvStyleVar_GrabRounding, 4)
-                dpg.add_theme_style(dpg.mvStyleVar_GrabMinSize, 12)
+                dpg.add_theme_style(dpg.mvStyleVar_GrabRounding, 3)
+                dpg.add_theme_style(dpg.mvStyleVar_GrabMinSize, 10)
 
                 # Combo / Dropdown
                 dpg.add_theme_color(dpg.mvThemeCol_Header, Theme.BG_CARD_HOVER)
@@ -272,7 +270,7 @@ class AudioVisualizerGUI:
 
                 # Child Window (Cards)
                 dpg.add_theme_color(dpg.mvThemeCol_ChildBg, Theme.BG_CARD)
-                dpg.add_theme_style(dpg.mvStyleVar_ChildRounding, 8)
+                dpg.add_theme_style(dpg.mvStyleVar_ChildRounding, 6)
                 dpg.add_theme_style(dpg.mvStyleVar_ChildBorderSize, 1)
 
                 # Separator
@@ -281,30 +279,35 @@ class AudioVisualizerGUI:
                 dpg.add_theme_color(dpg.mvThemeCol_SeparatorActive, Theme.BORDER_ACTIVE)
 
                 # Progress Bar
-                dpg.add_theme_color(dpg.mvThemeCol_PlotHistogram, Theme.SLIDER_GRAB)
+                dpg.add_theme_color(dpg.mvThemeCol_PlotHistogram, Theme.ACCENT)
                 dpg.add_theme_color(dpg.mvThemeCol_PlotHistogramHovered, Theme.SLIDER_GRAB_HOVER)
 
                 # Scrollbar
                 dpg.add_theme_color(dpg.mvThemeCol_ScrollbarBg, Theme.BG_DEEPEST)
                 dpg.add_theme_color(dpg.mvThemeCol_ScrollbarGrab, Theme.BORDER)
                 dpg.add_theme_color(dpg.mvThemeCol_ScrollbarGrabHovered, Theme.BORDER_ACTIVE)
-                dpg.add_theme_color(dpg.mvThemeCol_ScrollbarGrabActive, Theme.SLIDER_GRAB)
+                dpg.add_theme_color(dpg.mvThemeCol_ScrollbarGrabActive, Theme.ACCENT_DIM)
+
+                # Tree Node (Collapsible Cards)
+                dpg.add_theme_color(dpg.mvThemeCol_Header, Theme.BG_CARD)
+                dpg.add_theme_color(dpg.mvThemeCol_HeaderHovered, Theme.BG_CARD_HOVER)
+                dpg.add_theme_color(dpg.mvThemeCol_HeaderActive, (35, 45, 65))
 
                 # Allgemeine Spacing
-                dpg.add_theme_style(dpg.mvStyleVar_WindowRounding, 10)
+                dpg.add_theme_style(dpg.mvStyleVar_WindowRounding, 8)
                 dpg.add_theme_style(dpg.mvStyleVar_WindowBorderSize, 1)
-                dpg.add_theme_style(dpg.mvStyleVar_ItemSpacing, 6, 6)
-                dpg.add_theme_style(dpg.mvStyleVar_ItemInnerSpacing, 6, 4)
+                dpg.add_theme_style(dpg.mvStyleVar_ItemSpacing, 5, 5)
+                dpg.add_theme_style(dpg.mvStyleVar_ItemInnerSpacing, 5, 3)
 
         dpg.bind_theme("global_theme")
 
-    def _apply_card_theme(self, tag: str, accent_color: tuple[int, int, int]):
-        """Wendet ein Card-Theme mit farbigem Akzent auf ein Child-Window an."""
+    def _apply_card_theme(self, tag: str):
+        """Wendet ein subtiles Card-Theme auf ein Child-Window an."""
         with dpg.theme(tag=f"card_theme_{tag}"):
             with dpg.theme_component(dpg.mvChildWindow):
-                dpg.add_theme_color(dpg.mvThemeCol_Border, accent_color + (120,))
+                dpg.add_theme_color(dpg.mvThemeCol_Border, Theme.BORDER + (100,))
                 dpg.add_theme_color(dpg.mvThemeCol_ChildBg, Theme.BG_CARD)
-                dpg.add_theme_style(dpg.mvStyleVar_ChildRounding, 10)
+                dpg.add_theme_style(dpg.mvStyleVar_ChildRounding, 6)
                 dpg.add_theme_style(dpg.mvStyleVar_ChildBorderSize, 1)
         dpg.bind_item_theme(tag, f"card_theme_{tag}")
 
@@ -342,10 +345,10 @@ class AudioVisualizerGUI:
             self._build_menu_bar()
 
             with dpg.group(horizontal=True):
-                # --- LINKS: Control-Panel ---
-                self._build_control_panel()
-                # --- RECHTS: Preview ---
+                # --- LINKS: Preview (60%) ---
                 self._build_preview_panel()
+                # --- RECHTS: Control-Panel (40%) ---
+                self._build_control_panel()
 
             # --- UNTEN: Status-Bar ---
             self._build_status_bar()
@@ -386,122 +389,93 @@ class AudioVisualizerGUI:
     # -------------------------------------------------------------------------
 
     def _build_control_panel(self):
-        """Baut das scrollbare linke Control-Panel mit Cards."""
+        """Rechtes Control-Panel (40%) mit kollabierbaren Cards."""
         with dpg.child_window(
-            width=400,
-            height=-42,  # Platz fuer Status-Bar
+            width=500,
+            height=-42,
             border=False,
             tag="control_panel",
         ):
-            # --- AUDIO CARD ---
-            self._build_card(
+            # --- AUDIO ---
+            self._build_collapsible_card(
                 title="Audio",
-                accent=Theme.AUDIO,
-                icon="🎵",
-                content_tag="audio_card_content",
+                content_tag="audio_card",
                 build_fn=self._build_audio_section,
+                default_open=True,
             )
-            dpg.add_spacer(height=10)
-
-            # --- VISUALIZER CARD ---
-            self._build_card(
+            # --- VISUALIZER ---
+            self._build_collapsible_card(
                 title="Visualizer",
-                accent=Theme.VISUALIZER,
-                icon="🎨",
-                content_tag="viz_card_content",
+                content_tag="viz_card",
                 build_fn=self._build_visualizer_section,
+                default_open=True,
             )
-            dpg.add_spacer(height=10)
-
-            # --- KI CARD ---
-            self._build_card(
+            # --- KI ---
+            self._build_collapsible_card(
                 title="KI Optimierung",
-                accent=Theme.KI,
-                icon="🤖",
-                content_tag="ki_card_content",
+                content_tag="ki_card",
                 build_fn=self._build_ki_section,
+                default_open=False,
             )
-            dpg.add_spacer(height=10)
-
-            # --- QUOTES CARD ---
-            self._build_card(
+            # --- ZITATE ---
+            self._build_collapsible_card(
                 title="Zitate",
-                accent=(255, 105, 180),  # Hot Pink
-                icon="💬",
-                content_tag="quotes_card_content",
+                content_tag="quotes_card",
                 build_fn=self._build_quotes_section,
+                default_open=False,
             )
-            dpg.add_spacer(height=10)
-
-            # --- HINTERGRUND CARD ---
-            self._build_card(
+            # --- HINTERGRUND ---
+            self._build_collapsible_card(
                 title="Hintergrund",
-                accent=Theme.BACKGROUND,
-                icon="🖼️",
-                content_tag="bg_card_content",
+                content_tag="bg_card",
                 build_fn=self._build_background_section,
+                default_open=True,
             )
-            dpg.add_spacer(height=10)
-
-            # --- POST-PROCESS CARD ---
-            self._build_card(
+            # --- POST-PROCESS ---
+            self._build_collapsible_card(
                 title="Post-Process",
-                accent=Theme.POSTPROCESS,
-                icon="✨",
-                content_tag="pp_card_content",
+                content_tag="pp_card",
                 build_fn=self._build_postprocess_section,
+                default_open=False,
             )
-            dpg.add_spacer(height=10)
-
-            # --- PREVIEW-ZEIT CARD ---
-            self._build_card(
+            # --- PREVIEW ---
+            self._build_collapsible_card(
                 title="Preview",
-                accent=Theme.PREVIEW,
-                icon="👁️",
-                content_tag="preview_card_content",
+                content_tag="preview_card",
                 build_fn=self._build_preview_section,
+                default_open=True,
             )
-            dpg.add_spacer(height=10)
-
-            # --- EXPORT CARD ---
-            self._build_card(
+            # --- EXPORT ---
+            self._build_collapsible_card(
                 title="Export",
-                accent=Theme.EXPORT,
-                icon="🎬",
-                content_tag="export_card_content",
+                content_tag="export_card",
                 build_fn=self._build_export_section,
+                default_open=True,
             )
 
-    def _build_card(self, title: str, accent: tuple, icon: str, content_tag: str, build_fn):
-        """Erstellt eine visuelle Card mit farbigem Akzent."""
+    def _build_collapsible_card(self, title: str, content_tag: str, build_fn, default_open: bool = True):
+        """Kollabierbare Card mit subtilem Accent."""
         card_tag = f"card_{content_tag}"
         with dpg.child_window(
             width=-1,
-            height=0,  # Auto-height
+            height=0,
             border=True,
             tag=card_tag,
         ):
-            # Akzent-Leiste oben
+            # Subtile Accent-Leiste oben
             dpg.add_color_button(
-                default_value=accent + (255,),
+                default_value=Theme.ACCENT + (180,),
                 width=-1,
-                height=3,
+                height=2,
                 no_border=True,
                 no_drag_drop=True,
             )
-            dpg.add_spacer(height=4)
+            dpg.add_spacer(height=3)
 
-            # Titel mit Icon
-            with dpg.group(horizontal=True):
-                dpg.add_text(icon, color=accent)
-                dpg.add_text(title, color=accent)
-            dpg.add_separator()
-            dpg.add_spacer(height=4)
+            with dpg.tree_node(label=title, default_open=default_open):
+                build_fn()
 
-            # Inhalt
-            build_fn()
-
-        self._apply_card_theme(card_tag, accent)
+        self._apply_card_theme(card_tag)
 
     def _build_audio_section(self):
         dpg.add_button(
@@ -583,7 +557,7 @@ class AudioVisualizerGUI:
         )
         dpg.add_spacer(height=6)
         dpg.add_button(
-            label="✨ Parameter optimieren",
+            label="Parameter optimieren",
             callback=self._on_ki_optimize_clicked,
             width=-1,
             tag="btn_ki_optimize",
@@ -601,13 +575,13 @@ class AudioVisualizerGUI:
         )
         dpg.add_spacer(height=6)
         dpg.add_button(
-            label="🔮 Key-Zitate extrahieren",
+            label="Key-Zitate extrahieren",
             callback=self._on_extract_quotes_clicked,
             width=-1,
             tag="btn_extract_quotes",
         )
         dpg.add_button(
-            label="🎲 Demo-Zitate erstellen",
+            label="Demo-Zitate erstellen",
             callback=self._on_demo_quotes_clicked,
             width=-1,
         )
@@ -741,7 +715,7 @@ class AudioVisualizerGUI:
         )
         dpg.add_spacer(height=6)
         dpg.add_checkbox(
-            label="⚡ GPU-Encoding (NVENC/AMF/QSV)",
+            label="GPU-Encoding (NVENC/AMF/QSV)",
             default_value=self.state.gpu_encode,
             callback=self._on_gpu_encode_changed,
             tag="chk_gpu_encode",
@@ -757,13 +731,13 @@ class AudioVisualizerGUI:
         )
         dpg.add_spacer(height=8)
         dpg.add_button(
-            label="▶ Video exportieren",
+            label="Video exportieren",
             callback=self._on_render_clicked,
             width=-1,
             tag="btn_render",
         )
         dpg.add_button(
-            label="⏹ Abbrechen",
+            label="Abbrechen",
             callback=self._on_cancel_render_clicked,
             width=-1,
             tag="btn_cancel_render",
@@ -800,48 +774,36 @@ class AudioVisualizerGUI:
     # -------------------------------------------------------------------------
 
     def _build_preview_panel(self):
-        """Baut das rechte Preview-Panel mit Rahmen und Info-Overlay."""
+        """Linkes Preview-Panel (60%) mit Clean-Design."""
         with dpg.child_window(
             width=-1,
             height=-42,
             border=False,
             tag="preview_panel",
         ):
-            # Preview-Container als Card
-            preview_card = "preview_card"
+            preview_card = "preview_display_card"
             with dpg.child_window(
                 width=-1,
                 height=-1,
                 border=True,
                 tag=preview_card,
             ):
-                # Akzent oben
-                dpg.add_color_button(
-                    default_value=Theme.PREVIEW + (255,),
-                    width=-1,
-                    height=3,
-                    no_border=True,
-                    no_drag_drop=True,
-                )
-                dpg.add_spacer(height=6)
-
-                # Header mit Info
+                # Header
                 with dpg.group(horizontal=True):
-                    dpg.add_text("👁️", color=Theme.PREVIEW)
-                    dpg.add_text("Live Preview", color=Theme.PREVIEW)
+                    dpg.add_text("Preview", color=Theme.ACCENT)
                     dpg.add_spacer(width=20)
                     dpg.add_text(
-                        f"{self.state.preview_width}×{self.state.preview_height} @ {self.state.preview_fps}fps",
+                        f"{self.state.preview_width}x{self.state.preview_height} @ {self.state.preview_fps}fps",
                         color=Theme.TEXT_MUTED,
                         tag="preview_resolution_text",
                     )
 
                 dpg.add_separator()
-                dpg.add_spacer(height=6)
+                dpg.add_spacer(height=4)
 
-                # Das eigentliche Bild (zentriert)
+                # Bild zentriert
                 with dpg.group(horizontal=True):
-                    dpg.add_spacer(width=1)  # Flex spacer workaround
+                    dpg.add_spacer(width=1)
                     dpg.add_image(
                         self._preview_texture_tag,
                         width=self.state.preview_width,
@@ -850,48 +812,34 @@ class AudioVisualizerGUI:
                     )
                     dpg.add_spacer(width=1)
 
-                dpg.add_spacer(height=6)
-                # Zeit-Anzeige
+                dpg.add_spacer(height=4)
                 dpg.add_text(
                     "--:-- / --:--",
                     color=Theme.TEXT_MUTED,
                     tag="preview_time_text",
                 )
 
-            self._apply_card_theme(preview_card, Theme.PREVIEW)
+            self._apply_card_theme(preview_card)
 
     # -------------------------------------------------------------------------
     # Status Bar
     # -------------------------------------------------------------------------
 
     def _build_status_bar(self):
-        """Baut die untere Status-Leiste mit farbigen Indikatoren."""
+        """Kompakte Status-Leiste — ein Wort pro Status, komplett farbig."""
         with dpg.group(horizontal=True, tag="status_bar"):
-            # Audio-Indikator
-            dpg.add_text("●", color=Theme.STATUS_ERR, tag="status_dot_audio")
-            dpg.add_text("Audio", color=Theme.TEXT_MUTED, tag="status_label_audio")
-            dpg.add_spacer(width=12)
+            dpg.add_text("Audio", color=Theme.STATUS_ERR, tag="status_label_audio")
+            dpg.add_spacer(width=10)
+            dpg.add_text("Analyse", color=Theme.STATUS_ERR, tag="status_label_analyze")
+            dpg.add_spacer(width=10)
+            dpg.add_text("Render", color=Theme.STATUS_ERR, tag="status_label_render")
+            dpg.add_spacer(width=10)
+            dpg.add_text("KI", color=Theme.STATUS_ERR, tag="status_label_ki")
+            dpg.add_spacer(width=16)
 
-            # Analyse-Indikator
-            dpg.add_text("●", color=Theme.STATUS_ERR, tag="status_dot_analyze")
-            dpg.add_text("Analyse", color=Theme.TEXT_MUTED, tag="status_label_analyze")
-            dpg.add_spacer(width=12)
-
-            # Render-Indikator
-            dpg.add_text("●", color=Theme.STATUS_ERR, tag="status_dot_render")
-            dpg.add_text("Render", color=Theme.TEXT_MUTED, tag="status_label_render")
-            dpg.add_spacer(width=12)
-
-            # KI-Indikator
-            dpg.add_text("●", color=Theme.STATUS_ERR, tag="status_dot_ki")
-            dpg.add_text("KI", color=Theme.TEXT_MUTED, tag="status_label_ki")
-            dpg.add_spacer(width=20)
-
-            # Trenner
             dpg.add_text("|", color=Theme.BORDER)
-            dpg.add_spacer(width=12)
+            dpg.add_spacer(width=10)
 
-            # Status-Text
             dpg.add_text(
                 self.state.status_message,
                 color=Theme.TEXT_SECONDARY,
@@ -913,26 +861,18 @@ class AudioVisualizerGUI:
         dpg.configure_item("status_text", color=color)
 
     def _update_status_indicators(self):
-        """Aktualisiert die farbigen Status-Indikatoren."""
-        # Audio
+        """Aktualisiert die farbigen Status-Labels."""
         has_audio = self.state.audio_path is not None and os.path.exists(self.state.audio_path)
-        dpg.configure_item("status_dot_audio", color=Theme.STATUS_OK if has_audio else Theme.STATUS_ERR)
-        dpg.configure_item("status_label_audio", color=Theme.TEXT_PRIMARY if has_audio else Theme.TEXT_MUTED)
+        dpg.configure_item("status_label_audio", color=Theme.STATUS_OK if has_audio else Theme.STATUS_ERR)
 
-        # Analyse
         analyzed = self.state.features is not None
-        dpg.configure_item("status_dot_analyze", color=Theme.STATUS_OK if analyzed else (Theme.STATUS_WARN if has_audio else Theme.STATUS_ERR))
-        dpg.configure_item("status_label_analyze", color=Theme.TEXT_PRIMARY if analyzed else Theme.TEXT_MUTED)
+        dpg.configure_item("status_label_analyze", color=Theme.STATUS_OK if analyzed else (Theme.STATUS_WARN if has_audio else Theme.STATUS_ERR))
 
-        # Render
         rendering = self.state.is_rendering
-        dpg.configure_item("status_dot_render", color=Theme.STATUS_WARN if rendering else (Theme.STATUS_OK if analyzed else Theme.STATUS_ERR))
-        dpg.configure_item("status_label_render", color=Theme.TEXT_PRIMARY if rendering or analyzed else Theme.TEXT_MUTED)
+        dpg.configure_item("status_label_render", color=Theme.STATUS_WARN if rendering else (Theme.STATUS_OK if analyzed else Theme.STATUS_ERR))
 
-        # KI
         ki_ok = self.gemini is not None
-        dpg.configure_item("status_dot_ki", color=Theme.STATUS_OK if ki_ok else Theme.STATUS_ERR)
-        dpg.configure_item("status_label_ki", color=Theme.TEXT_PRIMARY if ki_ok else Theme.TEXT_MUTED)
+        dpg.configure_item("status_label_ki", color=Theme.STATUS_OK if ki_ok else Theme.STATUS_ERR)
 
     # -------------------------------------------------------------------------
     # File Dialogs
@@ -1006,7 +946,7 @@ class AudioVisualizerGUI:
                     ("Escape", "Abbrechen / Schließen"),
                 ]:
                     with dpg.table_row():
-                        dpg.add_text(key, color=Theme.AUDIO)
+                        dpg.add_text(key, color=Theme.ACCENT)
                         dpg.add_text(desc, color=Theme.TEXT_SECONDARY)
             dpg.add_spacer(height=12)
             dpg.add_button(label="Schließen", callback=lambda: dpg.delete_item(dpg.last_container()), width=-1)
@@ -1017,7 +957,7 @@ class AudioVisualizerGUI:
             if selections:
                 path = selections[0]
                 self.state.audio_path = path
-                dpg.set_value("audio_status", f"🎵 {Path(path).name}")
+                dpg.set_value("audio_status", f"{Path(path).name}")
                 dpg.configure_item("audio_status", color=Theme.TEXT_PRIMARY)
                 self._analyze_audio()
                 self._request_preview_update()
@@ -1123,7 +1063,7 @@ class AudioVisualizerGUI:
             return
 
         self.state.is_extracting_quotes = True
-        dpg.configure_item("btn_extract_quotes", label="⏳ Extrahiere...")
+        dpg.configure_item("btn_extract_quotes", label="Extrahiere...")
         dpg.set_value("quotes_status_text", "Gemini analysiert Audio...")
         dpg.configure_item("quotes_status_text", color=Theme.TEXT_SECONDARY)
 
@@ -1139,14 +1079,14 @@ class AudioVisualizerGUI:
                     q.end_time = max(q.start_time + 1.0, min(q.end_time, self.state.features.duration))
                 self.state.quotes = quotes
                 self.state.is_extracting_quotes = False
-                dpg.configure_item("btn_extract_quotes", label="🔮 Key-Zitate extrahieren")
+                dpg.configure_item("btn_extract_quotes", label="Key-Zitate extrahieren")
                 dpg.set_value("quotes_status_text", f"{len(quotes)} Zitate extrahiert!")
                 dpg.configure_item("quotes_status_text", color=Theme.STATUS_OK)
                 self._refresh_quotes_list()
                 self._request_preview_update()
             except Exception as e:
                 self.state.is_extracting_quotes = False
-                dpg.configure_item("btn_extract_quotes", label="🔮 Key-Zitate extrahieren")
+                dpg.configure_item("btn_extract_quotes", label="Key-Zitate extrahieren")
                 dpg.set_value("quotes_status_text", f"Fehler: {e}")
                 dpg.configure_item("quotes_status_text", color=Theme.STATUS_ERR)
 
@@ -1303,7 +1243,7 @@ class AudioVisualizerGUI:
 
         self.state.is_rendering = True
         self._cancel_event.clear()
-        dpg.configure_item("btn_render", label="⏳ Render läuft...")
+        dpg.configure_item("btn_render", label="Render läuft...")
         dpg.configure_item("btn_cancel_render", enabled=True)
         dpg.set_value("render_progress", 0.0)
         self._set_status("Starte Rendering...", "warn")
@@ -1398,7 +1338,7 @@ class AudioVisualizerGUI:
             dpg.configure_item("btn_cancel_render", enabled=False)
             output_path = final_msg.get("path", "")
             dpg.set_value("render_progress", 1.0)
-            dpg.configure_item("btn_render", label="▶ Video exportieren")
+            dpg.configure_item("btn_render", label="Video exportieren")
             dpg.set_value("render_status_text", f"Gespeichert: {output_path}")
             self._set_status(f"Fertig: {Path(output_path).name}", "ok")
             self._update_status_indicators()
@@ -1406,7 +1346,7 @@ class AudioVisualizerGUI:
             self.state.is_rendering = False
             dpg.configure_item("btn_cancel_render", enabled=False)
             dpg.set_value("render_progress", 0.0)
-            dpg.configure_item("btn_render", label="▶ Video exportieren")
+            dpg.configure_item("btn_render", label="Video exportieren")
             dpg.set_value("render_status_text", "")
             self._set_status("Rendering abgebrochen.", "warn")
             self._update_status_indicators()
@@ -1415,7 +1355,7 @@ class AudioVisualizerGUI:
             dpg.configure_item("btn_cancel_render", enabled=False)
             error_msg = final_msg.get("message", "Unbekannter Fehler")
             dpg.set_value("render_progress", 0.0)
-            dpg.configure_item("btn_render", label="▶ Video exportieren")
+            dpg.configure_item("btn_render", label="Video exportieren")
             dpg.set_value("render_status_text", "")
             self._set_status(f"Render-Fehler: {error_msg}", "error")
             self._update_status_indicators()
@@ -1461,7 +1401,7 @@ class AudioVisualizerGUI:
             return
 
         self.state.is_ki_optimizing = True
-        dpg.configure_item("btn_ki_optimize", label="⏳ KI denkt nach...")
+        dpg.configure_item("btn_ki_optimize", label="KI denkt nach...")
         self._set_ki_status("Sende Anfrage an Gemini...")
         self._update_status_indicators()
 
@@ -1483,7 +1423,7 @@ class AudioVisualizerGUI:
             threading.Thread(target=self._poll_ki_result, daemon=True).start()
         except Exception as e:
             self.state.is_ki_optimizing = False
-            dpg.configure_item("btn_ki_optimize", label="✨ Parameter optimieren")
+            dpg.configure_item("btn_ki_optimize", label="Parameter optimieren")
             self._set_ki_status(f"Fehler: {e}", error=True)
             self._update_status_indicators()
 
@@ -1504,10 +1444,10 @@ class AudioVisualizerGUI:
     def _poll_ki_result(self):
         try:
             result = self._ki_future.result(timeout=60)
-            dpg.configure_item("btn_ki_optimize", label="✨ Parameter optimieren")
+            dpg.configure_item("btn_ki_optimize", label="Parameter optimieren")
             self._apply_ki_result(result)
         except Exception as e:
-            dpg.configure_item("btn_ki_optimize", label="✨ Parameter optimieren")
+            dpg.configure_item("btn_ki_optimize", label="Parameter optimieren")
             self._set_ki_status(f"KI-Fehler: {e}", error=True)
         finally:
             self.state.is_ki_optimizing = False

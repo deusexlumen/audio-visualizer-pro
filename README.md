@@ -25,7 +25,7 @@ KI-gestützt. GPU-beschleunigt. Für Musikvideos, Podcasts & Creative Coding.</p
   <img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/Tests-134%20Passing-success" alt="Tests">
-  <img src="https://img.shields.io/badge/GUI-Streamlit-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit">
+  <img src="https://img.shields.io/badge/GUI-DearPyGui-2E8B57?logo=python&logoColor=white" alt="DearPyGui">
   <img src="https://img.shields.io/badge/GPU-OpenGL-5586A4?logo=opengl&logoColor=white" alt="OpenGL">
   <img src="https://img.shields.io/badge/Video-FFmpeg-007808?logo=ffmpeg&logoColor=white" alt="FFmpeg">
 </p>
@@ -133,7 +133,7 @@ Speziell abgestimmte Presets für **News, Interview, Storytelling & Mixed** — 
 </td>
 <td width="33%" align="center">
 
-### 🖥️ Streamlit-GUI
+### 🖥️ DearPyGui Desktop-GUI
 Keine Kommandozeile nötig. **Drag & Drop**, Live-Preview, One-Click-Render — alles im Browser.
 
 </td>
@@ -167,6 +167,8 @@ pip install -r requirements.txt
 ```bash
 # Windows
 double-click start_gui.bat
+# oder direkt:
+python gui.py
 
 # Oder überall
 python start_gui.py
@@ -516,7 +518,7 @@ audio_visualizer_pro/
 - [x] 💬 Gemini Zitat-Extraktion
 - [x] ✏️ Zitat-Review & Editing
 - [x] 🎙️ Podcast-Genre-Presets
-- [x] 🖥️ Streamlit-GUI mit Live-Preview
+- [x] 🖥️ DearPyGui Desktop-GUI mit GPU-Live-Preview
 - [x] ⚡ Aggressives Caching
 - [x] 🎬 FFmpeg-Hardware-Encoding
 - [ ] 🌐 Web-Export (HTML5 Canvas)
@@ -551,7 +553,7 @@ Dieses Projekt lebt von Experimenten und kreativen Ideen! 🧪
 | | | |
 |:---:|:---:|:---:|
 | **Audio-Analyse** | **GPU-Rendering** | **GUI** |
-| [Librosa](https://librosa.org/) | [ModernGL](https://moderngl.readthedocs.io/) | [Streamlit](https://streamlit.io/) |
+| [Librosa](https://librosa.org/) | [ModernGL](https://moderngl.readthedocs.io/) | [DearPyGui](https://github.com/hoffstadt/DearPyGui) |
 | **Bildverarbeitung** | **Video-Encoding** | **KI** |
 | [Pillow](https://python-pillow.org/) | [FFmpeg](https://ffmpeg.org/) | [Google Gemini](https://ai.google.dev/) |
 | **Datenvalidierung** | **CLI** | **Tests** |

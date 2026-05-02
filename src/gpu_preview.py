@@ -182,8 +182,7 @@ def render_gpu_preview(
         # Zu PIL Image konvertieren
         img_array = np.frombuffer(pixels, dtype=np.uint8)
         img_array = img_array.reshape((height, width, 3))
-        # Flip vertically (OpenGL hat Ursprung unten links)
-        img_array = np.flipud(img_array)
+        # ModernGL fbo.read() gibt bereits top-down (PIL-kompatibel)
         img = Image.fromarray(img_array, mode='RGB')
 
         return img
