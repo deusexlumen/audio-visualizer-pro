@@ -24,7 +24,7 @@ KI-gestützt. GPU-beschleunigt. Für Musikvideos, Podcasts & Creative Coding.</p
 <p>
   <img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
-  <img src="https://img.shields.io/badge/Tests-134%20Passing-success" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-142%20Passing-success" alt="Tests">
   <img src="https://img.shields.io/badge/GUI-DearPyGui-2E8B57?logo=python&logoColor=white" alt="DearPyGui">
   <img src="https://img.shields.io/badge/GPU-OpenGL-5586A4?logo=opengl&logoColor=white" alt="OpenGL">
   <img src="https://img.shields.io/badge/Video-FFmpeg-007808?logo=ffmpeg&logoColor=white" alt="FFmpeg">
@@ -107,14 +107,14 @@ Die KI analysiert dein Audio und empfiehlt **automatisch** den perfekten Visuali
 </td>
 <td width="33%" align="center">
 
-### 🎨 16 GPU-Visualizer
+### 🎨 18 GPU-Visualizer
 Von minimalistisch bis psychedelisch — alle Visualizer nutzen **Hardware-beschleunigtes OpenGL-Rendering** für flüssige 60fps.
 
 </td>
 <td width="33%" align="center">
 
 ### 💬 KI-Zitat-Overlays
-Gemini extrahiert automatisch die besten **Key-Zitate** aus deinem Audio. Editierbar, zeitbasiert, animiert.
+Gemini extrahiert automatisch die besten **Key-Zitate** aus deinem Audio. **Editierbar, zeitbasiert, animiert** — mit GPU-beschleunigtem Text-Rendering.
 
 </td>
 </tr>
@@ -122,19 +122,19 @@ Gemini extrahiert automatisch die besten **Key-Zitate** aus deinem Audio. Editie
 <td width="33%" align="center">
 
 ### ⚡ Aggressives Caching
-Audio-Analyse wird **einmalig** durchgeführt und gecached. Millionen Renders ohne Wartezeit.
+Audio-Analyse, Zitate und Upload-IDs werden **persistent** gecached. Millionen Renders ohne Wartezeit.
 
 </td>
 <td width="33%" align="center">
 
-### 🎙️ Podcast-Presets
-Speziell abgestimmte Presets für **News, Interview, Storytelling & Mixed** — mit optimierten Zitat-Overlays.
+### 📁 Projekt-Presets
+Speichere und lade **komplette Projekte** inkl. aller Einstellungen, Zitate und Parameter. Auto-Save beim Rendern.
 
 </td>
 <td width="33%" align="center">
 
 ### 🖥️ DearPyGui Desktop-GUI
-Keine Kommandozeile nötig. **Drag & Drop**, Live-Preview, One-Click-Render — alles im Browser.
+**Native Desktop-App** mit GPU-Live-Preview, dynamischen Parameter-Slidern pro Visualizer und One-Click-Render.
 
 </td>
 </tr>
@@ -264,6 +264,19 @@ graph TD
 | `voice_flow` | 〰️🎙️〰️ | Fließende Voice-Wellen-Animation | Storytelling | `flow_speed`, `wave_smoothness` |
 | `sacred_mandala` | 🔯🕉️🔯 | Heilige Geometrie mit Rotation | Meditation, Ambient | `rotation_speed`, `sacred_depth` |
 
+### ⚡ Universelle Effekt-Parameter
+
+Jeder Visualizer hat **dynamische Parameter-Slider** in der GUI:
+
+| Parameter | Beschreibung |
+|-----------|--------------|
+| `line_width` | Linien-Dicke für Linien-Visualisierungen |
+| `trail_length` | Anzahl Echo-/Trail-Frames |
+| `trail_decay` | Verblass-Geschwindigkeit der Trails |
+| `brightness` | Gesamt-Helligkeit |
+
+**Visualizer-spezifisch:** z.B. `pulse_intensity`, `ring_count`, `glow_radius`, `bar_count`, `particle_count`, `explosion_threshold` — automatisch je nach Visualizer angezeigt.
+
 </div>
 
 ---
@@ -290,9 +303,12 @@ flowchart LR
 
 - ⏱️ **Zeitbasiert**: Erscheint bei `start_time`, verschwindet bei `end_time`
 - ✨ **Animiert**: Fade-In/Out, Slide-In (up/down/left/right), Scale-In, Glow-Pulse
-- 🎨 **Stilvoll**: Abgerundete Box mit Schatten, Auto-Skalierung, Zeilenabstand
-- ✏️ **Editierbar**: Vor dem Rendering im GUI bearbeiten, deaktivieren, neu anordnen
+- 🎨 **Stilvoll**: Abgerundete Box mit Schatten, Auto-Skalierung, Zeilenabstand, Hintergrund-Blur
+- ✏️ **Vollständig editierbar**: Text, Start/End-Zeit, Löschen, Manuell hinzufügen — alles im GUI
+- 💾 **Persistent**: Zitate werden automatisch gecacht und beim nächsten Audio-Wechsel geladen
 - 🔤 **Eigene Schriftarten**: `.ttf`-Upload für Custom Branding
+- 🎯 **Zeitstempel-Verfeinerung**: Automatische Korrektur an Onset-Peaks und Beat-Frames
+- 💻 **Offline-Fallback**: Lokale `faster-whisper`-Transkription wenn Gemini nicht verfügbar
 
 ---
 
@@ -414,7 +430,7 @@ Alle GPU-Visualizer unterstützen diese universellen Effekt-Parameter, die über
 ## 🧪 Tests
 
 ```bash
-# Alle Tests ausführen (134 Tests)
+# Alle Tests ausführen (142 Tests)
 pytest tests/ -v
 
 # Spezifische Test-Suites
@@ -446,13 +462,17 @@ audio_visualizer_pro/
 │   ├── 📄 ai_matcher.py            # SmartMatcher — KI-gestützte Empfehlung
 │   ├── 📄 gemini_integration.py    # Gemini API für Zitat-Extraktion
 │   ├── 📄 quote_overlay.py         # Animierter Text-Overlay Renderer
+│   ├── 📄 gpu_quote_renderer.py    # GPU-beschleunigtes Zitat-Rendering
+│   ├── 📄 quote_cache.py           # Zitat-Persistenz & Upload-ID-Cache
+│   ├── 📄 quote_refiner.py         # Zeitstempel-Verfeinerung mit Audio-Analyse
+│   ├── 📄 local_transcription.py   # Lokaler Whisper-Fallback (optional)
 │   ├── 📄 gpu_renderer.py          # OpenGL GPU Render-Pipeline
 │   ├── 📄 gpu_preview.py           # Schneller Live-Preview (Einzel-Frame)
-│   ├── 📄 gpu_text_renderer.py     # GPU-beschleunigte Schrift-Rendering
+│   ├── 📄 gpu_text_renderer.py     # GPU-beschleunigtes Schrift-Rendering
 │   ├── 📄 postprocess.py           # Color Grading & Effekte
 │   ├── 📄 types.py                 # Pydantic Models & Schemas
 │   ├── 📄 beat_sync.py             # Beat-Synchronisation
-│   └── 📂 gpu_visualizers/         # 16 GPU-basierte Visualizer
+│   └── 📂 gpu_visualizers/         # 18 GPU-basierte Visualizer
 │       ├── base.py
 │       ├── pulsing_core.py
 │       ├── spectrum_bars.py
@@ -471,8 +491,8 @@ audio_visualizer_pro/
 │       ├── speech_focus.py
 │       └── voice_flow.py
 │
-├── 📂 tests/                       # 134 Unit- & Integration-Tests
-├── 📄 gui.py                       # Streamlit-Web-Interface
+├── 📂 tests/                       # 142 Unit- & Integration-Tests
+├── 📄 gui.py                       # DearPyGui Desktop-Interface
 ├── 📄 main.py                      # CLI Entry Point (click)
 ├── 📄 start_gui.py                 # GUI-Start-Skript
 ├── 📄 start_gui.bat                # Windows-Launcher
@@ -513,14 +533,17 @@ audio_visualizer_pro/
 
 ## 🛣️ Roadmap
 
-- [x] 🎨 10+ GPU-Visualizer mit OpenGL
+- [x] 🎨 18 GPU-Visualizer mit OpenGL
 - [x] 🤖 KI-Auto-Modus (Smart Matcher)
-- [x] 💬 Gemini Zitat-Extraktion
-- [x] ✏️ Zitat-Review & Editing
+- [x] 💬 Gemini Zitat-Extraktion mit adaptivem Confidence-Filter
+- [x] ✏️ Vollständiges Zitat-CRUD (Edit, Delete, Add, Save)
 - [x] 🎙️ Podcast-Genre-Presets
-- [x] 🖥️ DearPyGui Desktop-GUI mit GPU-Live-Preview
-- [x] ⚡ Aggressives Caching
-- [x] 🎬 FFmpeg-Hardware-Encoding
+- [x] 🖥️ DearPyGui Desktop-GUI mit GPU-Live-Preview & dynamischen Parametern
+- [x] ⚡ Aggressives Caching (Audio, Zitate, Upload-IDs)
+- [x] 💾 Projekt-Preset-System (Save/Load/Auto-Save)
+- [x] 🎬 FFmpeg-Hardware-Encoding (h264/h265/prores)
+- [x] 💻 Lokaler Whisper-Fallback für Offline-Betrieb
+- [x] 🎯 Zeitstempel-Verfeinerung via Onset/Beat-Detection
 - [ ] 🌐 Web-Export (HTML5 Canvas)
 - [ ] 🎚️ Echtzeit-Mikrofon-Visualizer
 - [ ] 📱 Mobile-App (Flutter/React Native)
