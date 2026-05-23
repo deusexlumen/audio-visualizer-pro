@@ -1005,7 +1005,10 @@ class AudioVisualizerGUI:
                     dpg.set_value(val_tag, fmt % val)
                 except Exception:
                     dpg.set_value(val_tag, str(round(val, 2)))
+        self.state.color_mode = "chroma"
+        dpg.set_value("param_color_mode", "chroma (dynamisch)")
         self.state.viz_extra_params = {}
+        self._rebuild_viz_param_controls()
         self._request_preview_update()
         self._set_status("Visualizer-Parameter zurückgesetzt.", "info")
 
@@ -2731,6 +2734,17 @@ class AudioVisualizerGUI:
         except Exception as e:
             self._show_error_modal(f"Fehler beim Laden: {e}")
 
+    def _set_slider_and_value(self, tag: str, val):
+        """Setzt Slider-Wert und zugehoerigen Wert-Text."""
+        dpg.set_value(tag, val)
+        val_tag = f"{tag}_value"
+        if dpg.does_item_exist(val_tag):
+            fmt = dpg.get_item_configuration(tag).get("format", "%.2f")
+            try:
+                dpg.set_value(val_tag, fmt % val)
+            except Exception:
+                dpg.set_value(val_tag, str(round(val, 2)))
+
     def _sync_ui_to_state(self):
         """Synchronisiert alle UI-Controls mit dem aktuellen AppState."""
         # Audio
@@ -2738,22 +2752,29 @@ class AudioVisualizerGUI:
             dpg.set_value("audio_status", Path(self.state.audio_path).name)
         # Visualizer
         dpg.set_value("viz_combo", self.state.visualizer_type)
-        dpg.set_value("param_offset_x", self.state.viz_offset_x)
-        dpg.set_value("param_offset_y", self.state.viz_offset_y)
-        dpg.set_value("param_scale", self.state.viz_scale)
-        dpg.set_value("param_color_mode", self.state.color_mode)
-        dpg.set_value("param_base_hue", self.state.base_hue)
-        dpg.set_value("param_color_saturation", self.state.color_saturation)
+        self._set_slider_and_value("param_offset_x", self.state.viz_offset_x)
+        self._set_slider_and_value("param_offset_y", self.state.viz_offset_y)
+        self._set_slider_and_value("param_scale", self.state.viz_scale)
+        color_mode_display = {
+            "chroma": "chroma (dynamisch)",
+            "fixed": "fixed (eine Farbe)",
+            "monochrome": "monochrome",
+            "warm": "warm",
+            "cool": "cool",
+        }.get(self.state.color_mode, "chroma (dynamisch)")
+        dpg.set_value("param_color_mode", color_mode_display)
+        self._set_slider_and_value("param_base_hue", self.state.base_hue)
+        self._set_slider_and_value("param_color_saturation", self.state.color_saturation)
         # Background
-        dpg.set_value("param_bg_blur", self.state.bg_blur)
-        dpg.set_value("param_bg_vignette", self.state.bg_vignette)
-        dpg.set_value("param_bg_opacity", self.state.bg_opacity)
+        self._set_slider_and_value("param_bg_blur", self.state.bg_blur)
+        self._set_slider_and_value("param_bg_vignette", self.state.bg_vignette)
+        self._set_slider_and_value("param_bg_opacity", self.state.bg_opacity)
         # Post-Process
-        dpg.set_value("param_pp_contrast", self.state.pp_contrast)
-        dpg.set_value("param_pp_saturation", self.state.pp_saturation)
-        dpg.set_value("param_pp_brightness", self.state.pp_brightness)
-        dpg.set_value("param_pp_warmth", self.state.pp_warmth)
-        dpg.set_value("param_pp_grain", self.state.pp_grain)
+        self._set_slider_and_value("param_pp_contrast", self.state.pp_contrast)
+        self._set_slider_and_value("param_pp_saturation", self.state.pp_saturation)
+        self._set_slider_and_value("param_pp_brightness", self.state.pp_brightness)
+        self._set_slider_and_value("param_pp_warmth", self.state.pp_warmth)
+        self._set_slider_and_value("param_pp_grain", self.state.pp_grain)
         # Export
         dpg.set_value("chk_gpu_encode", self.state.gpu_encode)
         fps_val = str(self.state.render_fps)
@@ -2774,8 +2795,16 @@ class AudioVisualizerGUI:
         # Quotes
         dpg.set_value("chk_quotes_enabled", self.state.quotes_enabled)
         dpg.set_value("quote_position", self.state.quote_config.position)
-        dpg.set_value("quote_font_size", self.state.quote_config.font_size)
-        dpg.set_value("quote_display_duration", self.state.quote_config.display_duration)
+        self._set_slider_and_value("quote_font_size", self.state.quote_config.font_size)
+        self._set_slider_and_value("quote_display_duration", self.state.quote_config.display_duration)
+        self._set_slider_and_value("quote_fade_duration", self.state.quote_config.fade_duration)
+        self._set_slider_and_value("quote_max_chars", self.state.quote_config.max_chars_per_line)
+        self._set_slider_and_value("quote_line_spacing", self.state.quote_config.line_spacing)
+        dpg.set_value("quote_slide_animation", self.state.quote_config.slide_animation)
+        dpg.set_value("quote_scale_in", self.state.quote_config.scale_in)
+        dpg.set_value("quote_glow_pulse", self.state.quote_config.glow_pulse)
+        self._set_slider_and_value("quote_compensation_blur", self.state.quote_config.compensation_blur)
+        self._set_slider_and_value("quote_latency_offset", self.state.quote_config.latency_offset)
         self._rebuild_viz_param_controls()
         self._refresh_quotes_list()
         self._request_preview_update()
