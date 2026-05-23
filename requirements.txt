@@ -24,6 +24,9 @@ pytest>=7.0.0
 # Audio-I/O (für Test-Dateien)
 soundfile>=0.11.0
 
+# GPU-Rendering
+moderngl>=5.0
+
 # GUI
 dearpygui>=2.0
 

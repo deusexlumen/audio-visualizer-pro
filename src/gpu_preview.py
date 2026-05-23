@@ -8,6 +8,8 @@ NEU: Renderer und Visualizer werden gecacht, um Shader-Neukompilierung
 bei jedem Slider-Zug zu vermeiden.
 """
 
+import traceback
+
 import numpy as np
 from PIL import Image
 
@@ -15,6 +17,7 @@ from .analyzer import AudioAnalyzer
 from .gpu_renderer import GPUPreviewRenderer
 from .gpu_visualizers import get_visualizer
 from .quote_overlay import QuoteOverlayConfig
+from .types import AudioFeatures
 
 
 # === Modul-Level Cache fuer Preview-Renderer ===
@@ -83,6 +86,7 @@ def render_gpu_preview(
     viz_offset_x: float = 0.0,
     viz_offset_y: float = 0.0,
     viz_scale: float = 1.0,
+    features: AudioFeatures = None,
 ):
     """
     Rendert ein einzelnes Frame fuer die Live-Vorschau.
@@ -107,9 +111,10 @@ def render_gpu_preview(
         PIL.Image oder None bei Fehler
     """
     try:
-        # Audio analysieren (gecached)
-        analyzer = AudioAnalyzer()
-        features = analyzer.analyze(audio_path, fps=fps)
+        # Audio analysieren (gecached) nur wenn nicht schon vorhanden
+        if features is None:
+            analyzer = AudioAnalyzer()
+            features = analyzer.analyze(audio_path, fps=fps)
 
         # Renderer und Visualizer aus Cache holen (NICHT jedes Mal neu erstellen)
         renderer, viz = _get_cached_renderer(visualizer_type, width, height, fps)
@@ -125,6 +130,21 @@ def render_gpu_preview(
                 background_image, background_blur
             )
 
+        # Beat-Intensity vektorisiert berechnen (fuer Visualizer die es brauchen)
+        frame_count = features.frame_count
+        beat_intensity = np.zeros(frame_count, dtype=np.float32)
+        if len(features.beat_frames) > 0:
+            decay_frames = max(3, int(fps * 0.1))
+            for bf in features.beat_frames:
+                if bf >= frame_count:
+                    continue
+                end = min(bf + decay_frames + 1, frame_count)
+                if end > bf:
+                    dists = np.arange(end - bf, dtype=np.float32)
+                    vals = 1.0 - dists / decay_frames
+                    vals = np.clip(vals, 0.0, 1.0)
+                    beat_intensity[bf:end] = np.maximum(beat_intensity[bf:end], vals)
+
         # Feature-Dict vorbereiten
         features_dict = {
             "rms": features.rms,
@@ -132,7 +152,9 @@ def render_gpu_preview(
             "chroma": features.chroma,
             "spectral_centroid": features.spectral_centroid,
             "fps": fps,
-            "frame_count": features.frame_count,
+            "frame_count": frame_count,
+            "beat_frames": features.beat_frames,
+            "beat_intensity": beat_intensity,
         }
 
         # Zeitpunkt fuer Preview
@@ -189,4 +211,7 @@ def render_gpu_preview(
 
     except Exception as e:
         print(f"[GPU Preview] Fehler: {e}")
+        traceback.print_exc()
+        # Cache invalidieren damit beim naechsten Versuch ein frischer Visualizer erstellt wird
+        _release_preview_cache()
         return None

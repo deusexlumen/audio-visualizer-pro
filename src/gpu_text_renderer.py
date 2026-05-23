@@ -43,8 +43,13 @@ class SDFFontAtlas:
         texture = atlas.build(ctx)  # ModernGL Context
     """
 
-    # Druckbare ASCII-Zeichen
-    CHARS = "".join(chr(c) for c in range(32, 127))
+    # Erweiterte Zeichen: ASCII + Deutsche Umlaute + Euro + Wichtige Satzzeichen
+    CHARS = (
+        "".join(chr(c) for c in range(32, 127))  # ASCII
+        + "äöüÄÖÜßéèàáçñ"  # Deutsche + Romanische Umlaute
+        + "€…–—"           # Sonderzeichen
+        + "«»"             # Anführungszeichen
+    )
 
     def __init__(self, font_path: str, font_size: int = 64, sdf_size: int = 64,
                  padding: int = 4, spread: float = 8.0):
@@ -414,6 +419,30 @@ class GPUTextRenderer:
         self._instance_vbo.write(self._instance_data[:instance_idx].tobytes())
         self._vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_idx)
         # Blending wird vom Aufrufer verwaltet (State-Machine-Sicherheit)
+
+    def render_multiline_text(self, lines: list[str], x: float, y: float,
+                              line_height: float = 1.4, size: float = 32.0,
+                              color: tuple = (1.0, 1.0, 1.0), alpha: float = 1.0,
+                              align: str = "left", glow: float = 0.0,
+                              glow_color: tuple = (1.0, 1.0, 1.0),
+                              smoothing: float = 0.25,
+                              outline_width: float = 0.0,
+                              outline_color: tuple = (0.0, 0.0, 0.0),
+                              shadow_offset: tuple = (0.0, 0.0),
+                              shadow_color: tuple = (0.0, 0.0, 0.0),
+                              shadow_alpha: float = 0.5):
+        """Rendert mehrere Zeilen Text untereinander (top-down)."""
+        scale = size / self.atlas.sdf_size
+        line_px = size * line_height
+        for i, line in enumerate(lines):
+            line_y = y + i * line_px
+            self.render_text(
+                line, x, line_y, size=size, color=color, alpha=alpha,
+                align=align, glow=glow, glow_color=glow_color,
+                smoothing=smoothing, outline_width=outline_width,
+                outline_color=outline_color, shadow_offset=shadow_offset,
+                shadow_color=shadow_color, shadow_alpha=shadow_alpha,
+            )
 
     def release(self):
         """Gibt alle GPU-Ressourcen (Shader, VBOs, VAO, Atlas-Textur) frei.

@@ -16,6 +16,9 @@ from typing import List, Optional
 from dataclasses import dataclass
 from pathlib import Path
 
+from .quote_cache import save_upload_id, load_upload_id, save_transcript
+from .types import Quote
+
 try:
     from google import genai
 except ImportError:
@@ -114,15 +117,6 @@ def _compress_audio_for_upload(input_path: str, output_path: str) -> bool:
         return result.returncode == 0 and os.path.exists(output_path)
     except Exception:
         return False
-
-
-@dataclass
-class Quote:
-    """Ein Key-Zitat mit Zeitstempel und Konfidenz."""
-    text: str
-    start_time: float  # Sekunden
-    end_time: float    # Sekunden
-    confidence: float  # 0.0-1.0
 
 
 class GeminiIntegration:
@@ -260,13 +254,16 @@ class GeminiIntegration:
         """Asynchrone Prompt-Generierung. Gibt ein Future zurueck."""
         return self._executor.submit(self.generate_background_prompt, audio_features)
 
-    def _upload_audio_with_retry(self, audio_path: str, max_retries: int = 3):
+    def _upload_audio_with_retry(self, audio_path: str, max_retries: int = 3,
+                                   progress_callback=None):
         """
         Laedt Audio zu Gemini hoch mit Retry-Logik, Komprimierung und Warten auf ACTIVE.
+        Nutzt gecachte Upload-IDs, um wiederholte Uploads zu vermeiden.
         
         Args:
             audio_path: Pfad zur Audio-Datei
             max_retries: Maximale Anzahl Upload-Versuche
+            progress_callback: Optional callback(status_msg) fuer Fortschrittsupdates
             
         Returns:
             Das hochgeladene File-Objekt (Status ACTIVE)
@@ -274,19 +271,46 @@ class GeminiIntegration:
         audio_path = Path(audio_path)
         original_size = audio_path.stat().st_size / (1024 * 1024)  # MB
         
+        # === Cache-Check: Vorhandene Upload-ID wiederverwenden ===
+        cached_id = load_upload_id(str(audio_path))
+        if cached_id:
+            if progress_callback:
+                progress_callback("Cache-Check...")
+            try:
+                cached_file = self.client.files.get(name=cached_id)
+                state_name = getattr(cached_file.state, 'name', str(cached_file.state))
+                if state_name == "ACTIVE":
+                    if progress_callback:
+                        progress_callback("Gecachte Upload-ID verwendet")
+                    print(f"[Gemini] Verwende gecachte Upload-ID: {cached_id}")
+                    return cached_file
+                else:
+                    print(f"[Gemini] Gecachte Upload-ID nicht mehr ACTIVE ({state_name}), neu hochladen...")
+            except Exception as e:
+                print(f"[Gemini] Gecachte Upload-ID ungueltig: {e}")
+        
         # Wenn Datei > 5MB, vorher komprimieren
         upload_path = str(audio_path)
         temp_compressed = None
         
         if original_size > 5:
+            if progress_callback:
+                progress_callback("Audio komprimieren...")
             temp_compressed = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False)
             temp_compressed.close()
             if _compress_audio_for_upload(str(audio_path), temp_compressed.name):
                 compressed_size = os.path.getsize(temp_compressed.name) / (1024 * 1024)
+                if progress_callback:
+                    progress_callback(f"Audio komprimiert: {compressed_size:.1f}MB")
                 print(f"[Gemini] Audio komprimiert: {original_size:.1f}MB -> {compressed_size:.1f}MB")
                 upload_path = temp_compressed.name
             else:
+                if progress_callback:
+                    progress_callback("Komprimierung fehlgeschlagen, verwende Original")
                 print(f"[Gemini] Komprimierung fehlgeschlagen, verwende Original ({original_size:.1f}MB)")
+        
+        if progress_callback:
+            progress_callback("Zu Gemini hochladen...")
         
         last_error = None
         for attempt in range(1, max_retries + 1):
@@ -296,16 +320,26 @@ class GeminiIntegration:
                 # WICHTIG: Auf ACTIVE warten! Sonst bricht Gemini die Verbindung ab.
                 max_wait = 60  # Max 60 Sekunden warten
                 waited = 0
+                if progress_callback:
+                    progress_callback("Warte auf Verarbeitung...")
                 while getattr(uploaded_file.state, 'name', str(uploaded_file.state)) == "PROCESSING" and waited < max_wait:
                     time.sleep(2)
                     waited += 2
                     uploaded_file = self.client.files.get(name=uploaded_file.name)
                     state_name = getattr(uploaded_file.state, 'name', str(uploaded_file.state))
+                    if progress_callback:
+                        progress_callback(f"Verarbeitung... ({waited}s)")
                     print(f"[Gemini] Datei-Status: {state_name} ({waited}s)")
                 
                 state_name = getattr(uploaded_file.state, 'name', str(uploaded_file.state))
                 if state_name != "ACTIVE":
                     raise RuntimeError(f"Datei nicht ACTIVE nach Upload: {state_name}")
+                
+                # Upload-ID cachen fuer zukuenftige Verwendung
+                save_upload_id(str(audio_path), uploaded_file.name)
+                
+                if progress_callback:
+                    progress_callback("Upload fertig")
                 
                 # Cleanup temp file
                 if temp_compressed and os.path.exists(temp_compressed.name):
@@ -314,6 +348,8 @@ class GeminiIntegration:
             except Exception as e:
                 last_error = e
                 print(f"[Gemini] Upload Versuch {attempt}/{max_retries} fehlgeschlagen: {e}")
+                if progress_callback:
+                    progress_callback(f"Upload Versuch {attempt}/{max_retries} fehlgeschlagen")
                 if attempt < max_retries:
                     wait = attempt * 2  # Exponential Backoff: 2s, 4s, 6s
                     print(f"[Gemini] Warte {wait}s vor naechstem Versuch...")
@@ -354,14 +390,17 @@ class GeminiIntegration:
                 )
             )
 
-            return response.text.strip()
+            transcript = response.text.strip()
+            # Transkript cachen
+            save_transcript(str(audio_path), transcript)
+            return transcript
         except (FileNotFoundError, RuntimeError):
             raise
         except Exception as e:
             raise RuntimeError(f"Unerwarteter Fehler bei der Transkription: {e}") from e
 
     def extract_quotes(self, audio_path: str, audio_duration: float = None,
-                        max_quotes: int = None) -> List[Quote]:
+                        max_quotes: int = None, progress_callback=None) -> List[Quote]:
         """
         Extrahiert Key-Zitate direkt aus einer Audio-Datei.
 
@@ -374,6 +413,7 @@ class GeminiIntegration:
             audio_path: Pfad zur Audio-Datei
             audio_duration: Dauer des Audios in Sekunden (fuer dynamische Anzahl)
             max_quotes: Maximale Anzahl an Zitaten (None = automatisch aus Dauer)
+            progress_callback: Optional callback(status_msg) fuer Fortschrittsupdates
 
         Returns:
             Liste von Quote-Objekten, sortiert nach Startzeit
@@ -398,10 +438,19 @@ class GeminiIntegration:
             elif max_quotes is None:
                 max_quotes = 5
 
+            if progress_callback:
+                progress_callback("Audio wird vorbereitet...")
+
             try:
-                uploaded_file = self._upload_audio_with_retry(str(audio_path))
+                uploaded_file = self._upload_audio_with_retry(
+                    str(audio_path),
+                    progress_callback=progress_callback
+                )
             except Exception as e:
                 raise RuntimeError(f"Audio-Upload zu Gemini fehlgeschlagen: {e}") from e
+
+            if progress_callback:
+                progress_callback("KI verarbeitet Audio...")
 
             prompt = f"""
             Analysiere dieses Audio und extrahiere ALLE wichtigen Key-Zitate.
@@ -437,6 +486,9 @@ class GeminiIntegration:
                 )
             )
 
+            if progress_callback:
+                progress_callback("Zitate werden gefiltert...")
+
             quotes_data = self._parse_json_response(response.text)
             if not isinstance(quotes_data, list):
                 print(f"[Gemini] Zitat-Antwort war kein Array (Typ: {type(quotes_data).__name__}), verwende leere Liste")
@@ -455,8 +507,23 @@ class GeminiIntegration:
                     confidence=float(q.get("confidence", 0.5))
                 ))
 
-            # Confidence-Filter: nur Zitate >= 0.6
-            quotes = [q for q in quotes if q.confidence >= 0.6]
+            # --- ADAPTIVE CONFIDENCE-FILTERUNG ---
+            base_threshold = 0.6
+            filtered = [q for q in quotes if q.confidence >= base_threshold]
+
+            # Zu wenige Zitate -> Threshold senken
+            if len(filtered) < 2 and len(quotes) > len(filtered):
+                if progress_callback:
+                    progress_callback(f"Nur {len(filtered)} Zitate bei 0.6, senke auf 0.4...")
+                filtered = [q for q in quotes if q.confidence >= 0.4]
+
+            # Zu viele Zitate bei kurzem Audio -> Threshold erhöhen
+            if len(filtered) > 15 and audio_duration is not None and audio_duration < 600:
+                if progress_callback:
+                    progress_callback(f"{len(filtered)} Zitate, erhöhe auf 0.7...")
+                filtered = [q for q in quotes if q.confidence >= 0.7]
+
+            quotes = filtered
 
             # Nach Confidence sortieren (beste zuerst)
             quotes = sorted(quotes, key=lambda x: x.confidence, reverse=True)
@@ -466,6 +533,9 @@ class GeminiIntegration:
 
             # Nach Startzeit sortieren fuer finale Ausgabe
             quotes = sorted(quotes, key=lambda x: x.start_time)
+
+            if progress_callback:
+                progress_callback(f"{len(quotes)} Zitate extrahiert")
 
             return quotes
         except (FileNotFoundError, RuntimeError):

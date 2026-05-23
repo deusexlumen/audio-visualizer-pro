@@ -208,37 +208,62 @@ class BaseGPUVisualizer(abc.ABC):
         Returns:
             Dictionary mit den skalaren Features fuer den angegebenen Frame.
         """
-        frame_idx = max(0, min(frame_idx, features.get("frame_count", 0) - 1))
+        # Sicherer Clamp gegen frame_count UND tatsaechliche Array-Laengen
+        max_idx = features.get("frame_count", 0) - 1
+        for key in ("rms", "onset", "spectral_centroid", "chroma"):
+            if key in features:
+                arr = features[key]
+                if hasattr(arr, "shape") and len(arr.shape) > 1:
+                    # 2D-Array: laengste Achse bestimmen
+                    arr_len = max(arr.shape)
+                elif hasattr(arr, "__len__"):
+                    arr_len = len(arr)
+                else:
+                    arr_len = 0
+                max_idx = min(max_idx, arr_len - 1)
+        frame_idx = max(0, min(frame_idx, max_idx))
 
-        chroma = features["chroma"]
-        if len(chroma.shape) > 1 and chroma.shape[0] == 12:
-            chroma_frame = chroma[:, frame_idx]
-        elif len(chroma.shape) > 1 and chroma.shape[1] == 12:
-            chroma_frame = chroma[frame_idx, :]
-        else:
+        chroma = features.get("chroma")
+        if chroma is not None and hasattr(chroma, "shape") and len(chroma.shape) > 1:
+            if chroma.shape[0] == 12 and chroma.shape[1] > frame_idx >= 0:
+                chroma_frame = chroma[:, frame_idx]
+            elif chroma.shape[1] == 12 and chroma.shape[0] > frame_idx >= 0:
+                chroma_frame = chroma[frame_idx, :]
+            else:
+                chroma_frame = np.zeros(12, dtype=np.float32)
+        elif chroma is not None and hasattr(chroma, "__len__") and len(chroma) > frame_idx >= 0:
             chroma_frame = chroma[frame_idx]
+        else:
+            chroma_frame = np.zeros(12, dtype=np.float32)
+
+        def _safe_float(arr, idx, default=0.0):
+            if arr is None:
+                return default
+            if hasattr(arr, "__len__") and len(arr) > idx >= 0:
+                return float(arr[idx])
+            return default
 
         result = {
-            "rms": float(features["rms"][frame_idx]),
-            "onset": float(features["onset"][frame_idx]),
+            "rms": _safe_float(features.get("rms"), frame_idx, 0.0),
+            "onset": _safe_float(features.get("onset"), frame_idx, 0.0),
             "chroma": chroma_frame,
-            "spectral_centroid": float(features["spectral_centroid"][frame_idx]),
+            "spectral_centroid": _safe_float(features.get("spectral_centroid"), frame_idx, 0.0),
             "mode": features.get("mode", "music"),
         }
 
         # Neue Features (falls vorhanden)
         if "transient" in features and len(features["transient"]) > 0:
-            result["transient"] = float(features["transient"][frame_idx])
+            result["transient"] = _safe_float(features["transient"], frame_idx, 0.0)
         else:
             result["transient"] = result["onset"] * 1.5  # Fallback
 
         if "voice_clarity" in features and len(features["voice_clarity"]) > 0:
-            result["voice_clarity"] = float(features["voice_clarity"][frame_idx])
+            result["voice_clarity"] = _safe_float(features["voice_clarity"], frame_idx, 0.0)
         else:
             result["voice_clarity"] = result["rms"]  # Fallback
 
         if "voice_band" in features and len(features["voice_band"]) > 0:
-            result["voice_band"] = float(features["voice_band"][frame_idx])
+            result["voice_band"] = _safe_float(features["voice_band"], frame_idx, 0.0)
         else:
             result["voice_band"] = result.get("voice_clarity", result["rms"])  # Fallback
 

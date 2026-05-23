@@ -230,3 +230,52 @@ User meldete: "Ich hab jetzt was gerendert und es ist komplett blurred obwohl ic
 - Zusaetzlich: `_load_background_texture` prueft jetzt `blur > 0.01` statt `blur > 0` (robuster)
 
 **Status:** ✅ Syntax-Check OK. Videos mit Qualitaet "high" sind jetzt deutlich schaerfer.
+
+## 2026-05-08 – GUI Redesign v3.0 (Stabil)
+
+**Problem:**
+User war frustriert ueber die GUI: "haesslich, unuebersichtlich, billig". Das vorherige v3.0-Redesign (fc12971) war technisch kaputt (Alias-Duplikate, color_button crashes, thread-unsafe DPG-Calls).
+
+**Loesung:**
+Stabiler Redesign auf Basis des funktionierenden v2.1-Codes. Keine strukturellen Aenderungen an der Render-Pipeline oder Threading-Logik — nur UI-Verbesserungen.
+
+**Aenderungen in `gui.py`:**
+
+### Design-System
+- Neue kategorien-basierte Akzente: Audio (Mint), Visualizer (Violett), KI (Amber), Zitate (Rose), Hintergrund (Blau), Post-Process (Lavendel), Export (Gruen)
+- `dim()` und `alpha()` Helper-Methoden im Theme
+- Premium Dark Farbpalette mit tieferem Schwarz und klarerem Kontrast
+
+### Layout
+- **58/42 Split**: Preview links (groesser), Controls rechts (520px)
+- Fenster: 1520x1000 (statt 1500x980)
+- App-Header mit farbigem Logo-Placeholder, Titel, Untertitel und Status-Chips
+
+### Cards
+- Kollabierbare Cards mit `dpg.tree_node()` statt statischer Child-Windows
+- Jede Card hat einen 3px farbigen Akzent-Balken oben
+- Default-Zustaende: Audio, Visualizer, Hintergrund, Preview, Export = offen; KI, Zitate, Post-Process = zugeklappt
+
+### Buttons
+- Primaere Actions mit kategorie-spezifischem Akzent (z.B. Audio-Laden = Mint)
+- Sekundaere Actions (Abbrechen, Demo-Zitate) mit dezentem Grau
+- `_make_accent_button_theme()` und `_make_secondary_button_theme()` mit Alias-Schutz
+
+### Preview
+- Placeholder-Bild mit "Audio laden fuer Preview" + Format-Info
+- Welcome-Screen mit CTA-Button wenn kein Audio geladen ist
+- Hintergrundbild-Fallback: zeigt Bild auch ohne Audio an (mit Blur/Vignette/Opacity via PIL)
+
+### Thread-Safety
+- Audio-Analyse-Ergebnisse werden in `self._analyze_result` gepackt und im Main Thread via `_process_analyze_result()` verarbeitet
+- Preview-Hash wird erst nach erfolgreichem Rendern gesetzt (verhindert "hang" bei Hintergrundbild-Fehlern)
+
+### Datei-Dialoge
+- Starten standardmaessig im Downloads-Ordner
+- Merken sich das letzte Verzeichnis pro Typ (Audio / Hintergrund)
+
+### Typografie
+- 4 Fonts: Standard (15px), Small (13px), Header (18px Bold), Card-Titel (15px Bold), Mono (14px)
+- Alle Labels und Tooltips nutzen den kleineren Font fuer bessere Hierarchie
+
+**Status:** ✅ Syntax OK. Keine Emojis mehr. Keine Aliasing-Bugs.

@@ -147,27 +147,28 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
         primary = self._hsv_to_rgb(base_hue, 0.9, 1.0)
         secondary = self._hsv_to_rgb((base_hue + 0.33) % 1.0, 0.8, 1.0)
 
-        num_rings = int(self.params["circle_count"])
-        wave_amp = self.params["wave_amplitude"]
+        num_rings = int(self.params.get("circle_count", 5))
+        if num_rings < 1:
+            num_rings = 1
+        wave_amp = self.params.get("wave_amplitude", 1.0)
         t = frame_idx * 0.03
         cx, cy = self.center
         line_verts = []
 
-        # --- Ring-Daten initialisieren (falls noch nicht geschehen) ---
-        if not hasattr(self, '_ring_data'):
-            self._ring_data = []
-            for i in range(num_rings):
-                self._ring_data.append({
-                    "base_radius": (i + 1) * (self.max_radius / num_rings),
-                    "amplitude": 10.0 + i * 5.0,
-                    "frequency": 0.1 + i * 0.02,
-                    "phase": i * np.pi / 3.0,
-                    "wave_count": 6 + i * 2,
-                })
+        # --- Ring-Daten JEDES FRAME frisch berechnen (kein persistenter State) ---
+        ring_data = []
+        for i in range(num_rings):
+            ring_data.append({
+                "base_radius": (i + 1) * (self.max_radius / num_rings),
+                "amplitude": 10.0 + i * 5.0,
+                "frequency": 0.1 + i * 0.02,
+                "phase": i * np.pi / 3.0,
+                "wave_count": 6 + i * 2,
+            })
 
         # --- Ringe von aussen nach innen ---
         for i in range(num_rings - 1, -1, -1):
-            ring = self._ring_data[i]
+            ring = ring_data[i]
             audio_boost = 1.0 + rms * 0.5
             if onset > 0.3:
                 audio_boost += onset * 0.5

@@ -20,6 +20,7 @@ from .analyzer import AudioAnalyzer
 from .types import AudioFeatures, Quote
 from .gpu_visualizers import get_visualizer
 from .gpu_text_renderer import SDFFontAtlas, GPUTextRenderer
+from .gpu_quote_renderer import GPUQuoteRenderer
 from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
 
 
@@ -927,35 +928,28 @@ class GPUBatchRenderer:
         self.ctx.disable(moderngl.BLEND)
     
     def _init_text_renderer(self):
-        """Lazy-Initialisierung des SDF Text-Renderers.
+        """Lazy-Initialisierung des GPU Quote-Renderers.
 
-        Gibt vorhandene Ressourcen explizit frei, bevor neue erzeugt werden,
-        um VRAM-Leaks bei wiederholter Initialisierung zu vermeiden.
+        Erstellt einen GPUQuoteRenderer mit SDF-Font-Atlas.
+        Gibt vorhandene Ressourcen explizit frei, bevor neue erzeugt werden.
         """
-        if hasattr(self, '_text_renderer') and self._text_renderer is not None:
+        if hasattr(self, '_quote_gpu_renderer') and self._quote_gpu_renderer is not None:
             return
 
-        # Defensives Cleanup: Falls vorherige Initialisierung abgebrochen wurde
-        if hasattr(self, '_text_renderer') and self._text_renderer:
-            self._text_renderer.release()
-            self._text_renderer = None
-        if hasattr(self, '_font_texture') and self._font_texture:
-            self._font_texture.release()
-            self._font_texture = None
+        # Defensives Cleanup
+        if hasattr(self, '_quote_gpu_renderer') and self._quote_gpu_renderer:
+            self._quote_gpu_renderer.release()
+            self._quote_gpu_renderer = None
 
         font_path = "C:/Windows/Fonts/arial.ttf"
         if not os.path.exists(font_path):
-            # Fallback-Fonts probieren
             for fallback in ["C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/calibri.ttf"]:
                 if os.path.exists(fallback):
                     font_path = fallback
                     break
-        
-        self._font_atlas = SDFFontAtlas(font_path, font_size=64, sdf_size=64)
-        self._font_texture = self._font_atlas.build(self.ctx)
-        self._text_renderer = GPUTextRenderer(
-            self.ctx, self._font_atlas, self._font_texture,
-            width=self.width, height=self.height
+
+        self._quote_gpu_renderer = GPUQuoteRenderer(
+            self.ctx, font_path, width=self.width, height=self.height
         )
         
         # Box-Shader fuer Quote-Hintergruende (abgerundetes Rechteck)
@@ -1072,33 +1066,19 @@ class GPUBatchRenderer:
         return 1.0
 
     def _render_quotes_gpu(self, time: float, quotes: list, config, frame_idx: int = None):
-        """Rendert Quote-Overlays via PIL-basiertem QuoteOverlayRenderer.
-        
-        Liest den aktuellen FBO, wendet den bewaehrten PIL-Renderer an
-        und schreibt das Ergebnis zurueck. Robuster als der SDF-Ansatz.
+        """Rendert Quote-Overlays via GPUQuoteRenderer.
+
+        Direktes GPU-Rendering ohne FBO-Read/Write. Sehr viel schneller
+        als der alte PIL-basierte Ansatz.
         """
+        if not hasattr(self, '_quote_gpu_renderer') or self._quote_gpu_renderer is None:
+            return
+
         quote = self._get_active_quote(time, quotes, config.display_duration, frame_idx)
         if quote is None:
             return
-        
-        alpha = self._calculate_fade_alpha(time, quote, config.fade_duration, config.display_duration)
-        if alpha <= 0.01:
-            return
-        
-        # FBO in RGBA-Array lesen (ModernGL gibt bottom-up, PIL braucht top-down)
-        pixels = self.fbo.read(components=4)
-        arr_rgba = np.frombuffer(pixels, dtype=np.uint8).reshape((self.height, self.width, 4)).copy()
-        arr_rgba = np.flipud(arr_rgba)  # bottom-up -> top-down
-        
-        # PIL-Renderer auf RGB-Teil anwenden
-        arr_rgb = arr_rgba[:, :, :3].copy()
-        renderer = QuoteOverlayRenderer(quotes=[quote], config=config)
-        arr_rgb = renderer.apply(arr_rgb, time, frame_idx)
-        
-        # Zurueck in RGBA einfuegen und in OpenGL bottom-up konvertieren
-        arr_rgba[:, :, :3] = arr_rgb
-        arr_rgba = np.flipud(arr_rgba)
-        self.fbo.color_attachments[0].write(arr_rgba.tobytes())
+
+        self._quote_gpu_renderer.render(quote, config, time, frame_idx)
 
     def _mux_audio(self, video_path: str, audio_path: str, output_path: str):
         """Kombiniert Video-Stream mit Original-Audio.
@@ -1149,6 +1129,9 @@ class GPUBatchRenderer:
             if hasattr(self, "_font_texture") and self._font_texture:
                 self._font_texture.release()
                 self._font_texture = None
+            if hasattr(self, "_quote_gpu_renderer") and self._quote_gpu_renderer:
+                self._quote_gpu_renderer.release()
+                self._quote_gpu_renderer = None
             if hasattr(self, "ctx") and self.ctx:
                 self.ctx.release()
                 self.ctx = None

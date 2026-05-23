@@ -188,9 +188,20 @@ class OrchestralSwellGPU(BaseGPUVisualizer):
         frame_idx = int(time * features.get("fps", 30))
         frame_idx = max(0, min(frame_idx, features.get("frame_count", 0) - 1))
 
-        rms = float(features["rms"][frame_idx])
-        onset = float(features["onset"][frame_idx])
-        beat_intensity = float(features.get("beat_intensity", [0.0] * 30)[frame_idx])
+        def _safe_float(arr, idx, default=0.0):
+            if arr is None:
+                return default
+            if hasattr(arr, "__len__") and len(arr) > idx >= 0:
+                return float(arr[idx])
+            return default
+
+        rms = _safe_float(features.get("rms"), frame_idx, 0.0)
+        onset = _safe_float(features.get("onset"), frame_idx, 0.0)
+        beat_intensity_arr = features.get("beat_intensity")
+        if beat_intensity_arr is not None and hasattr(beat_intensity_arr, "__len__") and len(beat_intensity_arr) > frame_idx >= 0:
+            beat_intensity = float(beat_intensity_arr[frame_idx])
+        else:
+            beat_intensity = min(onset * 1.5, 1.0)
         self._prog["u_resolution"].value = (self.width, self.height)
         self._prog["u_time"].value = time
         self._prog["u_rms"].value = rms
