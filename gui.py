@@ -955,7 +955,8 @@ class AudioVisualizerGUI:
         def _fmt_name(name):
             return name.replace('_', ' ').title()
 
-        with dpg.parent(container):
+        dpg.push_container_stack(container)
+        try:
             for param_name, (default, min_val, max_val, step) in all_params.items():
                 tag = f"viz_param_{param_name}"
                 current_val = self.state.viz_extra_params.get(param_name, default)
@@ -2123,13 +2124,17 @@ class AudioVisualizerGUI:
         dpg.delete_item(container, children_only=True)
 
         if not self.state.quotes:
-            with dpg.parent(container):
+            dpg.push_container_stack(container)
+            try:
                 dpg.add_text("Noch keine Zitate. Extrahiere oder füge manuell hinzu.",
                              color=Theme.TEXT_MUTED, wrap=320)
+            finally:
+                dpg.pop_container_stack()
             dpg.set_value("quotes_status_text", "")
             return
 
-        with dpg.parent(container):
+        dpg.push_container_stack(container)
+        try:
             for i, q in enumerate(self.state.quotes):
                 with dpg.group(horizontal=True):
                     # Index
@@ -2172,6 +2177,8 @@ class AudioVisualizerGUI:
                     )
                     dpg.bind_item_theme(dpg.last_item(), self._make_secondary_button_theme())
                 dpg.add_separator()
+        finally:
+            dpg.pop_container_stack()
 
         dpg.set_value("quotes_status_text", f"{len(self.state.quotes)} Zitate")
         dpg.configure_item("quotes_status_text", color=Theme.STATUS_OK)
