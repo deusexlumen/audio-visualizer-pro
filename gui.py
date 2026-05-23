@@ -978,6 +978,8 @@ class AudioVisualizerGUI:
                     tooltip=f"{_fmt_name(param_name)}: {min_val} - {max_val}",
                     format=fmt,
                 )
+        finally:
+            dpg.pop_container_stack()
 
     def _on_viz_extra_param_changed(self, param_name: str, sender, app_data):
         """Callback fuer dynamische Visualizer-Parameter."""
