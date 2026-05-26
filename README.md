@@ -22,6 +22,7 @@ KI-gestützt. GPU-beschleunigt. Für Musikvideos, Podcasts & Creative Coding.</p
 </p>
 
 <p>
+  <img src="https://img.shields.io/badge/SOTA-v2.0.0-FF6B6B?style=flat-square" alt="SOTA Version">
   <img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/Tests-142%20Passing-success" alt="Tests">
