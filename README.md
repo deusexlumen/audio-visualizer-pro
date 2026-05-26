@@ -3,20 +3,33 @@
 [![Tests](https://img.shields.io/badge/tests-134%20passed-brightgreen)](https://github.com/audio-visualizer-pro/audio-visualizer-pro/actions)
 [![Coverage](https://img.shields.io/badge/coverage-77%25-yellowgreen)](https://github.com/audio-visualizer-pro/audio-visualizer-pro/actions)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+# Audio Visualizer Pro v2.1.0
+
 **Professionelles Audio-Visualisierungs-System mit GPU-Beschleunigung und KI-Unterstützung**
+
 Erstelle atemberaubende Musikvideos, Podcast-Visuals und kreative Projekte mit 16 GPU-beschleunigten Visualizern, KI-gestützter Zitat-Extraktion und professionellem Video-Encoding.
+
 ---
+
 ## 🎯 Überblick
+
 Audio Visualizer Pro ist ein modulares System zur Erstellung hochwertiger Audio-Visualisierungen. Es kombiniert GPU-beschleunigtes Rendering (ModernGL/OpenGL), KI-gestützte Audio-Analyse (Gemini) und eine professionelle DearPyGui-Oberfläche.
+
 ### Kernfunktionen
-- **16 GPU-Visualizer**: Shader-basierte Visualisierung mit ModernGL
-- **KI-Integration**: Automatische Transkription und Zitat-Extraktion mit Gemini 3.1 Flash-Lite
-- **DearPyGui GUI**: Premium Dark UI mit Echtzeit-Vorschau
-- **Post-Processing**: Bloom, Film Grain, Vignette, Chromatic Aberration, LUTs
-- **Multi-Codec**: H.264, HEVC, ProRes Encoding via FFmpeg
-- **Beat-Sync**: Synchronisierte Zitat-Einblendungen und Visual-Effekte
-- **Plugin-System**: Einfache Erweiterung um eigene Visualizer
+
+- **🎨 16 GPU-Visualizer**: Shader-basierte Visualisierung mit ModernGL (10 Classic + 6 Signature Pro)
+- **🤖 KI-Integration**: Automatische Transkription und Zitat-Extraktion mit Gemini 3.1 Flash-Lite
+- **🖥️ DearPyGui GUI**: Premium Dark UI mit Echtzeit-Vorschau
+- **✨ Post-Processing**: Bloom, Film Grain, Vignette, Chromatic Aberration, LUTs
+- **🎬 Multi-Codec**: H.264, HEVC, ProRes Encoding via FFmpeg
+- **🎵 Beat-Sync**: Synchronisierte Zitat-Einblendungen und Visual-Effekte
+- **🔌 Plugin-System**: Einfache Erweiterung um eigene Visualizer
+- **🧪 134 Tests**: Umfassende Testabdeckung mit 77% Coverage
+- **🧠 Evo-Agent Framework**: State Ledger, Root Orchestrator & Skill-Dispatcher
+
 ---
+
 ## 🚀 Schnellstart
 ### Voraussetzungen
 ```bash
@@ -56,7 +69,9 @@ python main.py render dein_audio.mp3 --visual neon_wave_circle \
   --param color_mode=chroma \
   -o custom.mp4
 ```
+
 ---
+
 ## 🎨 Verfügbare Visualizer
 ### Classic Visualizer (10)
 | Name | Beschreibung | Ideal für |
@@ -80,7 +95,9 @@ python main.py render dein_audio.mp3 --visual neon_wave_circle \
 | `speech_focus` | Fokus auf Sprachfrequenzen | Hörbücher, Vorträge |
 | `bass_temple` | Bass-zentrierte Tempel-Architektur | Bass Music, Trap |
 | `orchestral_swell` | Orchestrale Wellenbewegungen | Filmmusik, Klassik |
+
 ---
+
 ## 🤖 KI-Features
 ### Automatisierte Zitat-Extraktion
 Nutzt Gemini 3.1 Flash-Lite für:
@@ -103,7 +120,9 @@ Die KI analysiert Audio-Eigenschaften und empfiehlt:
 - Passenden Visualizer-Typ
 - Optimierte Farbpaletten (basierend auf erkannter Tonart)
 - Angepasste Parameter (Partikel-Dichte, Geschwindigkeit, Intensität)
+
 ---
+
 ## 🏗️ Architektur
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -126,7 +145,9 @@ Die KI analysiert Audio-Eigenschaften und empfiehlt:
 3. **Quote Overlay**: SDF-basiertes Text-Rendering mit Fade-Animation
 4. **Post-Processing**: Color Grading und Effekte
 5. **Video-Encoding**: FFmpeg mit Multi-Codec Support
+
 ---
+
 ## ⚙️ Konfiguration
 ### Config-Presets
 Vordefinierte Presets im `config/` Ordner:
@@ -154,7 +175,9 @@ python main.py render audio.mp3 --visual particle_swarm \
   --param trail_length=15 \
   -o custom.mp4
 ```
+
 ---
+
 ## 🧪 Testing
 ```bash
 # Alle Tests ausführen (134 Tests)
@@ -175,7 +198,9 @@ pytest tests/test_quote_overlay.py -v       # Quote Overlays
 | `quote_overlay.py` | 93% |
 | `types.py` | 100% |
 | **Gesamt** | **77%** |
+
 ---
+
 ## 📁 Projektstruktur
 ```
 audio-visualizer-pro/
@@ -242,7 +267,9 @@ audio-visualizer-pro/
     ├── system_prompt.md
     └── tool.md
 ```
+
 ---
+
 ## 💻 Systemanforderungen
 | Komponente | Minimum | Empfohlen |
 |------------|---------|-----------|
@@ -252,28 +279,86 @@ audio-visualizer-pro/
 | VRAM | 2 GB | 4 GB+ |
 | Speicher | 500 MB | 1 GB+ |
 | FFmpeg | 4.0+ | 6.0+ |
+
 ---
+
 ## 🛣️ Roadmap
-### Q1 2025
-- ✅ GPU-basiertes Rendering mit ModernGL
-- ✅ 16 GPU-Visualizer implementiert
-- ✅ DearPyGui Premium UI
-- ✅ Gemini KI-Integration
-- ✅ 134 Tests mit 77% Coverage
-### Q2 2025 (Geplant)
-- [ ] WebAssembly-Export für Browser-Rendering
-- [ ] Echtzeit-Audio-Input (Mikrofon/Live-Stream)
-- [ ] Multi-Track Support (Stems)
-- [ ] VR/AR Visualizer Export
-- [ ] Cloud-Rendering Pipeline
-### Future
-- [ ] Eigene Trainierbare KI-Modelle für Visual-Empfehlungen
-- [ ] Community Plugin Marketplace
-- [ ] Mobile Apps (iOS/Android)
-- [ ] Unreal Engine Integration
+
+### ✅ Abgeschlossen (v2.0 - v2.1)
+
+#### Q1 2025 — GPU Foundation & Testing
+- ✅ GPU-basiertes Rendering mit ModernGL/OpenGL
+- ✅ 16 GPU-Visualizer implementiert (10 Classic + 6 Signature Pro)
+- ✅ DearPyGui Premium UI mit Live-Preview
+- ✅ Gemini KI-Integration (Transkription & Zitat-Extraktion)
+- ✅ Test-Suite: 134 Tests mit 77% Coverage
+- ✅ Post-Processing Pipeline (Bloom, Grain, Vignette, LUTs, Chromatic Aberration)
+- ✅ SDF-basiertes Text-Rendering für Quote Overlays
+- ✅ Multi-Codec Support (H.264, HEVC, ProRes)
+
+#### Q2 2025 — Evo-Agent Framework & Quality
+- ✅ Evo-Agent Framework etabliert (`cognitive_core/`)
+- ✅ 5 Skill-Spezifikationen implementiert
+- ✅ State Ledger & Root Orchestrator
+- ✅ GPU-Renderer Mock-Infrastruktur für hardware-unabhängige Tests
+- ✅ Coverage-Optimierung: 63% → 77%
+- ✅ PIL-Pipeline entfernt, GPU-Pipeline konsolidiert
+
 ---
+
+### 🔄 In Entwicklung (v2.2 - v2.3)
+
+#### Q3 2025 — Advanced Features
+- [ ] **Echtzeit-Audio-Input**: Mikrofon/Live-Stream Unterstützung
+- [ ] **Multi-Track Support**: Separates Rendering von Audio-Stems (Drums, Bass, Vocals)
+- [ ] **Advanced Beat Detection**: Sub-beat Präzision für komplexe Rhythmen
+- [ ] **Custom Shader Editor**: GUI-basierter Shader-Editor für Power-User
+- [ ] **Batch-Rendering Queue**: Mehrere Videos hintereinander rendern
+- [ ] **Progressive Preview**: Schnellere Vorschau durch reduzierte Auflösung/FPS
+
+#### Q4 2025 — Platform Expansion
+- [ ] **CLI Enhancement**: Interaktiver CLI-Modus mit Live-Feedback
+- [ ] **Preset Marketplace**: Community-geteilte Config-Presets
+- [ ] **Advanced LUT Support**: 3D-LUTs für professionelles Color Grading
+
+---
+
+### 🔮 Zukunft (v3.0+)
+
+#### 2026 — KI & Automation
+- [ ] **Trainierbare KI-Modelle**: Eigene Modelle für Visual-Empfehlungen
+- [ ] **Style Transfer**: Musikvideo-Stil von Referenzvideos lernen
+- [ ] **Automatische Schnittsetzung**: KI-generierte Cuts synchron zur Musik
+- [ ] **Voice Isolation**: Separate Visualisierung von Sprachspuren
+- [ ] **Generative Visuals**: KI-generierte Visualizer basierend auf Audio-Beschreibung
+
+#### 2026+ — Platform & Ecosystem
+- [ ] **Community Plugin Marketplace**: Erweiterungen von Drittanbietern
+- [ ] **Mobile Companion App**: iOS/Android für Remote-Steuerung
+- [ ] **Unreal Engine Integration**: Export für Echtzeit-Engines
+- [ ] **WebAssembly-Export**: Browser-basiertes Rendering ohne Installation
+- [ ] **Cloud-Rendering Pipeline**: Skalierbares Rendering in der Cloud
+- [ ] **VR/AR Visualizer**: Immersive Visualisierungen für VR-Headsets
+
+---
+
+### 📊 Meilensteine
+
+| Version | Ziel | Status |
+|---------|------|--------|
+| v2.0 | GPU-Rendering Launch | ✅ Abgeschlossen |
+| v2.1 | Testing & Stability | ✅ Abgeschlossen |
+| v2.2 | Live-Audio & Multi-Track | 🔄 In Entwicklung |
+| v2.3 | Platform Expansion | 📅 Geplant Q4 2025 |
+| v3.0 | KI-Automation | 📅 Geplant 2026 |
+
+---
+
+
 ## 🤝 Contributing
+
 Wir freuen uns über Beiträge! Bitte beachte folgende Richtlinien:
+
 ### Entwicklungsumgebung einrichten
 ```bash
 # Fork klonen
@@ -285,6 +370,7 @@ pip install -e ".[dev]"
 black src/ tests/
 flake8 src/ tests/
 ```
+
 ### Pull Request Prozess
 1. Issue erstellen oder existierendes kommentieren
 2. Feature-Branch erstellen (`git checkout -b feature/mein-feature`)
@@ -292,15 +378,20 @@ flake8 src/ tests/
 4. Tests ausführen (`pytest tests/ -v`)
 5. Branch pushen (`git push origin feature/mein-feature`)
 6. Pull Request öffnen
+
 ### Code Style
 - **Sprache**: Kommentare und Dokumentation auf Deutsch
 - **Formatierung**: Black-konform (88 Zeichen pro Zeile)
 - **Typisierung**: Type Hints für alle Funktionen
 - **Tests**: Mindestens 80% Coverage für neue Features
+
 ---
+
 ## 📄 Lizenz
 MIT License — Siehe [LICENSE](LICENSE) für Details.
+
 ---
+
 ## 🙏 Credits
 | Projekt | Zweck |
 |---------|-------|
@@ -310,11 +401,14 @@ MIT License — Siehe [LICENSE](LICENSE) für Details.
 | [Gemini API](https://ai.google.dev/) | KI Transkription |
 | [FFmpeg](https://ffmpeg.org/) | Video Encoding |
 | [Pydantic](https://docs.pydantic.dev/) | Datenvalidierung |
+
 ---
+
 ## 📬 Support
 - **Issues**: [GitHub Issues](https://github.com/audio-visualizer-pro/audio-visualizer-pro/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/audio-visualizer-pro/audio-visualizer-pro/discussions)
 - **E-Mail**: support@audio-visualizer.pro
+
 ---
 <div align="center">
 **Audio Visualizer Pro v2.1.0**
