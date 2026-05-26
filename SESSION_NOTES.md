@@ -279,3 +279,59 @@ Stabiler Redesign auf Basis des funktionierenden v2.1-Codes. Keine strukturellen
 - Alle Labels und Tooltips nutzen den kleineren Font fuer bessere Hierarchie
 
 **Status:** ✅ Syntax OK. Keine Emojis mehr. Keine Aliasing-Bugs.
+
+
+## 2026-05-22 – Plan-Completion: Alle Features implementiert
+
+**Plan:** `doctor-mid-nite-moon-girl-fire.md` (Approved)
+
+### Implementierte Features
+
+#### Phase 1 – GPU Quote System
+- **GPU-Quote-Renderer**: Pure GPU SDF text rendering, no FBO read/write
+- **Quote-Persistenz & Cache**: `QuoteCacheManager` speichert Quotes als JSON, cached Gemini Upload-IDs mit TTL
+- **Circular Import Fix**: `Quote` dataclass von `gemini_integration.py` nach `src/types.py` (Pydantic BaseModel) verschoben
+
+#### Phase 2 – Quote Workflow & UI
+- **2.1 Quote-CRUD UI**: Editierbare Quote-Liste (Text, Start/End-Zeit, Confidence, Delete), Add/Save/Reset Buttons, scrollbarer Container
+- **2.2 Progress Feedback**: `_upload_audio_with_retry` und `extract_quotes` akzeptieren `progress_callback`. GUI zeigt Schritt-fuer-Schritt Status. Auto Demo-Zitate Fallback bei Fehler.
+- **2.3 Transkript-Caching & Zeitstempel-Verbesserung**: `save/load_transcript()` in `quote_cache.py`. Neues `src/quote_refiner.py` snapped Zeitstempel zu Onset-Peaks/Beat-Frames. 8 Unit Tests in `tests/test_quote_refiner.py`.
+- **2.4 Lokales Fallback**: `src/local_transcription.py` mit optionalem `faster-whisper` Offline-Transkription
+- **2.5 Adaptive Quote-Qualitaet**: Dynamischer Confidence-Threshold (0.4–0.7) basierend auf Quote-Anzahl
+
+#### Phase 1 – Erweiterte Steuerung (GUI)
+- **1.1 Dynamische Visualizer-Parameter**: GUI introspectet `BaseGPUVisualizer.EFFECTS` + `PARAMS` pro Visualizer und generiert Slider dynamisch. Werte in `AppState.viz_extra_params` gespeichert.
+- **1.2 Quote-Config vollstaendig exposed**: 8 neue Controls (Fade, Max Zeichen, Zeilenabstand, Slide-Animation, Scale-In, Glow-Pulse, Blur, Latenz-Offset)
+- **1.3 Projekt-Preset-System**: Save/Load/Auto-Save/Quick-Load nach `projects/*.json`. `_sync_ui_to_state()` stellt komplette UI aus geladenem State wieder her.
+- **1.4 Export-Einstellungen erweitert**: FPS (24/30/60), Codec (h264/h265/prores), Qualitaet (Draft/Standard/High/Lossless)
+- **1.5 Config-Schema aktualisiert**: `schemas.py` listet jetzt alle 18 Visualizer, Universal-Params, `QuoteOverlayConfig`, warmth/film_grain
+
+### Bugs & Fixes in dieser Session
+
+#### DPG API Compatibility
+- **Problem**: DPG v2.3.1 hat keine `dpg.parent()` Methode
+- **Fix**: `dpg.push_container_stack(item)` + `dpg.pop_container_stack()` mit try/finally statt `with dpg.parent()`
+- **Betroffen**: `_rebuild_viz_param_controls()`, `_refresh_quotes_list()`
+
+#### Color Mode Sync
+- **Problem**: `_sync_ui_to_state` setzte `param_color_mode` auf internen String ("chroma"), aber DPG Combo erwartet Display-String ("chroma (dynamisch)")
+- **Fix**: Mapping mit Emoji-Prefixes in beide Richtungen
+
+#### Slider-Wert-Synchronisierung
+- **Problem**: Beim Projekt-Laden wurden Slider-Positionen korrekt gesetzt, aber Wert-Texte behielten alte Werte
+- **Fix**: Neue `_set_slider_and_value(tag, val)` Methode aktualisiert Slider + Wert-Text atomar
+- **Commit**: `70c2fcb`
+
+#### Stale Bytecode
+- **Pattern**: User wiederholt Fehler von alten `.pyc` Dateien bekommen
+- **Workaround**: `__pycache__` loeschen nach strukturellen Aenderungen, Timestamps pruefen
+
+### Test-Status
+- **142 Tests passing** (134 bestehende + 8 neue `test_quote_refiner.py`)
+- **0 Regressions** in bestehenden Test-Suites
+
+### Git
+- **Remote**: `https://github.com/deusexlumen/audio-visualizer-pro`
+- **Latest**: `70c2fcb` auf `master`
+
+**Status:** ✅ Alle Plan-Features implementiert, getestet und gepusht.

@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "audio_path": "C:\\Users\\Buxe\\Downloads\\Digitale_Gorilla-Taktiken_gegen_den_KI-Müll.m4a",
+  "background_path": "C:\\Users\\Buxe\\Downloads\\ChatGPT Image May 25, 2026, 01_54_00 PM.png",
+  "output_dir": "output",
+  "visualizer_type": "spectrum_genesis",
+  "viz_offset_x": 0.0,
+  "viz_offset_y": 0.0,
+  "viz_scale": 1.0,
+  "viz_extra_params": {
+    "color_mode": "chroma",
+    "base_hue": 0.65,
+    "color_saturation": 0.25,
+    "line_width": 0.003,
+    "trail_length": 3,
+    "trail_decay": 0.8500000000000001,
+    "brightness": 0.9,
+    "bar_count": 32,
+    "wave_intensity": 0.1,
+    "glow_radius": 10.0,
+    "color_shift": 0.05,
+    "beat_flash": 0.0
+  },
+  "bg_blur": 1.100000023841858,
+  "bg_vignette": 0.15000000596046448,
+  "bg_opacity": 0.8500000238418579,
+  "pp_contrast": 0.9800000190734863,
+  "pp_saturation": 0.949999988079071,
+  "pp_brightness": 0.0,
+  "pp_warmth": 0.1,
+  "pp_grain": 0.05,
+  "color_mode": "chroma",
+  "base_hue": 0.5400000214576721,
+  "color_saturation": 0.7900000214576721,
+  "resolution": [
+    1280,
+    720
+  ],
+  "render_fps": 30,
+  "gpu_encode": true,
+  "quotes_enabled": true,
+  "quote_config": {
+    "position": "bottom",
+    "font_size": 52,
+    "display_duration": 8.0,
+    "fade_duration": 0.6,
+    "max_chars_per_line": 40,
+    "line_spacing": 10,
+    "slide_animation": "none",
+    "scale_in": true,
+    "glow_pulse": false,
+    "compensation_blur": 12.0,
+    "latency_offset": 0.0
+  },
+  "quotes": [
+    {
+      "text": "Wir befinden uns mitten in der Ära des sogenannten Dead Internet.",
+      "start_time": 21.17,
+      "end_time": 22.8,
+      "confidence": 0.95
+    },
+    {
+      "text": "Es geht um die Wiedererlangung eurer digitalen Souveränität.",
+      "start_time": 46.03,
+      "end_time": 47.6,
+      "confidence": 0.95
+    },
+    {
+      "text": "Der echte Mensch, also ihr vor dem Bildschirm, der stört in diesem geschlossenen System.",
+      "start_time": 222.83,
+      "end_time": 224.37,
+      "confidence": 0.9
+    },
+    {
+      "text": "Das System misst unser Gehirn von morgens bis abends mit komplett leeren digitalen Kalorien.",
+      "start_time": 317.9,
+      "end_time": 319.5,
+      "confidence": 0.95
+    },
+    {
+      "text": "Wir fressen uns da durch, bis der Sättigungspunkt schon längst überschritten ist.",
+      "start_time": 322.93,
+      "end_time": 324.47,
+      "confidence": 0.9
+    },
+    {
+      "text": "Aber gleichzeitig verhungern wir kognitiv.",
+      "start_time": 327.6,
+      "end_time": 329.13,
+      "confidence": 0.9
+    },
+    {
+      "text": "Das Netz laut unseren Quellen aktuell in zwei völlig unterschiedliche Welten auf.",
+      "start_time": 400.2,
+      "end_time": 401.8,
+      "confidence": 0.9
+    },
+    {
+      "text": "Wenn du nicht für das Produkt bezahlst, bist du das Produkt.",
+      "start_time": 499.07,
+      "end_time": 500.63,
+      "confidence": 0.95
+    },
+    {
+      "text": "Das ist als würdest du in einer Stadt leben und der öffentliche Trinkwasserbrunnen auf dem Marktplatz ist plötzlich schleichend giftig geworden.",
+      "start_time": 509.07,
+      "end_time": 510.63,
+      "confidence": 0.95
+    },
+    {
+      "text": "Inhalt schlägt Form.",
+      "start_time": 1240.47,
+      "end_time": 1241.5,
+      "confidence": 0.95
+    }
+  ]
+}

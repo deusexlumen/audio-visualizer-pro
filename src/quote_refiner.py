@@ -38,13 +38,20 @@ def refine_quote_timestamps(
     Returns:
         Neue Liste von Quote-Objekten mit verfeinerten Zeitstempeln
     """
+    print(f"[QUOTE_REFINER] LADE NEUE VERSION - features type: {type(features)}")
     if not quotes:
         return quotes
 
-    fps = features.get("fps", 30)
-    onset = features.get("onset")
-    beat_frames = features.get("beat_frames")
-    duration = features.get("duration", 0.0)
+    # Unterstuetzt sowohl Dict als auch Pydantic-Modelle (z.B. AudioFeatures)
+    def _get(key, default=None):
+        if isinstance(features, dict):
+            return features.get(key, default)
+        return getattr(features, key, default)
+
+    fps = _get("fps", 30)
+    onset = _get("onset")
+    beat_frames = _get("beat_frames")
+    duration = _get("duration", 0.0)
 
     if duration <= 0:
         return quotes

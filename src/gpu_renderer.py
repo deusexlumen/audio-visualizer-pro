@@ -20,7 +20,6 @@ from .analyzer import AudioAnalyzer
 from .types import AudioFeatures, Quote
 from .gpu_visualizers import get_visualizer
 from .gpu_text_renderer import SDFFontAtlas, GPUTextRenderer
-from .gpu_quote_renderer import GPUQuoteRenderer
 from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
 
 
@@ -201,21 +200,25 @@ class GPUBatchRenderer:
             temp_video.name, codec, quality, gpu_encode=gpu_encode
         )
 
+        # FFmpeg-stderr in Log-Datei umleiten, damit Encoder-Fehler diagnosebar sind
+        self._ffmpeg_stderr_path = temp_video.name.replace(".mp4", "_ffmpeg_stderr.log")
+        self._ffmpeg_stderr_file = open(self._ffmpeg_stderr_path, "wb")
         process = subprocess.Popen(
             ffmpeg_cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=self._ffmpeg_stderr_file,
             bufsize=8 * 1024 * 1024,  # 8MB Buffer fuer schnelleres Schreiben
         )
 
         try:
             # Quote-Renderer initialisieren falls noetig
             if quotes and quote_config and quote_config.enabled:
-                self._init_text_renderer()
-            
-            # Frame-Index fuer Quote-Buffer bauen (O(1) Lookups im Render-Loop)
-            self._build_quote_frame_index(quotes, quote_config, frame_count)
+                try:
+                    self._init_quote_overlay(quotes, quote_config, frame_count, self.fps)
+                except Exception as e:
+                    print(f"[GPU] Quote-Initialisierung fehlgeschlagen: {e}")
+                    quotes = None  # Quotes fuer diesen Render deaktivieren
 
             # === PRODUCER-CONSUMER: Render und Encode parallel ===
             # Der Render-Thread rendert Frames in eine Queue.
@@ -298,13 +301,23 @@ class GPUBatchRenderer:
                     else:
                         target_fbo = self.fbo
                     
-                    if quotes and quote_config and quote_config.enabled:
-                        target_fbo.use()
-                        self._render_quotes_gpu(time, quotes, quote_config, frame_idx=i)
-                        if _DEBUG and i == 0:
-                            self._save_debug(target_fbo, "debug_step5_after_quotes.png")
-                    
                     pixels = target_fbo.read(components=3)
+                    
+                    # PIL-basierte Quote-Overlays auf das Frame-Array anwenden
+                    if quotes and quote_config and quote_config.enabled:
+                        try:
+                            arr = np.frombuffer(pixels, dtype=np.uint8).copy().reshape((self.height, self.width, 3))
+                            arr = self._quote_overlay_renderer.apply(arr, time, frame_idx=i)
+                            pixels = arr.tobytes()
+                            if _DEBUG and i == 0:
+                                from PIL import Image
+                                Image.fromarray(arr).save("debug_step5_after_quotes.png")
+                                print(f"[GPU] DEBUG: debug_step5_after_quotes.png gespeichert")
+                        except Exception as e:
+                            # Quote-Renderer darf NIEMALS den gesamten Render killen
+                            print(f"[GPU] Quote-Render-Fehler bei Frame {i} ({time:.2f}s): {e}")
+                            # Weiter mit dem naechsten Frame
+                    
                     if _DEBUG and i == 0:
                         self._save_debug(target_fbo, "debug_step6_final.png")
                     
@@ -345,8 +358,28 @@ class GPUBatchRenderer:
 
             process.wait()
 
+            # stderr-File schliessen, damit es gelesen werden kann
+            try:
+                self._ffmpeg_stderr_file.close()
+            except Exception:
+                pass
+
             if process.returncode != 0:
-                raise RuntimeError("FFmpeg Video-Encoding fehlgeschlagen")
+                stderr_msg = ""
+                try:
+                    with open(self._ffmpeg_stderr_path, "r", encoding="utf-8", errors="replace") as f:
+                        stderr_msg = f.read().strip()
+                except Exception:
+                    pass
+                if stderr_msg:
+                    raise RuntimeError(
+                        f"FFmpeg Video-Encoding fehlgeschlagen (Code {process.returncode}):\n{stderr_msg}"
+                    )
+                else:
+                    raise RuntimeError(
+                        f"FFmpeg Video-Encoding fehlgeschlagen (Code {process.returncode}). "
+                        f"Stderr-Log: {self._ffmpeg_stderr_path}"
+                    )
 
             # Audio mit dem Video muxen
             self._mux_audio(temp_video.name, audio_path, output_path)
@@ -354,16 +387,37 @@ class GPUBatchRenderer:
 
         finally:
             # FFmpeg-Prozess sauber beenden falls noch aktiv
-            if process.poll() is None:
-                process.terminate()
+            if "process" in locals() and process is not None:
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+
+            # stderr-File schliessen falls noch offen
+            if hasattr(self, "_ffmpeg_stderr_file") and self._ffmpeg_stderr_file:
                 try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
+                    self._ffmpeg_stderr_file.close()
+                except Exception:
+                    pass
+                self._ffmpeg_stderr_file = None
 
             # Temporaere Datei aufraeumen
             if os.path.exists(temp_video.name):
                 os.unlink(temp_video.name)
+            # Stderr-Log aufraeumen NUR bei Erfolg (beim Fehler behalten fuer Diagnose)
+            returncode_ok = "process" in locals() and process is not None and process.returncode == 0
+            if (
+                hasattr(self, "_ffmpeg_stderr_path")
+                and self._ffmpeg_stderr_path
+                and os.path.exists(self._ffmpeg_stderr_path)
+                and returncode_ok
+            ):
+                try:
+                    os.unlink(self._ffmpeg_stderr_path)
+                except Exception:
+                    pass
 
     def _save_debug(self, fbo_obj, filename: str):
         """Speichert den aktuellen FBO-Inhalt als PNG fuer Debugging."""
@@ -927,158 +981,12 @@ class GPUBatchRenderer:
         self._bg_vao.render(mode=moderngl.TRIANGLE_STRIP)
         self.ctx.disable(moderngl.BLEND)
     
-    def _init_text_renderer(self):
-        """Lazy-Initialisierung des GPU Quote-Renderers.
-
-        Erstellt einen GPUQuoteRenderer mit SDF-Font-Atlas.
-        Gibt vorhandene Ressourcen explizit frei, bevor neue erzeugt werden.
-        """
-        if hasattr(self, '_quote_gpu_renderer') and self._quote_gpu_renderer is not None:
+    def _init_quote_overlay(self, quotes, quote_config, frame_count, fps):
+        """Initialisiert den PIL-basierten Quote-Overlay-Renderer."""
+        if hasattr(self, '_quote_overlay_renderer') and self._quote_overlay_renderer is not None:
             return
-
-        # Defensives Cleanup
-        if hasattr(self, '_quote_gpu_renderer') and self._quote_gpu_renderer:
-            self._quote_gpu_renderer.release()
-            self._quote_gpu_renderer = None
-
-        font_path = "C:/Windows/Fonts/arial.ttf"
-        if not os.path.exists(font_path):
-            for fallback in ["C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/calibri.ttf"]:
-                if os.path.exists(fallback):
-                    font_path = fallback
-                    break
-
-        self._quote_gpu_renderer = GPUQuoteRenderer(
-            self.ctx, font_path, width=self.width, height=self.height
-        )
-        
-        # Box-Shader fuer Quote-Hintergruende (abgerundetes Rechteck)
-        self._box_prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
-            uniform vec2 u_resolution;
-            in vec2 in_pos;
-            in vec2 in_center;
-            in vec2 in_size;
-            in vec4 in_color;
-            out vec4 v_color;
-            out vec2 v_local;
-            out vec2 v_size;
-            void main() {
-                vec2 pixel = in_center + in_pos * in_size;
-                vec2 ndc = (pixel / u_resolution) * 2.0 - 1.0;
-                ndc.y = -ndc.y;
-                gl_Position = vec4(ndc, 0.0, 1.0);
-                v_color = in_color;
-                v_local = in_pos * in_size;  // Pixel-Koordinaten innerhalb der Box
-                v_size = in_size;
-            }
-            """,
-            fragment_shader="""
-            #version 330
-            in vec4 v_color;
-            in vec2 v_local;
-            in vec2 v_size;
-            out vec4 f_color;
-            
-            float sdRoundBox(vec2 p, vec2 b, float r) {
-                vec2 d = abs(p) - b + r;
-                return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)) - r;
-            }
-            
-            uniform float u_radius;
-            void main() {
-                float radius = min(v_size.x, v_size.y) * u_radius;
-                float d = sdRoundBox(v_local, v_size, radius);
-                // Anti-Aliasing: 1 Pixel weicher Uebergang am Rand
-                float edge_alpha = 1.0 - smoothstep(0.0, 1.0, d);
-                if (edge_alpha < 0.01) discard;
-                float alpha = edge_alpha * v_color.a;
-                f_color = vec4(v_color.rgb, alpha);
-            }
-            """,
-        )
-        quad = np.array([[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]], dtype=np.float32)
-        box_quad_vbo = self.ctx.buffer(quad.tobytes())
-        self._box_vbo = self.ctx.buffer(reserve=10 * 8 * 4, dynamic=True)
-        self._box_vao = self.ctx.vertex_array(
-            self._box_prog,
-            [
-                (box_quad_vbo, "2f", "in_pos"),
-                (self._box_vbo, "2f 2f 4f /i", "in_center", "in_size", "in_color"),
-            ],
-        )
-
-    def _build_quote_frame_index(self, quotes, quote_config, frame_count):
-        """Baut einen vorberechneten Frame-Index fuer O(1) Quote-Lookups."""
-        self._quote_frame_index = None
-        if not quotes or not quote_config:
-            return
-        
-        latency_offset = getattr(quote_config, 'latency_offset', 0.0)
-        display_duration = getattr(quote_config, 'display_duration', 8.0)
-        
-        self._quote_frame_index = [[] for _ in range(frame_count)]
-        self._quote_config_display_duration = display_duration
-        self._quote_latency_offset = latency_offset
-        
-        for quote in quotes:
-            adj_start = quote.start_time + latency_offset
-            effective_end = min(quote.end_time, quote.start_time + display_duration)
-            adj_end = effective_end + latency_offset
-            start_frame = max(0, min(int(adj_start * self.fps), frame_count - 1))
-            end_frame = max(0, min(int(adj_end * self.fps), frame_count - 1))
-            
-            for f in range(start_frame, end_frame + 1):
-                self._quote_frame_index[f].append(quote)
-
-    def _get_active_quote(self, time_seconds: float, quotes: list, display_duration: float, frame_idx: int = None):
-        """Findet das aktuell aktive Zitat. Nutzt Frame-Index wenn verfuegbar."""
-        if frame_idx is not None and hasattr(self, '_quote_frame_index') and self._quote_frame_index is not None:
-            if 0 <= frame_idx < len(self._quote_frame_index):
-                candidates = self._quote_frame_index[frame_idx]
-                latency_offset = getattr(self, '_quote_latency_offset', 0.0)
-                for quote in candidates:
-                    effective_end = min(quote.end_time, quote.start_time + display_duration)
-                    adj_start = quote.start_time + latency_offset
-                    adj_end = effective_end + latency_offset
-                    if adj_start <= time_seconds <= adj_end:
-                        return quote
-                return None
-        
-        # Fallback: lineare Suche
-        for quote in quotes:
-            effective_end = min(quote.end_time, quote.start_time + display_duration)
-            if quote.start_time <= time_seconds <= effective_end:
-                return quote
-        return None
-
-    def _calculate_fade_alpha(self, time_seconds: float, quote, fade_duration: float, display_duration: float):
-        """Berechnet Fade-Alpha (0.0 - 1.0)."""
-        effective_end = min(quote.end_time, quote.start_time + display_duration)
-        
-        if time_seconds < quote.start_time + fade_duration:
-            progress = (time_seconds - quote.start_time) / fade_duration
-            return max(0.0, min(1.0, progress))
-        elif time_seconds > effective_end - fade_duration:
-            progress = (effective_end - time_seconds) / fade_duration
-            return max(0.0, min(1.0, progress))
-        return 1.0
-
-    def _render_quotes_gpu(self, time: float, quotes: list, config, frame_idx: int = None):
-        """Rendert Quote-Overlays via GPUQuoteRenderer.
-
-        Direktes GPU-Rendering ohne FBO-Read/Write. Sehr viel schneller
-        als der alte PIL-basierte Ansatz.
-        """
-        if not hasattr(self, '_quote_gpu_renderer') or self._quote_gpu_renderer is None:
-            return
-
-        quote = self._get_active_quote(time, quotes, config.display_duration, frame_idx)
-        if quote is None:
-            return
-
-        self._quote_gpu_renderer.render(quote, config, time, frame_idx)
+        self._quote_overlay_renderer = QuoteOverlayRenderer(quotes=quotes, config=quote_config)
+        self._quote_overlay_renderer.build_frame_index(frame_count, fps)
 
     def _mux_audio(self, video_path: str, audio_path: str, output_path: str):
         """Kombiniert Video-Stream mit Original-Audio.
@@ -1114,6 +1022,15 @@ class GPUBatchRenderer:
             if hasattr(self, "fbo") and self.fbo:
                 self.fbo.release()
                 self.fbo = None
+            if hasattr(self, "viz_fbo") and self.viz_fbo:
+                self.viz_fbo.release()
+                self.viz_fbo = None
+            if hasattr(self, "bg_fbo") and self.bg_fbo:
+                self.bg_fbo.release()
+                self.bg_fbo = None
+            if hasattr(self, "_dummy_black_texture") and self._dummy_black_texture:
+                self._dummy_black_texture.release()
+                self._dummy_black_texture = None
             if hasattr(self, "quad_vao") and self.quad_vao:
                 self.quad_vao.release()
                 self.quad_vao = None
@@ -1129,9 +1046,19 @@ class GPUBatchRenderer:
             if hasattr(self, "_font_texture") and self._font_texture:
                 self._font_texture.release()
                 self._font_texture = None
-            if hasattr(self, "_quote_gpu_renderer") and self._quote_gpu_renderer:
-                self._quote_gpu_renderer.release()
-                self._quote_gpu_renderer = None
+            if hasattr(self, "_quote_overlay_renderer") and self._quote_overlay_renderer:
+                self._quote_overlay_renderer = None
+            # Zusaetzliche Shader/VAO/VBO aus dem Render-Pipeline freigeben
+            for name in ("_pp_prog", "_pp_vao", "_composite_prog", "_composite_vao",
+                         "_blit_prog", "_blit_vao", "_blit_vbo", "_bg_prog", "_bg_vao",
+                         "_bg_vbo", "_box_prog", "_box_vao", "_box_vbo"):
+                obj = getattr(self, name, None)
+                if obj:
+                    try:
+                        obj.release()
+                    except Exception:
+                        pass
+                    setattr(self, name, None)
             if hasattr(self, "ctx") and self.ctx:
                 self.ctx.release()
                 self.ctx = None
@@ -1140,7 +1067,10 @@ class GPUBatchRenderer:
 
     def __del__(self):
         """Gibt GPU-Ressourcen beim Zerstoeren der Instanz frei."""
-        self.release()
+        try:
+            self.release()
+        except Exception:
+            pass
 
 
 class GPUPreviewRenderer(GPUBatchRenderer):

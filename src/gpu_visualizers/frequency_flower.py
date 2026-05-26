@@ -288,11 +288,14 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
 
             points_left = []
             points_right = []
-            for i in range(int(stem_length)):
-                y = stem_top + i
-                x_offset = np.sin(i * 0.02 + progress * 5.0) * bend
+            max_stem_points = 200
+            step = max(1.0, stem_length / max_stem_points)
+            for i in range(int(stem_length / step)):
+                t = i * step
+                y = stem_top + t
+                x_offset = np.sin(t * 0.02 + progress * 5.0) * bend
                 x = stem_x + x_offset
-                w = stem_width * (1.0 - i / stem_length * 0.3)
+                w = stem_width * (1.0 - t / stem_length * 0.3)
                 points_left.append((x - w / 2.0, y))
                 points_right.append((x + w / 2.0, y))
 
@@ -317,8 +320,17 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
         # Polygone (Bluetenblaetter + Staengel)
         if poly_verts:
             arr = np.array(poly_verts, dtype=np.float32)
+            data = arr.tobytes()
+            # VBO bei Bedarf vergroessern
+            if len(data) > self._poly_vbo.size:
+                self._poly_vbo = self.ctx.buffer(data, dynamic=True)
+                self._poly_vao = self.ctx.vertex_array(
+                    self._poly_prog,
+                    [(self._poly_vbo, "2f 3f 1f", "in_pos", "in_color", "in_alpha")],
+                )
+            else:
+                self._poly_vbo.write(data)
             self._poly_prog["u_resolution"].value = (self.width, self.height)
-            self._poly_vbo.write(arr.tobytes())
             self._poly_vao.render(mode=moderngl.TRIANGLES)
 
         # Partikel (Stempel + Pollen + Highlights)

@@ -107,6 +107,7 @@ class GPUQuoteRenderer:
         # Cache für aktives Zitat (vermeidet Neuberechnung)
         self._cached_quote_text: Optional[str] = None
         self._cached_lines: List[str] = []
+        self._cached_font_size: int = 0
         self._cached_box_w: float = 0.0
         self._cached_box_h: float = 0.0
 
@@ -118,135 +119,238 @@ class GPUQuoteRenderer:
         if quote is None:
             return
 
-        # --- Fade-Alpha berechnen ---
-        fade = getattr(config, 'fade_duration', 0.6)
-        display_dur = getattr(config, 'display_duration', 8.0)
-        effective_end = min(quote.end_time, quote.start_time + display_dur)
-        latency = getattr(config, 'latency_offset', 0.0)
-        t = time_seconds - latency
-
-        if t < quote.start_time or t > effective_end:
+        # Defensive: text muss ein nicht-leerer String sein
+        quote_text = getattr(quote, 'text', None)
+        if not quote_text or not isinstance(quote_text, str):
             return
 
-        if t < quote.start_time + fade:
-            alpha = (t - quote.start_time) / fade
-        elif t > effective_end - fade:
-            alpha = (effective_end - t) / fade
-        else:
-            alpha = 1.0
-        alpha = max(0.0, min(1.0, alpha))
-        if alpha <= 0.01:
-            return
+        try:
+            # --- Fade-Alpha berechnen ---
+            fade = getattr(config, 'fade_duration', 0.6)
+            if fade <= 0.0:
+                fade = 0.001  # Division by Zero verhindern
+            display_dur = getattr(config, 'display_duration', 8.0)
+            effective_end = min(quote.end_time, quote.start_time + display_dur)
+            latency = getattr(config, 'latency_offset', 0.0)
+            t = time_seconds - latency
 
-        # --- Text vorbereiten (caching) ---
-        if self._cached_quote_text != quote.text:
-            self._cached_quote_text = quote.text
-            self._cached_lines = self._wrap_text(quote.text, config)
-            # Box-Größe schätzen
+            if t < quote.start_time or t > effective_end:
+                return
+
+            if t < quote.start_time + fade:
+                alpha = (t - quote.start_time) / fade
+            elif t > effective_end - fade:
+                alpha = (effective_end - t) / fade
+            else:
+                alpha = 1.0
+            alpha = max(0.0, min(1.0, alpha))
+            if alpha <= 0.01:
+                return
+
+            # --- Text vorbereiten (caching) ---
+            if self._cached_quote_text != quote_text:
+                self._cached_quote_text = quote_text
+                scale = getattr(config, 'scale', 1.0)
+                base_font_size = int(config.font_size * scale)
+                padding = int(config.box_padding * scale)
+                max_box_w = self.width * getattr(config, 'max_width_ratio', 0.75)
+                auto_scale = getattr(config, 'auto_scale_font', False)
+                min_font = getattr(config, 'min_font_size', 16)
+
+                font_size = base_font_size
+                while True:
+                    # Iterativ umbrechen bis es in die max Breite passt (CR-4)
+                    estimated_chars = config.max_chars_per_line
+                    while estimated_chars > 10:
+                        lines = self._wrap_text(quote_text, config, estimated_chars)
+                        max_w = 0
+                        for line in lines:
+                            w = self._text_width(line, font_size)
+                            max_w = max(max_w, w)
+                        if max_w + padding * 2 <= max_box_w:
+                            break
+                        estimated_chars -= 2
+                    else:
+                        lines = self._wrap_text(quote_text, config, estimated_chars)
+                        max_w = max((self._text_width(line, font_size) for line in lines), default=0)
+
+                    # Auto-Scale: wenn es immer noch nicht passt, Schrift verkleinern
+                    if max_w + padding * 2 <= max_box_w or not auto_scale or font_size <= min_font:
+                        break
+                    font_size -= 2
+
+                self._cached_lines = lines
+                self._cached_font_size = font_size
+                line_h = font_size * 1.4
+                self._cached_box_w = min(max_w + padding * 2, max_box_w)
+                self._cached_box_h = len(self._cached_lines) * line_h + padding * 2
+
+            lines = self._cached_lines
+            if not lines:
+                return
+
             scale = getattr(config, 'scale', 1.0)
-            font_size = int(config.font_size * scale)
-            line_h = font_size * 1.4
+            font_size = getattr(self, '_cached_font_size', int(config.font_size * scale))
+            line_height_px = font_size * 1.4
             padding = int(config.box_padding * scale)
-            max_w = 0
-            for line in self._cached_lines:
-                w = self._text_width(line, font_size)
-                max_w = max(max_w, w)
-            self._cached_box_w = min(max_w + padding * 2,
-                                     self.width * config.max_width_ratio)
-            self._cached_box_h = len(self._cached_lines) * line_h + padding * 2
+            box_w = self._cached_box_w
+            box_h = self._cached_box_h
 
-        lines = self._cached_lines
-        scale = getattr(config, 'scale', 1.0)
-        font_size = int(config.font_size * scale)
-        line_height_px = font_size * 1.4
-        padding = int(config.box_padding * scale)
-        box_w = self._cached_box_w
-        box_h = self._cached_box_h
+            # --- Position berechnen ---
+            offset_x = getattr(config, 'offset_x', 0)
+            offset_y = getattr(config, 'offset_y', 0)
+            margin = getattr(config, 'box_margin_bottom', 100)
 
-        # --- Position berechnen ---
-        offset_x = getattr(config, 'offset_x', 0)
-        offset_y = getattr(config, 'offset_y', 0)
-        margin = getattr(config, 'box_margin_bottom', 100)
+            raw_box_x = (self.width - box_w) / 2.0 + offset_x
+            position = getattr(config, 'position', 'bottom')
+            if position == "bottom":
+                raw_box_y = self.height - box_h - margin + offset_y
+            elif position == "top":
+                raw_box_y = margin + offset_y
+            else:  # center
+                raw_box_y = (self.height - box_h) / 2.0 + offset_y
 
-        box_x = (self.width - box_w) / 2.0 + offset_x
-        if config.position == "bottom":
-            box_y = self.height - box_h - margin + offset_y
-        elif config.position == "top":
-            box_y = margin + offset_y
-        else:  # center
-            box_y = (self.height - box_h) / 2.0 + offset_y
+            # --- Slide-In/Out Animation (FE-4) ---
+            slide_offset_x = 0.0
+            slide_offset_y = 0.0
+            if alpha < 1.0:
+                is_fade_in = (time_seconds - latency) < quote.start_time + fade
+                if is_fade_in:
+                    anim = getattr(config, 'slide_animation', 'none')
+                    dist = getattr(config, 'slide_distance', 100.0)
+                else:
+                    anim = getattr(config, 'slide_out_animation', 'none')
+                    dist = getattr(config, 'slide_out_distance', 100.0)
+                
+                slide_factor = (1.0 - alpha) * dist
+                if anim == "left":
+                    slide_offset_x = -slide_factor
+                elif anim == "right":
+                    slide_offset_x = slide_factor
+                elif anim == "up":
+                    slide_offset_y = -slide_factor
+                elif anim == "down":
+                    slide_offset_y = slide_factor
 
-        # Clamp
-        box_x = max(0.0, min(box_x, self.width - box_w))
-        box_y = max(0.0, min(box_y, self.height - box_h))
+            box_x = raw_box_x + slide_offset_x
+            box_y = raw_box_y + slide_offset_y
 
-        # --- Box rendern ---
-        self.ctx.enable(moderngl.BLEND)
-        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+            # Clamp
+            box_x = max(0.0, min(box_x, self.width - box_w))
+            box_y = max(0.0, min(box_y, self.height - box_h))
 
-        box_color = config.box_color
-        if len(box_color) == 3:
-            box_color = (*box_color, 200)
-        shadow = getattr(config, 'shadow_offset', (3, 3))
-        shadow_color = getattr(config, 'shadow_color', (0, 0, 0, 120))
-        if len(shadow_color) == 3:
-            shadow_color = (*shadow_color, 120)
+            # --- Box vorbereiten ---
+            box_color = getattr(config, 'box_color', (26, 26, 46, 200))
+            if box_color is None:
+                box_color = (26, 26, 46, 200)
+            if len(box_color) == 3:
+                box_color = (*box_color, 200)
+            shadow = getattr(config, 'shadow_offset', (3, 3))
+            if shadow is None:
+                shadow = (3, 3)
+            shadow_color = getattr(config, 'shadow_color', (0, 0, 0, 120))
+            if shadow_color is None:
+                shadow_color = (0, 0, 0, 120)
+            if len(shadow_color) == 3:
+                shadow_color = (*shadow_color, 120)
 
-        self._box_prog["u_resolution"].value = (self.width, self.height)
-        self._box_prog["u_box"].value = (box_x, box_y, box_w, box_h)
-        self._box_prog["u_radius"].value = float(config.box_radius * scale)
-        self._box_prog["u_color"].value = (
-            box_color[0] / 255.0,
-            box_color[1] / 255.0,
-            box_color[2] / 255.0,
-            box_color[3] / 255.0,
-        )
-        self._box_prog["u_alpha"].value = alpha
-        self._box_prog["u_shadow"].value = shadow
-        self._box_prog["u_shadow_color"].value = (
-            shadow_color[0] / 255.0,
-            shadow_color[1] / 255.0,
-            shadow_color[2] / 255.0,
-            shadow_color[3] / 255.0,
-        )
-        self._box_prog["u_shadow_alpha"].value = shadow_color[3] / 255.0
-        blur = getattr(config, 'compensation_blur', 12.0) * scale
-        self._box_prog["u_blur"].value = blur
+            # --- GPU Spatial Compensation (ME-6) ---
+            self.ctx.enable(moderngl.BLEND)
+            self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
 
-        self._box_vao.render(mode=moderngl.TRIANGLES)
+            if getattr(config, 'spatial_compensation', True):
+                comp_pad = padding * 2
+                comp_darken = getattr(config, 'compensation_darken', 0.55)
+                comp_color = (
+                    float(box_color[0]) / 255.0 * comp_darken,
+                    float(box_color[1]) / 255.0 * comp_darken,
+                    float(box_color[2]) / 255.0 * comp_darken,
+                    float(box_color[3]) / 255.0 * 0.6,
+                )
+                self._box_prog["u_resolution"].value = (self.width, self.height)
+                self._box_prog["u_box"].value = (box_x - comp_pad, box_y - comp_pad,
+                                                  box_w + comp_pad * 2, box_h + comp_pad * 2)
+                self._box_prog["u_radius"].value = float(getattr(config, 'box_radius', 16) * scale * 1.5)
+                self._box_prog["u_color"].value = comp_color
+                self._box_prog["u_alpha"].value = float(alpha) * 0.5
+                self._box_prog["u_shadow"].value = (0.0, 0.0)
+                self._box_prog["u_shadow_color"].value = (0.0, 0.0, 0.0, 0.0)
+                self._box_prog["u_shadow_alpha"].value = 0.0
+                self._box_prog["u_blur"].value = float(getattr(config, 'compensation_blur', 12.0) * scale)
+                self._box_vao.render(mode=moderngl.TRIANGLES)
 
-        # --- Text rendern ---
-        text_color = getattr(config, 'font_color', (255, 255, 255))
-        text_rgb = (text_color[0] / 255.0, text_color[1] / 255.0, text_color[2] / 255.0)
+            # --- Box rendern ---
+            self._box_prog["u_resolution"].value = (self.width, self.height)
+            self._box_prog["u_box"].value = (box_x, box_y, box_w, box_h)
+            self._box_prog["u_radius"].value = float(getattr(config, 'box_radius', 16) * scale)
+            self._box_prog["u_color"].value = (
+                float(box_color[0]) / 255.0,
+                float(box_color[1]) / 255.0,
+                float(box_color[2]) / 255.0,
+                float(box_color[3]) / 255.0,
+            )
+            self._box_prog["u_alpha"].value = float(alpha)
+            self._box_prog["u_shadow"].value = (float(shadow[0]), float(shadow[1]))
+            self._box_prog["u_shadow_color"].value = (
+                float(shadow_color[0]) / 255.0,
+                float(shadow_color[1]) / 255.0,
+                float(shadow_color[2]) / 255.0,
+                float(shadow_color[3]) / 255.0,
+            )
+            self._box_prog["u_shadow_alpha"].value = float(shadow_color[3]) / 255.0
+            blur = getattr(config, 'compensation_blur', 12.0) * scale
+            self._box_prog["u_blur"].value = float(blur)
 
-        text_x = box_x + box_w / 2.0
-        text_y = box_y + padding + font_size * 0.85
+            self._box_vao.render(mode=moderngl.TRIANGLES)
 
-        glow = getattr(config, 'glow_pulse', False) and alpha < 1.0
-        glow_val = 0.3 if glow else 0.0
+            # --- Text rendern ---
+            text_color = getattr(config, 'font_color', (255, 255, 255))
+            if text_color is None:
+                text_color = (255, 255, 255)
+            text_rgb = (
+                float(text_color[0]) / 255.0,
+                float(text_color[1]) / 255.0,
+                float(text_color[2]) / 255.0,
+            )
 
-        align = getattr(config, 'text_align', 'center')
+            text_x = box_x + box_w / 2.0
+            # Vertikale Zentrierung des Textblocks in der Box (CR-5)
+            line_px = font_size * 1.4
+            total_text_h = len(lines) * line_px
+            text_y = box_y + padding + (box_h - 2 * padding - total_text_h) / 2.0 + font_size * 0.85
 
-        self._text_renderer.render_multiline_text(
-            lines, text_x, text_y,
-            line_height=1.4, size=font_size,
-            color=text_rgb, alpha=alpha,
-            align=align,
-            glow=glow_val, glow_color=text_rgb,
-            smoothing=0.25,
-            outline_width=0.0,
-            shadow_offset=(1.0, 1.0),
-            shadow_color=(0.0, 0.0, 0.0),
-            shadow_alpha=0.4,
-        )
+            glow = getattr(config, 'glow_pulse', False) and alpha < 1.0
+            glow_val = 0.3 if glow else 0.0
 
-        # Blending bleibt aktiv (Aufrufer verwaltet State)
+            align = getattr(config, 'text_align', 'center')
 
-    def _wrap_text(self, text: str, config) -> List[str]:
+            self._text_renderer.render_multiline_text(
+                lines, text_x, text_y,
+                line_height=1.4, size=font_size,
+                color=text_rgb, alpha=alpha,
+                align=align,
+                glow=glow_val, glow_color=text_rgb,
+                smoothing=0.25,
+                outline_width=0.0,
+                shadow_offset=(1.0, 1.0),
+                shadow_color=(0.0, 0.0, 0.0),
+                shadow_alpha=0.4,
+            )
+
+            # Blending bleibt aktiv (Aufrufer verwaltet State)
+        except Exception as e:
+            # Quote-Renderer-Fehler duerfen niemals den ganzen Render killen
+            import traceback
+            print(f"[GPUQuoteRenderer] Fehler beim Rendern von Quote: {e}")
+            traceback.print_exc()
+            return
+
+    def _wrap_text(self, text: str, config, max_chars: int = None) -> List[str]:
         """Bricht Text in Zeilen um."""
         import textwrap
-        max_chars = config.max_chars_per_line
-        return textwrap.wrap(text, width=max_chars, break_long_words=False,
+        if max_chars is None:
+            max_chars = config.max_chars_per_line
+        return textwrap.wrap(text, width=max_chars, break_long_words=True,
                              replace_whitespace=False)
 
     def _text_width(self, text: str, size: float) -> float:

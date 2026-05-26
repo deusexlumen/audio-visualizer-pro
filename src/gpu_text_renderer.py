@@ -76,7 +76,7 @@ class SDFFontAtlas:
         self._generate_atlas()
         # Konvertiere float32 -> uint8 fuer die Textur (normalized)
         data_u8 = (np.clip(self.texture_data, 0.0, 1.0) * 255).astype(np.uint8)
-        # PIL ist top-down, OpenGL erwartet bottom-up
+        # OpenGL erwartet bottom-up; unser Array ist top-down
         data_u8 = np.flipud(data_u8)
         tex = ctx.texture((self.atlas_width, self.atlas_height), 1,
                           data_u8.tobytes(), dtype="f1")
@@ -194,11 +194,16 @@ class SDFFontAtlas:
         return self.glyphs.get(char)
 
     def get_uv(self, glyph: GlyphInfo) -> tuple[float, float, float, float]:
-        """Berechnet UV-Koordinaten fuer eine Glyphe im Atlas."""
+        """Berechnet UV-Koordinaten fuer eine Glyphe im Atlas.
+
+        Der Atlas wird mit np.flipud hochgeladen (top-down -> bottom-up).
+        Daher muessen die V-Koordinaten invertiert werden.
+        """
         u1 = glyph.x / self.atlas_width
-        v1 = glyph.y / self.atlas_height
         u2 = (glyph.x + glyph.w) / self.atlas_width
-        v2 = (glyph.y + glyph.h) / self.atlas_height
+        # V invertieren wegen np.flipud
+        v1 = 1.0 - (glyph.y + glyph.h) / self.atlas_height
+        v2 = 1.0 - glyph.y / self.atlas_height
         return u1, v1, u2, v2
 
 
@@ -349,13 +354,38 @@ class GPUTextRenderer:
             glow_color: RGB-Farbe des Glows.
             smoothing: Kantenglaettung (0.0 = hart, 0.5 = sehr weich).
         """
+        if not text or not isinstance(text, str):
+            return
+        if not (0.0 <= alpha <= 1.0):
+            alpha = max(0.0, min(1.0, float(alpha)))
+        if size <= 0:
+            return
+
+        # Defensive: Farben validieren
+        try:
+            color = (float(color[0]), float(color[1]), float(color[2]))
+        except Exception:
+            color = (1.0, 1.0, 1.0)
+        try:
+            glow_color = (float(glow_color[0]), float(glow_color[1]), float(glow_color[2]))
+        except Exception:
+            glow_color = (1.0, 1.0, 1.0)
+        try:
+            outline_color = (float(outline_color[0]), float(outline_color[1]), float(outline_color[2]))
+        except Exception:
+            outline_color = (0.0, 0.0, 0.0)
+        try:
+            shadow_color = (float(shadow_color[0]), float(shadow_color[1]), float(shadow_color[2]))
+        except Exception:
+            shadow_color = (0.0, 0.0, 0.0)
+
         # Text-Breite berechnen fuer Alignment
         total_width = 0.0
+        safe_scale = size / max(self.atlas.sdf_size, 1)
         for char in text:
             g = self.atlas.get_glyph(char)
             if g:
-                scale = size / self.atlas.sdf_size
-                total_width += g.advance * scale
+                total_width += g.advance * safe_scale
 
         if align == "center":
             cursor_x = x - total_width / 2.0
@@ -366,20 +396,20 @@ class GPUTextRenderer:
 
         cursor_y = y
         instance_idx = 0
-        scale = size / self.atlas.sdf_size
 
         for char in text:
             g = self.atlas.get_glyph(char)
             if not g:
                 continue
             if instance_idx >= self._max_chars:
+                print(f"[GPUTextRenderer] WARN: Text ab Frame-Char {self._max_chars} abgeschnitten")
                 break
 
             # Quad-Position und Groesse
-            px = cursor_x + g.bearing_x * scale
-            py = cursor_y - g.bearing_y * scale
-            pw = g.w * scale / 2.0
-            ph = g.h * scale / 2.0
+            px = cursor_x + g.bearing_x * safe_scale
+            py = cursor_y - g.bearing_y * safe_scale
+            pw = g.w * safe_scale / 2.0
+            ph = g.h * safe_scale / 2.0
 
             u1, v1, u2, v2 = self.atlas.get_uv(g)
 
@@ -391,25 +421,28 @@ class GPUTextRenderer:
                 alpha,
             ]
             instance_idx += 1
-            cursor_x += g.advance * scale
+            cursor_x += g.advance * safe_scale
 
         if instance_idx == 0:
             return
 
         # Shader-Uniforms
         self._prog["u_resolution"].value = (self.width, self.height)
-        self._prog["u_smoothing"].value = smoothing
-        self._prog["u_glow"].value = glow
+        self._prog["u_smoothing"].value = float(smoothing)
+        self._prog["u_glow"].value = float(glow)
         self._prog["u_glow_color"].value = glow_color
-        self._prog["u_outline_width"].value = outline_width
+        self._prog["u_outline_width"].value = float(outline_width)
         self._prog["u_outline_color"].value = outline_color
-        shadow_uv_offset = (
-            shadow_offset[0] / max(self.atlas.atlas_width, 1),
-            shadow_offset[1] / max(self.atlas.atlas_height, 1)
-        )
+        try:
+            shadow_uv_offset = (
+                float(shadow_offset[0]) / max(self.atlas.atlas_width, 1),
+                float(shadow_offset[1]) / max(self.atlas.atlas_height, 1)
+            )
+        except Exception:
+            shadow_uv_offset = (0.0, 0.0)
         self._prog["u_shadow_offset"].value = shadow_uv_offset
         self._prog["u_shadow_color"].value = shadow_color
-        self._prog["u_shadow_alpha"].value = shadow_alpha
+        self._prog["u_shadow_alpha"].value = float(shadow_alpha)
 
         self.texture.use(location=0)
         self._prog["u_atlas"].value = 0
@@ -432,12 +465,16 @@ class GPUTextRenderer:
                               shadow_color: tuple = (0.0, 0.0, 0.0),
                               shadow_alpha: float = 0.5):
         """Rendert mehrere Zeilen Text untereinander (top-down)."""
-        scale = size / self.atlas.sdf_size
-        line_px = size * line_height
+        if not lines:
+            return
+        safe_size = max(float(size), 1.0)
+        line_px = safe_size * float(line_height)
         for i, line in enumerate(lines):
+            if not line:
+                continue
             line_y = y + i * line_px
             self.render_text(
-                line, x, line_y, size=size, color=color, alpha=alpha,
+                line, x, line_y, size=safe_size, color=color, alpha=alpha,
                 align=align, glow=glow, glow_color=glow_color,
                 smoothing=smoothing, outline_width=outline_width,
                 outline_color=outline_color, shadow_offset=shadow_offset,

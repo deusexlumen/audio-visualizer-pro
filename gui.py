@@ -2021,7 +2021,13 @@ class AudioVisualizerGUI:
             quotes = final_msg.get("quotes", [])
             # Zeitstempel mit Audio-Analyse verfeinern
             if self.state.features:
-                quotes = refine_quote_timestamps(quotes, self.state.features)
+                # AudioFeatures (Pydantic-Modell) in Dict konvertieren fuer Kompatibilitaet
+                features_dict = self.state.features
+                if hasattr(features_dict, "model_dump"):
+                    features_dict = features_dict.model_dump()
+                elif hasattr(features_dict, "dict"):
+                    features_dict = features_dict.dict()
+                quotes = refine_quote_timestamps(quotes, features_dict)
             self.state.quotes = quotes
             # Zitate automatisch cachen
             if self.state.audio_path:

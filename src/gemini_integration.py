@@ -497,8 +497,10 @@ class GeminiIntegration:
             quotes = []
             for q in quotes_data:
                 text = str(q.get("text", "")).strip()
-                # Mindestlaenge: 3 Woerter
-                if len(text.split()) < 3:
+                # Mindestlaenge: 3 Woerter (CJK-aware: bei CJK-Zeichen >= 6 Zeichen)
+                word_count = len(text.split())
+                char_count = len(text)
+                if word_count < 3 and char_count < 6:
                     continue
                 quotes.append(Quote(
                     text=text,
