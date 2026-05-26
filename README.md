@@ -284,9 +284,9 @@ audio-visualizer-pro/
 
 ## 🛣️ Roadmap
 
-### ✅ Abgeschlossen (v2.0 - v2.1)
+### ✅ Abgeschlossen (v2.0 - v2.5)
 
-#### Q1 2025 — GPU Foundation & Testing
+#### 2024-2025 — Foundation & Core Features
 - ✅ GPU-basiertes Rendering mit ModernGL/OpenGL
 - ✅ 16 GPU-Visualizer implementiert (10 Classic + 6 Signature Pro)
 - ✅ DearPyGui Premium UI mit Live-Preview
@@ -295,62 +295,101 @@ audio-visualizer-pro/
 - ✅ Post-Processing Pipeline (Bloom, Grain, Vignette, LUTs, Chromatic Aberration)
 - ✅ SDF-basiertes Text-Rendering für Quote Overlays
 - ✅ Multi-Codec Support (H.264, HEVC, ProRes)
-
-#### Q2 2025 — Evo-Agent Framework & Quality
-- ✅ Evo-Agent Framework etabliert (`cognitive_core/`)
+- ✅ Evo-Agent Framework (`cognitive_core/`)
 - ✅ 5 Skill-Spezifikationen implementiert
-- ✅ State Ledger & Root Orchestrator
-- ✅ GPU-Renderer Mock-Infrastruktur für hardware-unabhängige Tests
-- ✅ Coverage-Optimierung: 63% → 77%
-- ✅ PIL-Pipeline entfernt, GPU-Pipeline konsolidiert
 
 ---
 
-### 🔄 In Entwicklung (v2.2 - v2.3)
+### 🎯 Aktuell (v2.6 - v3.0) — 2026
 
-#### Q3 2025 — Advanced Features
+#### Q1-Q2 2026 — Stabilisierung & Usability ✓ Im Fokus
+Da dieses Projekt von einem Ein-Personen-Team (mit KI-Unterstützung) entwickelt wird, liegt der Fokus auf **pragmatischen Verbesserungen** statt Feature-Creep:
+
+- ✅ **Code-Qualität**: Refactoring für bessere Wartbarkeit ohne Programmier-Kenntnisse
+- ✅ **Dokumentation**: Ausführliche Anleitungen für Nicht-Entwickler
+- ✅ **Fehlerbehandlung**: Robuste Error-Messages für Endnutzer
+- [ ] **One-Click Installer**: Vereinfachte Installation ohne manuelle Dependency-Konfiguration
+- [ ] **GUI-Verbesserungen**: Intuitivere Bedienung für Power-User-Funktionen
+- [ ] **Preset-Bibliothek**: 10+ zusätzliche vordefinierte Presets für häufige Anwendungsfälle
+
+#### Q3-Q4 2026 — Geplante Erweiterungen (realistisch für Solo-Entwicklung)
+- [ ] **Batch-Rendering**: Mehrere Audio-Dateien nacheinander verarbeiten
+- [ ] **Auto-Update Mechanismus**: Einfache Updates ohne manuelle Git-Operationen
+- [ ] **Video-Tutorials**: Schritt-für-Schritt Anleitungen für alle Kernfunktionen
+- [ ] **Community-Support**: Discord/Forum für Nutzeraustausch
+
+---
+
+### 🔮 Langfristige Vision (v3.0+) — 2027+
+
+#### Priorisierte Features (nur wenn wirklich benötigt)
+Diese Features werden **nur implementiert**, wenn konkrete Nachfrage besteht:
+
 - [ ] **Echtzeit-Audio-Input**: Mikrofon/Live-Stream Unterstützung
-- [ ] **Multi-Track Support**: Separates Rendering von Audio-Stems (Drums, Bass, Vocals)
-- [ ] **Advanced Beat Detection**: Sub-beat Präzision für komplexe Rhythmen
-- [ ] **Custom Shader Editor**: GUI-basierter Shader-Editor für Power-User
-- [ ] **Batch-Rendering Queue**: Mehrere Videos hintereinander rendern
-- [ ] **Progressive Preview**: Schnellere Vorschau durch reduzierte Auflösung/FPS
-
-#### Q4 2025 — Platform Expansion
-- [ ] **CLI Enhancement**: Interaktiver CLI-Modus mit Live-Feedback
-- [ ] **Preset Marketplace**: Community-geteilte Config-Presets
-- [ ] **Advanced LUT Support**: 3D-LUTs für professionelles Color Grading
-
----
-
-### 🔮 Zukunft (v3.0+)
-
-#### 2026 — KI & Automation
-- [ ] **Trainierbare KI-Modelle**: Eigene Modelle für Visual-Empfehlungen
-- [ ] **Style Transfer**: Musikvideo-Stil von Referenzvideos lernen
-- [ ] **Automatische Schnittsetzung**: KI-generierte Cuts synchron zur Musik
-- [ ] **Voice Isolation**: Separate Visualisierung von Sprachspuren
-- [ ] **Generative Visuals**: KI-generierte Visualizer basierend auf Audio-Beschreibung
-
-#### 2026+ — Platform & Ecosystem
-- [ ] **Community Plugin Marketplace**: Erweiterungen von Drittanbietern
+- [ ] **Multi-Track Support**: Separates Rendering von Audio-Stems
+- [ ] **Custom Shader Editor**: GUI-basierter Editor für Visual-Anpassungen
 - [ ] **Mobile Companion App**: iOS/Android für Remote-Steuerung
-- [ ] **Unreal Engine Integration**: Export für Echtzeit-Engines
-- [ ] **WebAssembly-Export**: Browser-basiertes Rendering ohne Installation
-- [ ] **Cloud-Rendering Pipeline**: Skalierbares Rendering in der Cloud
-- [ ] **VR/AR Visualizer**: Immersive Visualisierungen für VR-Headsets
+
+#### Experimentelle Features (KI-getrieben)
+- [ ] **Style Transfer**: Musikvideo-Stil von Referenzvideos lernen
+- [ ] **Generative Visuals**: KI-generierte Visualizer basierend auf Text-Beschreibung
+- [ ] **Automatische Schnittsetzung**: KI-generierte Cuts synchron zur Musik
 
 ---
 
-### 📊 Meilensteine
+### ⚠️ Nicht Geplant (bewusste Entscheidungen)
 
-| Version | Ziel | Status |
-|---------|------|--------|
-| v2.0 | GPU-Rendering Launch | ✅ Abgeschlossen |
-| v2.1 | Testing & Stability | ✅ Abgeschlossen |
-| v2.2 | Live-Audio & Multi-Track | 🔄 In Entwicklung |
-| v2.3 | Platform Expansion | 📅 Geplant Q4 2025 |
-| v3.0 | KI-Automation | 📅 Geplant 2026 |
+Als Ein-Personen-Projekt mit Fokus auf **Stabilität und Einfachheit** werden folgende Features bewusst **nicht** verfolgt:
+
+- ❌ Cloud-Rendering Pipeline (zu komplex, zu teuer)
+- ❌ VR/AR Visualizer (zu spezialisiert)
+- ❌ Unreal Engine Integration (Overkill für Use-Case)
+- ❌ WebAssembly-Export (Performance-Einbußen inakzeptabel)
+- ❌ Plugin Marketplace (Wartungsaufwand zu hoch)
+- ❌ Trainierbare KI-Modelle (API-Lösung ist pragmatischer)
+
+---
+
+### 📊 Entwicklungs-Prinzipien
+
+| Prinzip | Beschreibung |
+|---------|--------------|
+| **KI-First** | Alle Code-Änderungen werden primär durch KI generiert |
+| **No-Code Friendly** | Features müssen ohne Programmierkenntnisse nutzbar sein |
+| **Stability > Features** | Lieber weniger Features, dafür stabil und gut getestet |
+| **Documentation Driven** | Jede Funktion wird ausführlich dokumentiert |
+| **Pragmatic Evolution** | Nur Features implementieren, die wirklich gebraucht werden |
+
+---
+
+### 📈 Meilensteine
+
+| Version | Ziel | Status | Zeitraum |
+|---------|------|--------|-----------|
+| v2.0 | GPU-Rendering Launch | ✅ Abgeschlossen | 2024 |
+| v2.1 | Testing & Stability | ✅ Abgeschlossen | Q1 2025 |
+| v2.2-v2.5 | Evo-Agent Framework, Quality Improvements | ✅ Abgeschlossen | 2025 |
+| v2.6 | Usability & One-Click Setup | 🔄 In Arbeit | Q2 2026 |
+| v2.7 | Batch Processing & Auto-Updates | 📅 Geplant | Q3 2026 |
+| v3.0 | Documentation Complete & Community Ready | 📅 Geplant | Q4 2026 |
+| v3.1+ | Community-Driven Features | 💭 Evaluierung | 2027+ |
+
+---
+
+### 💡 Entwicklungshintergrund
+
+**Team-Struktur:**
+- 👤 **Projektinitiator**: Keine Programmierkenntnisse, fokussiert auf Vision, Testing & Dokumentation
+- 🤖 **KI-Assistenten**: Code-Generierung, Refactoring, Testing, Debugging
+
+**Entwicklungs-Geschwindigkeit:**
+- Realistische Feature-Umsetzung: 1-2 größere Features pro Quartal
+- Fokus auf Qualität statt Quantität
+- Alle Änderungen werden umfassend getestet (77%+ Coverage)
+- Dokumentation hat gleiche Priorität wie Code
+
+**Warum dieser Ansatz?**
+Dieses Projekt beweist, dass moderne Softwareentwicklung auch ohne traditionelle Programmierkenntnisse möglich ist. Durch die Kombination aus menschlicher Vision, domänenspezifischem Wissen und KI-gestützter Implementierung entstehen robuste, professionelle Tools – in realistischer Geschwindigkeit und mit nachhaltiger Wartbarkeit.
 
 ---
 
