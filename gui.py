@@ -226,8 +226,8 @@ class AppState:
             f"{self.pp_warmth:.2f}_{self.pp_grain:.2f}_{self.preview_time_percent:.2f}_"
             f"{self.color_mode}_{self.base_hue:.2f}_{self.color_saturation:.2f}_"
             f"{self.quotes_enabled}_{len(self.quotes)}_{qc.position}_{qc.font_size}_{qc.display_duration}_"
-            f"{qc.fade_duration:.1f}_{qc.max_chars_per_line}_{qc.line_spacing}_{qc.slide_animation}_"
-            f"{qc.scale_in}_{qc.glow_pulse}_{qc.compensation_blur:.1f}_{qc.latency_offset:.1f}_"
+            f"{qc.fade_duration:.1f}_{qc.max_chars_per_line}_{qc.line_spacing}_"
+            f"{qc.compensation_blur:.1f}_{qc.latency_offset:.1f}_"
             f"{qc.box_padding}_{qc.box_radius}_{qc.box_margin_bottom}_{qc.max_width_ratio:.2f}_{qc.scale:.2f}_"
             f"{hash(qc.font_color)}_{hash(qc.box_color)}_"
             f"{hash(frozenset(self.viz_extra_params.items())) if self.viz_extra_params else 0}"
@@ -262,19 +262,39 @@ class AppState:
             "gpu_encode": self.gpu_encode,
             "quotes_enabled": self.quotes_enabled,
             "quote_config": {
+                "enabled": qc.enabled,
                 "position": qc.position,
                 "font_size": qc.font_size,
                 "font_color": list(qc.font_color),
+                "font_path": qc.font_path,
                 "box_color": list(qc.box_color),
                 "display_duration": qc.display_duration,
                 "fade_duration": qc.fade_duration,
                 "max_chars_per_line": qc.max_chars_per_line,
                 "line_spacing": qc.line_spacing,
+                "text_align": qc.text_align,
+                "shadow_color": list(qc.shadow_color) if isinstance(qc.shadow_color, tuple) else qc.shadow_color,
+                "shadow_offset": list(qc.shadow_offset) if isinstance(qc.shadow_offset, tuple) else qc.shadow_offset,
+                "auto_scale_font": qc.auto_scale_font,
+                "min_font_size": qc.min_font_size,
+                "max_font_size": qc.max_font_size,
                 "slide_animation": qc.slide_animation,
+                "slide_distance": qc.slide_distance,
+                "slide_out_animation": qc.slide_out_animation,
+                "slide_out_distance": qc.slide_out_distance,
                 "scale_in": qc.scale_in,
+                "typewriter": qc.typewriter,
+                "typewriter_speed": qc.typewriter_speed,
+                "typewriter_mode": qc.typewriter_mode,
                 "glow_pulse": qc.glow_pulse,
+                "glow_pulse_intensity": qc.glow_pulse_intensity,
+                "spatial_compensation": qc.spatial_compensation,
                 "compensation_blur": qc.compensation_blur,
+                "compensation_darken": qc.compensation_darken,
                 "latency_offset": qc.latency_offset,
+                "buffer_lookahead": qc.buffer_lookahead,
+                "offset_x": qc.offset_x,
+                "offset_y": qc.offset_y,
                 "box_padding": qc.box_padding,
                 "box_radius": qc.box_radius,
                 "box_margin_bottom": qc.box_margin_bottom,
@@ -322,20 +342,45 @@ class AppState:
 
         # Quote-Config
         qc_data = data.get("quote_config", {})
+        def _tuple_or(val, default):
+            if val is None:
+                return default
+            return tuple(val) if isinstance(val, list) else val
+
         state.quote_config = QuoteOverlayConfig(
+            enabled=qc_data.get("enabled", True),
             position=qc_data.get("position", "bottom"),
             font_size=qc_data.get("font_size", 52),
-            font_color=tuple(qc_data.get("font_color", [255, 255, 255])),
-            box_color=tuple(qc_data.get("box_color", [26, 26, 46, 200])),
+            font_color=_tuple_or(qc_data.get("font_color"), (255, 255, 255)),
+            font_path=qc_data.get("font_path"),
+            box_color=_tuple_or(qc_data.get("box_color"), (26, 26, 46, 200)),
             display_duration=qc_data.get("display_duration", 8.0),
             fade_duration=qc_data.get("fade_duration", 0.6),
             max_chars_per_line=qc_data.get("max_chars_per_line", 40),
             line_spacing=qc_data.get("line_spacing", 10),
+            text_align=qc_data.get("text_align", "center"),
+            shadow_color=_tuple_or(qc_data.get("shadow_color"), (0, 0, 0, 120)),
+            shadow_offset=_tuple_or(qc_data.get("shadow_offset"), (3, 3)),
+            auto_scale_font=qc_data.get("auto_scale_font", True),
+            min_font_size=qc_data.get("min_font_size", 16),
+            max_font_size=qc_data.get("max_font_size", 72),
             slide_animation=qc_data.get("slide_animation", "none"),
+            slide_distance=qc_data.get("slide_distance", 100.0),
+            slide_out_animation=qc_data.get("slide_out_animation", "none"),
+            slide_out_distance=qc_data.get("slide_out_distance", 100.0),
             scale_in=qc_data.get("scale_in", False),
+            typewriter=qc_data.get("typewriter", False),
+            typewriter_speed=qc_data.get("typewriter_speed", 15.0),
+            typewriter_mode=qc_data.get("typewriter_mode", "char"),
             glow_pulse=qc_data.get("glow_pulse", False),
+            glow_pulse_intensity=qc_data.get("glow_pulse_intensity", 0.5),
+            spatial_compensation=qc_data.get("spatial_compensation", True),
             compensation_blur=qc_data.get("compensation_blur", 12.0),
+            compensation_darken=qc_data.get("compensation_darken", 0.55),
             latency_offset=qc_data.get("latency_offset", 0.0),
+            buffer_lookahead=qc_data.get("buffer_lookahead", 2.0),
+            offset_x=qc_data.get("offset_x", 0),
+            offset_y=qc_data.get("offset_y", 0),
             box_padding=qc_data.get("box_padding", 32),
             box_radius=qc_data.get("box_radius", 16),
             box_margin_bottom=qc_data.get("box_margin_bottom", 100),
@@ -1242,27 +1287,9 @@ class AudioVisualizerGUI:
             tooltip="Abstand zwischen Textzeilen",
             format="%.0f",
         )
-        dpg.add_combo(
-            label="Slide-Animation",
-            items=["none", "up", "down", "left", "right"],
-            default_value=self.state.quote_config.slide_animation,
-            callback=self._on_quote_config_changed,
-            width=-1,
-            tag="quote_slide_animation",
-        )
-        with dpg.group(horizontal=True):
-            dpg.add_checkbox(
-                label="Scale-In-Effekt",
-                default_value=self.state.quote_config.scale_in,
-                callback=self._on_quote_config_changed,
-                tag="quote_scale_in",
-            )
-            dpg.add_checkbox(
-                label="Glow-Pulse",
-                default_value=self.state.quote_config.glow_pulse,
-                callback=self._on_quote_config_changed,
-                tag="quote_glow_pulse",
-            )
+        # Hinweis: Slide-Animation, Scale-In und Glow-Pulse sind derzeit nicht implementiert.
+        # Die Controls wurden entfernt, um User-Verwirrung zu vermeiden.
+        # Sie koennen bei Bedarf in src/quote_overlay.py implementiert werden.
         self._styled_slider(
             label="Hintergrund-Blur (px)",
             tag="quote_compensation_blur",
@@ -2351,12 +2378,6 @@ class AudioVisualizerGUI:
             self.state.quote_config.max_chars_per_line = int(dpg.get_value(sender))
         elif tag == "quote_line_spacing":
             self.state.quote_config.line_spacing = int(dpg.get_value(sender))
-        elif tag == "quote_slide_animation":
-            self.state.quote_config.slide_animation = dpg.get_value(sender)
-        elif tag == "quote_scale_in":
-            self.state.quote_config.scale_in = bool(dpg.get_value(sender))
-        elif tag == "quote_glow_pulse":
-            self.state.quote_config.glow_pulse = bool(dpg.get_value(sender))
         elif tag == "quote_compensation_blur":
             self.state.quote_config.compensation_blur = float(dpg.get_value(sender))
         elif tag == "quote_latency_offset":
@@ -2981,9 +3002,6 @@ class AudioVisualizerGUI:
         self._set_slider_and_value("quote_fade_duration", self.state.quote_config.fade_duration)
         self._set_slider_and_value("quote_max_chars", self.state.quote_config.max_chars_per_line)
         self._set_slider_and_value("quote_line_spacing", self.state.quote_config.line_spacing)
-        dpg.set_value("quote_slide_animation", self.state.quote_config.slide_animation)
-        dpg.set_value("quote_scale_in", self.state.quote_config.scale_in)
-        dpg.set_value("quote_glow_pulse", self.state.quote_config.glow_pulse)
         self._set_slider_and_value("quote_compensation_blur", self.state.quote_config.compensation_blur)
         self._set_slider_and_value("quote_box_padding", self.state.quote_config.box_padding)
         self._set_slider_and_value("quote_box_radius", self.state.quote_config.box_radius)

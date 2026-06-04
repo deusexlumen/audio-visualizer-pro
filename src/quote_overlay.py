@@ -96,12 +96,13 @@ class QuoteOverlayRenderer:
         self._fps = 30
         self._dirty = True
     
-    def _load_font(self):
+    def _load_font(self, size: int = None):
         """Laedt eine Schriftart mit Fallback."""
+        font_size = size or self.config.font_size
         # Benutzerdefinierte Schriftart zuerst probieren
         if self.config.font_path and Path(self.config.font_path).exists():
             try:
-                self._font = ImageFont.truetype(self.config.font_path, self.config.font_size)
+                self._font = ImageFont.truetype(self.config.font_path, font_size)
                 return
             except (OSError, IOError):
                 pass
@@ -121,7 +122,7 @@ class QuoteOverlayRenderer:
         
         for path in font_paths:
             try:
-                self._font = ImageFont.truetype(path, self.config.font_size)
+                self._font = ImageFont.truetype(path, font_size)
                 self._font_path = path
                 return
             except (OSError, IOError):
@@ -130,6 +131,16 @@ class QuoteOverlayRenderer:
         # Fallback auf Default-Schrift
         self._font = ImageFont.load_default()
         self._font_path = None
+    
+    def _get_font(self):
+        """Gibt den Font zurueck, laedt bei Bedarf neu wenn sich Groesse oder Skalierung aendern."""
+        config_scale = getattr(self.config, 'scale', 1.0)
+        effective_size = max(1, int(self.config.font_size * config_scale))
+        current_key = (effective_size, self.config.font_path)
+        if not hasattr(self, '_font_cache_key') or self._font_cache_key != current_key:
+            self._font_cache_key = current_key
+            self._load_font(size=effective_size)
+        return self._font
     
     def set_latency_offset(self, offset: float):
         """Setzt die Latenz-Kompensation (Sekunden). Negativ = frueher, Positiv = spaeter."""
@@ -236,12 +247,13 @@ class QuoteOverlayRenderer:
         if not lines:
             return (0, 0)
         
+        font = self._get_font()
         # PIL 10.0+ nutzt getbbox, aeltere getsize
-        if hasattr(self._font, 'getbbox'):
+        if hasattr(font, 'getbbox'):
             max_width = 0
             total_height = 0
             for line in lines:
-                bbox = self._font.getbbox(line)
+                bbox = font.getbbox(line)
                 line_width = bbox[2] - bbox[0]
                 line_height = bbox[3] - bbox[1]
                 max_width = max(max_width, line_width)
@@ -251,8 +263,8 @@ class QuoteOverlayRenderer:
             return (max_width, total_height)
         else:
             # Fallback fuer aeltere PIL Versionen
-            max_width = max(self._font.getsize(line)[0] for line in lines)
-            line_height = self._font.getsize(lines[0])[1]
+            max_width = max(font.getsize(line)[0] for line in lines)
+            line_height = font.getsize(lines[0])[1]
             total_height = len(lines) * line_height + (len(lines) - 1) * self.config.line_spacing
             return (max_width, total_height)
     
@@ -362,16 +374,17 @@ class QuoteOverlayRenderer:
         
         # Text zeichnen
         font_color = list(self.config.font_color)[:3] + [int(255 * alpha)]
+        font = self._get_font()
         
         # Vertikale Zentrierung des Text-Blocks in der Box
-        if hasattr(self._font, 'getbbox'):
+        if hasattr(font, 'getbbox'):
             line_heights = []
             for line in lines:
-                bbox = self._font.getbbox(line)
+                bbox = font.getbbox(line)
                 line_heights.append(bbox[3] - bbox[1])
             total_text_height = sum(line_heights) + (len(lines) - 1) * self.config.line_spacing
         else:
-            line_height = self._font.getsize(lines[0])[1]
+            line_height = font.getsize(lines[0])[1]
             total_text_height = len(lines) * line_height + (len(lines) - 1) * self.config.line_spacing
         
         text_start_y = box_y + (box_height - total_text_height) // 2
@@ -379,12 +392,12 @@ class QuoteOverlayRenderer:
         
         for i, line in enumerate(lines):
             # Horizontale Zentrierung jeder Zeile
-            if hasattr(self._font, 'getbbox'):
-                bbox = self._font.getbbox(line)
+            if hasattr(font, 'getbbox'):
+                bbox = font.getbbox(line)
                 line_width = bbox[2] - bbox[0]
                 line_height_actual = bbox[3] - bbox[1]
             else:
-                line_width, line_height_actual = self._font.getsize(line)
+                line_width, line_height_actual = font.getsize(line)
             
             if self.config.text_align == "center":
                 line_x = box_x + (box_width - line_width) // 2
@@ -392,7 +405,7 @@ class QuoteOverlayRenderer:
                 line_x = box_x + box_width - line_width - padding
             else:  # left
                 line_x = box_x + padding
-            draw.text((line_x, current_y), line, font=self._font, fill=tuple(font_color))
+            draw.text((line_x, current_y), line, font=font, fill=tuple(font_color))
             current_y += line_height_actual + self.config.line_spacing
         
         # Overlay auf Originalbild komponieren
