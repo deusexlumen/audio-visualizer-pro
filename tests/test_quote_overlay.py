@@ -66,11 +66,13 @@ class TestQuoteOverlayRenderer:
         """Wenn kein Zitat zur Zeit aktiv, Frame unveraendert."""
         frame = create_test_frame()
         quotes = create_test_quotes()
-        renderer = QuoteOverlayRenderer(quotes)
+        # display_duration auf 4.0 setzen, damit sie mit den Test-end_times uebereinstimmen
+        config = QuoteOverlayConfig(display_duration=4.0)
+        renderer = QuoteOverlayRenderer(quotes, config)
         # Zeit vor dem ersten Zitat
         result = renderer.apply(frame, time_seconds=0.5)
         np.testing.assert_array_equal(frame, result)
-        # Zeit zwischen den Zitaten
+        # Zeit zwischen den Zitaten (erstes endet bei 5.0, zweites startet bei 10.0)
         result = renderer.apply(frame, time_seconds=7.0)
         np.testing.assert_array_equal(frame, result)
         # Zeit nach allen Zitaten
@@ -118,7 +120,9 @@ class TestQuoteOverlayRenderer:
         """Fade-Out am Ende des Zitats."""
         frame = create_test_frame()
         quotes = [Quote(text="Test", start_time=1.0, end_time=5.0, confidence=1.0)]
-        renderer = QuoteOverlayRenderer(quotes)
+        # display_duration auf 4.0 setzen, damit end_time bei 5.0 bleibt
+        config = QuoteOverlayConfig(display_duration=4.0)
+        renderer = QuoteOverlayRenderer(quotes, config)
         
         # Kurz vor Ende sollte es noch sichtbar sein
         result_before = renderer.apply(frame, time_seconds=4.6)
@@ -145,7 +149,9 @@ class TestQuoteOverlayRenderer:
             Quote(text="Erstes Zitat", start_time=1.0, end_time=3.0, confidence=1.0),
             Quote(text="Zweites Zitat", start_time=5.0, end_time=7.0, confidence=1.0),
         ]
-        renderer = QuoteOverlayRenderer(quotes)
+        # display_duration auf 2.0 setzen, damit Zitate nicht ueberlappen
+        config = QuoteOverlayConfig(display_duration=2.0)
+        renderer = QuoteOverlayRenderer(quotes, config)
         
         # Erstes Zitat aktiv
         r1 = renderer.apply(frame.copy(), time_seconds=2.0)
@@ -346,3 +352,47 @@ class TestQuoteOverlayConfig:
         assert config.typewriter_mode == "word"
         assert config.glow_pulse is True
         assert config.glow_pulse_intensity == 0.8
+
+
+class TestQuoteDisplayDuration:
+    """Tests dass display_duration die end_time ueberschreibt."""
+
+    def test_display_duration_overrides_end_time(self):
+        """display_duration sollte die tatsaechliche Anzeigedauer steuern."""
+        frame = create_test_frame()
+        # Zitat mit end_time=3.0 (nur 2 Sekunden)
+        quotes = [Quote(text="Kurzes Zitat", start_time=1.0, end_time=3.0, confidence=1.0)]
+        # Aber display_duration=8.0 -> sollte 8 Sekunden sichtbar sein
+        config = QuoteOverlayConfig(display_duration=8.0, fade_duration=0.1)
+        renderer = QuoteOverlayRenderer(quotes, config)
+        renderer.build_frame_index(frame_count=300, fps=30)
+
+        # Bei 2.0s (innerhalb original end_time) -> sichtbar
+        r1 = renderer.apply(frame.copy(), time_seconds=2.0, frame_idx=60)
+        assert np.any(r1 != frame)
+
+        # Bei 5.0s (nach original end_time, aber vor display_duration) -> sichtbar
+        r2 = renderer.apply(frame.copy(), time_seconds=5.0, frame_idx=150)
+        assert np.any(r2 != frame)
+
+        # Bei 9.5s (nach display_duration) -> nicht mehr sichtbar
+        r3 = renderer.apply(frame.copy(), time_seconds=9.5, frame_idx=285)
+        np.testing.assert_array_equal(r3, frame)
+
+    def test_short_display_duration_cuts_early(self):
+        """Kurze display_duration sollte Zitat frueher ausblenden."""
+        frame = create_test_frame()
+        # Zitat mit end_time=10.0 (9 Sekunden)
+        quotes = [Quote(text="Langes Zitat", start_time=1.0, end_time=10.0, confidence=1.0)]
+        # Aber display_duration=3.0 -> nur 3 Sekunden sichtbar
+        config = QuoteOverlayConfig(display_duration=3.0, fade_duration=0.1)
+        renderer = QuoteOverlayRenderer(quotes, config)
+        renderer.build_frame_index(frame_count=300, fps=30)
+
+        # Bei 2.0s -> sichtbar
+        r1 = renderer.apply(frame.copy(), time_seconds=2.0, frame_idx=60)
+        assert np.any(r1 != frame)
+
+        # Bei 4.5s (nach display_duration) -> nicht mehr sichtbar
+        r2 = renderer.apply(frame.copy(), time_seconds=4.5, frame_idx=135)
+        np.testing.assert_array_equal(r2, frame)

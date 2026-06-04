@@ -165,10 +165,11 @@ class TestRenderGpuPreview:
         mock_renderer._apply_postprocess.assert_called_once()
         mock_renderer.post_fbo.read.assert_called_once()
 
+    @patch('src.gpu_preview.QuoteOverlayRenderer')
     @patch('src.gpu_preview.AudioAnalyzer')
     @patch('src.gpu_preview.GPUPreviewRenderer')
-    def test_render_gpu_preview_with_quotes(self, mock_renderer_cls, mock_analyzer_cls, dummy_features):
-        """Preview mit Quotes sollte _render_quotes_gpu aufrufen."""
+    def test_render_gpu_preview_with_quotes(self, mock_renderer_cls, mock_analyzer_cls, mock_quote_renderer_cls, dummy_features):
+        """Preview mit Quotes sollte QuoteOverlayRenderer aufrufen."""
         mock_analyzer = MagicMock()
         mock_analyzer.analyze.return_value = dummy_features
         mock_analyzer_cls.return_value = mock_analyzer
@@ -179,6 +180,10 @@ class TestRenderGpuPreview:
         mock_renderer.viz_fbo = MagicMock()
         mock_renderer.fbo.read.return_value = b'\x00' * (480 * 270 * 3)
         mock_renderer_cls.return_value = mock_renderer
+
+        mock_quote_renderer = MagicMock()
+        mock_quote_renderer.apply.return_value = np.zeros((270, 480, 3), dtype=np.uint8)
+        mock_quote_renderer_cls.return_value = mock_quote_renderer
 
         from src.types import Quote
         from src.quote_overlay import QuoteOverlayConfig
@@ -196,8 +201,8 @@ class TestRenderGpuPreview:
         )
 
         assert img is not None
-        mock_renderer._init_text_renderer.assert_called_once()
-        mock_renderer._render_quotes_gpu.assert_called_once()
+        mock_quote_renderer_cls.assert_called_once()
+        mock_quote_renderer.apply.assert_called_once()
 
     @patch('src.gpu_preview.AudioAnalyzer')
     @patch('src.gpu_preview.GPUPreviewRenderer')

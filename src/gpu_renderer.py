@@ -426,7 +426,7 @@ class GPUBatchRenderer:
             raw = fbo_obj.read(components=3)
             arr = np.frombuffer(raw, dtype=np.uint8).reshape((self.height, self.width, 3))
             # ModernGL fbo.read() gibt Daten top-to-bottom (PIL-kompatibel)
-            Image.fromarray(arr, mode='RGB').save(filename)
+            Image.fromarray(arr).save(filename)
             print(f"[GPU] DEBUG: {filename} gespeichert ({self.width}x{self.height})")
         except Exception as e:
             print(f"[GPU] DEBUG: Konnte {filename} nicht speichern: {e}")

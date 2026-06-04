@@ -154,7 +154,7 @@ class QuoteOverlayRenderer:
             
             for quote in self.quotes:
                 adj_start = quote.start_time + self.config.latency_offset
-                effective_end = min(quote.end_time, quote.start_time + self.config.display_duration)
+                effective_end = quote.start_time + self.config.display_duration
                 adj_end = effective_end + self.config.latency_offset
                 start_frame = max(0, min(int(adj_start * fps), frame_count - 1))
                 end_frame = max(0, min(int(adj_end * fps), frame_count - 1))
@@ -179,7 +179,7 @@ class QuoteOverlayRenderer:
             if 0 <= frame_idx < self._frame_count:
                 candidates = self._frame_index[frame_idx]
                 for quote in candidates:
-                    effective_end = min(quote.end_time, quote.start_time + self.config.display_duration)
+                    effective_end = quote.start_time + self.config.display_duration
                     adj_start = quote.start_time + self.config.latency_offset
                     adj_end = effective_end + self.config.latency_offset
                     if adj_start <= time_seconds <= adj_end:
@@ -188,7 +188,7 @@ class QuoteOverlayRenderer:
         
         # Fallback: lineare Suche (kompatibel mit alten Aufrufen)
         for quote in self.quotes:
-            effective_end = min(quote.end_time, quote.start_time + self.config.display_duration)
+            effective_end = quote.start_time + self.config.display_duration
             adj_start = quote.start_time + self.config.latency_offset
             adj_end = effective_end + self.config.latency_offset
             if adj_start <= time_seconds <= adj_end:
@@ -204,7 +204,7 @@ class QuoteOverlayRenderer:
         Beruecksichtigt die maximale Anzeigedauer.
         """
         fade = self.config.fade_duration
-        effective_end = min(quote.end_time, quote.start_time + self.config.display_duration)
+        effective_end = quote.start_time + self.config.display_duration
         duration = effective_end - quote.start_time
         
         # Am Anfang: Fade-In

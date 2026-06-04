@@ -16,7 +16,7 @@ from PIL import Image
 from .analyzer import AudioAnalyzer
 from .gpu_renderer import GPUPreviewRenderer
 from .gpu_visualizers import get_visualizer
-from .quote_overlay import QuoteOverlayConfig
+from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
 from .types import AudioFeatures
 
 
@@ -181,11 +181,6 @@ def render_gpu_preview(
             scale=viz_scale,
         )
 
-        # Quote-Overlays auf GPU rendern
-        if quotes and quote_config and quote_config.enabled:
-            renderer._init_text_renderer()
-            renderer._render_quotes_gpu(preview_time, quotes, quote_config)
-
         # Post-Process (Color-Grading) anwenden falls konfiguriert
         if postprocess:
             renderer._apply_postprocess(
@@ -204,8 +199,16 @@ def render_gpu_preview(
         # Zu PIL Image konvertieren
         img_array = np.frombuffer(pixels, dtype=np.uint8)
         img_array = img_array.reshape((height, width, 3))
+
+        # Quote-Overlays mit PIL anwenden (nach GPU-Rendering)
+        if quotes and quote_config and quote_config.enabled:
+            quote_renderer = QuoteOverlayRenderer(quotes=quotes, config=quote_config)
+            quote_renderer.build_frame_index(frame_count, fps)
+            preview_frame_idx = int(preview_time * fps)
+            img_array = quote_renderer.apply(img_array, preview_time, frame_idx=preview_frame_idx)
+
         # ModernGL fbo.read() gibt bereits top-down (PIL-kompatibel)
-        img = Image.fromarray(img_array, mode='RGB')
+        img = Image.fromarray(img_array)
 
         return img
 

@@ -130,7 +130,7 @@ class GPUQuoteRenderer:
             if fade <= 0.0:
                 fade = 0.001  # Division by Zero verhindern
             display_dur = getattr(config, 'display_duration', 8.0)
-            effective_end = min(quote.end_time, quote.start_time + display_dur)
+            effective_end = quote.start_time + display_dur
             latency = getattr(config, 'latency_offset', 0.0)
             t = time_seconds - latency
 
