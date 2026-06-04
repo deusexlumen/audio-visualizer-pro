@@ -363,8 +363,8 @@ class AppState:
             if path.exists():
                 data = json.loads(path.read_text(encoding="utf-8"))
                 return [p for p in data.get("recent", []) if os.path.exists(p)][:8]
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[GUI] Konnte recent files nicht laden: {e}")
         return []
 
     @staticmethod
@@ -373,8 +373,8 @@ class AppState:
             Path(".cache").mkdir(parents=True, exist_ok=True)
             path = Path(".cache") / "gui_recent_files.json"
             path.write_text(json.dumps({"recent": files[:8]}, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[GUI] Konnte recent files nicht speichern: {e}")
 
     @staticmethod
     def _load_card_states() -> dict:
@@ -382,8 +382,8 @@ class AppState:
             path = Path(".cache") / "gui_card_states.json"
             if path.exists():
                 return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[GUI] Konnte card states nicht laden: {e}")
         return {}
 
     @staticmethod
@@ -392,8 +392,8 @@ class AppState:
             Path(".cache").mkdir(parents=True, exist_ok=True)
             path = Path(".cache") / "gui_card_states.json"
             path.write_text(json.dumps(states, indent=2), encoding="utf-8")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[GUI] Konnte card states nicht speichern: {e}")
 
     def add_recent_file(self, path: str):
         # Defensiv: Attribute initialisieren falls nicht vorhanden
@@ -452,9 +452,13 @@ class AudioVisualizerGUI:
 
         text = "Audio laden für Preview"
         sub = "MP3 · WAV · FLAC · AAC · OGG · M4A"
+        font_path = self._resolve_font("regular")
         try:
-            font = ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", 26)
-            font_sub = ImageFont.truetype("C:/Windows/Fonts/segoeui.ttf", 16)
+            if font_path:
+                font = ImageFont.truetype(font_path, 26)
+                font_sub = ImageFont.truetype(font_path, 16)
+            else:
+                raise OSError("No system font found")
         except Exception:
             font = ImageFont.load_default()
             font_sub = ImageFont.load_default()
@@ -499,6 +503,60 @@ class AudioVisualizerGUI:
     def _on_escape(self, sender, app_data):
         if self.state.is_rendering:
             self._on_cancel_render_clicked()
+
+    @staticmethod
+    def _resolve_font(style: str = "regular") -> str | None:
+        """Cross-platform Font-Resolver mit Fallback-Ketten."""
+        candidates = {
+            "regular": [
+                "C:/Windows/Fonts/segoeui.ttf",
+                "/System/Library/Fonts/Helvetica.ttc",
+                "/Library/Fonts/Arial.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+            ],
+            "bold": [
+                "C:/Windows/Fonts/segoeuib.ttf",
+                "/System/Library/Fonts/Helvetica.ttc",
+                "/Library/Fonts/Arial Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+            ],
+            "mono": [
+                "C:/Windows/Fonts/consola.ttf",
+                "/System/Library/Fonts/Menlo.ttc",
+                "/Library/Fonts/Courier New.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+                "/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf",
+            ],
+        }
+        for path in candidates.get(style, candidates["regular"]):
+            if os.path.exists(path):
+                return path
+        # Last resort: scan common directories for any TTF/TTC
+        search_dirs = []
+        import sys
+        if sys.platform == "win32":
+            search_dirs = ["C:/Windows/Fonts"]
+        elif sys.platform == "darwin":
+            search_dirs = ["/System/Library/Fonts", "/Library/Fonts"]
+        else:
+            search_dirs = ["/usr/share/fonts", "/usr/local/share/fonts"]
+        for d in search_dirs:
+            if os.path.isdir(d):
+                for root, _, files in os.walk(d):
+                    for f in files:
+                        if f.lower().endswith((".ttf", ".ttc")):
+                            return os.path.join(root, f)
+        return None
+
+    def _safe_bind_font(self, item, font):
+        """Bindet einen Font nur wenn er existiert (Cross-Platform Fallback)."""
+        if font is not None:
+            dpg.bind_item_font(item, font)
 
     def _setup_theme(self):
         """Premium Dark Theme — kategorien-basierte Akzente, elegante Typografie."""
@@ -629,17 +687,21 @@ class AudioVisualizerGUI:
         self._setup_shortcuts()
 
         with dpg.font_registry():
+            font_regular = self._resolve_font("regular")
+            font_bold = self._resolve_font("bold")
+            font_mono = self._resolve_font("mono")
             # Hauptfont
-            default_font = dpg.add_font("C:/Windows/Fonts/segoeui.ttf", 15)
-            dpg.bind_font(default_font)
+            default_font = dpg.add_font(font_regular, 15) if font_regular else None
+            if default_font:
+                dpg.bind_font(default_font)
             # Kleinerer Font für Labels
-            self._font_small = dpg.add_font("C:/Windows/Fonts/segoeui.ttf", 13)
+            self._font_small = dpg.add_font(font_regular, 13) if font_regular else default_font
             # Größerer Font für Überschriften
-            self._font_header = dpg.add_font("C:/Windows/Fonts/segoeuib.ttf", 18)
+            self._font_header = dpg.add_font(font_bold, 18) if font_bold else default_font
             # Card-Titel
-            self._font_card_title = dpg.add_font("C:/Windows/Fonts/segoeuib.ttf", 15)
+            self._font_card_title = dpg.add_font(font_bold, 15) if font_bold else default_font
             # Status/Mono
-            self._font_mono = dpg.add_font("C:/Windows/Fonts/consola.ttf", 14)
+            self._font_mono = dpg.add_font(font_mono, 14) if font_mono else default_font
 
         # Texture fuer Preview
         with dpg.texture_registry(show=False):
@@ -709,9 +771,9 @@ class AudioVisualizerGUI:
 
             with dpg.group():
                 dpg.add_text("Audio Visualizer Pro", color=Theme.TEXT_PRIMARY)
-                dpg.bind_item_font(dpg.last_item(), self._font_header)
+                self._safe_bind_font(dpg.last_item(), self._font_header)
                 dpg.add_text("GPU-beschleunigte Audio-Visualisierung", color=Theme.TEXT_MUTED)
-                dpg.bind_item_font(dpg.last_item(), self._font_small)
+                self._safe_bind_font(dpg.last_item(), self._font_small)
 
             dpg.add_spacer(width=20)
 
@@ -733,11 +795,11 @@ class AudioVisualizerGUI:
                 no_border=True, no_drag_drop=True,
             )
             dpg.add_text(label, color=Theme.TEXT_SECONDARY)
-            dpg.bind_item_font(dpg.last_item(), self._font_small)
+            self._safe_bind_font(dpg.last_item(), self._font_small)
         if tooltip:
             with dpg.tooltip(parent=tag):
                 dpg.add_text(tooltip, color=Theme.TEXT_MUTED)
-                dpg.bind_item_font(dpg.last_item(), self._font_small)
+                self._safe_bind_font(dpg.last_item(), self._font_small)
 
     # -------------------------------------------------------------------------
     # Menu Bar
@@ -820,7 +882,7 @@ class AudioVisualizerGUI:
             return
         dpg.add_spacer(height=6, parent=parent)
         dpg.add_text("Zuletzt verwendet", color=Theme.TEXT_MUTED, parent=parent)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         for i, path in enumerate(self.state._recent_files[:5]):
             fname = Path(path).name
             btn_tag = f"recent_audio_{i}"
@@ -863,7 +925,7 @@ class AudioVisualizerGUI:
     def _build_visualizer_section(self):
         with dpg.group(horizontal=True):
             dpg.add_text("Typ", color=Theme.TEXT_SECONDARY)
-            dpg.bind_item_font(dpg.last_item(), self._font_small)
+            self._safe_bind_font(dpg.last_item(), self._font_small)
             dpg.add_button(
                 label="↺ Reset",
                 callback=lambda s, a: self._reset_visualizer_params(),
@@ -881,7 +943,7 @@ class AudioVisualizerGUI:
         dpg.add_spacer(height=8)
 
         dpg.add_text("Position & Größe", color=Theme.TEXT_SECONDARY)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         self._styled_slider(
             label="Offset X",
             tag="param_offset_x",
@@ -906,7 +968,7 @@ class AudioVisualizerGUI:
         dpg.add_spacer(height=8)
 
         dpg.add_text("Farbpalette", color=Theme.TEXT_SECONDARY)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         dpg.add_combo(
             items=["chroma (dynamisch)", "fixed (eine Farbe)", "monochrome", "warm", "cool"],
             default_value="chroma (dynamisch)",
@@ -932,7 +994,7 @@ class AudioVisualizerGUI:
 
         # Container fuer dynamische Visualizer-Parameter
         dpg.add_text("Effekte", tag="viz_params_label", color=Theme.TEXT_SECONDARY, show=False)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         dpg.add_group(tag="viz_params_container")
 
     def _rebuild_viz_param_controls(self):
@@ -1030,7 +1092,7 @@ class AudioVisualizerGUI:
 
     def _build_ki_section(self):
         dpg.add_text("Dein Wunsch (optional)", color=Theme.TEXT_SECONDARY)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         dpg.add_input_text(
             hint="z.B. 'dunkler, mehr Kontrast, cyberpunk-Stil'",
             default_value="",
@@ -1077,7 +1139,7 @@ class AudioVisualizerGUI:
 
         # --- ZITAT-LISTE (CRUD) ---
         dpg.add_text("Zitate", color=Theme.TEXT_SECONDARY)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         dpg.add_child_window(
             tag="quotes_list_container",
             width=-1, height=180,
@@ -1107,11 +1169,11 @@ class AudioVisualizerGUI:
         dpg.add_spacer(height=8)
 
         dpg.add_text("Erscheinungsbild", color=Theme.TEXT_SECONDARY)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         # Farben
         with dpg.group(horizontal=True):
             dpg.add_text("Textfarbe", color=Theme.TEXT_SECONDARY)
-            dpg.bind_item_font(dpg.last_item(), self._font_small)
+            self._safe_bind_font(dpg.last_item(), self._font_small)
             dpg.add_color_edit(
                 default_value=self.state.quote_config.font_color,
                 callback=self._on_quote_config_changed,
@@ -1122,7 +1184,7 @@ class AudioVisualizerGUI:
             )
             dpg.add_spacer(width=8)
             dpg.add_text("Box-Farbe", color=Theme.TEXT_SECONDARY)
-            dpg.bind_item_font(dpg.last_item(), self._font_small)
+            self._safe_bind_font(dpg.last_item(), self._font_small)
             dpg.add_color_edit(
                 default_value=self.state.quote_config.box_color,
                 callback=self._on_quote_config_changed,
@@ -1279,7 +1341,7 @@ class AudioVisualizerGUI:
 
         dpg.add_spacer(height=8)
         dpg.add_text("Effekte", color=Theme.TEXT_SECONDARY)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         self._styled_slider(
             label="Blur",
             tag="param_bg_blur",
@@ -1324,7 +1386,7 @@ class AudioVisualizerGUI:
     def _build_postprocess_section(self):
         with dpg.group(horizontal=True):
             dpg.add_text("Color Grading", color=Theme.TEXT_SECONDARY)
-            dpg.bind_item_font(dpg.last_item(), self._font_small)
+            self._safe_bind_font(dpg.last_item(), self._font_small)
             dpg.add_button(
                 label="↺",
                 callback=lambda s, a: self._reset_postprocess_params(),
@@ -1355,7 +1417,7 @@ class AudioVisualizerGUI:
         )
         dpg.add_spacer(height=8)
         dpg.add_text("Effekte", color=Theme.TEXT_SECONDARY)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         self._styled_slider(
             label="Warmth",
             tag="param_pp_warmth",
@@ -1404,12 +1466,12 @@ class AudioVisualizerGUI:
             "Preview aktualisiert automatisch beim Loslassen des Sliders.",
             wrap=340, color=Theme.TEXT_MUTED,
         )
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
 
     def _build_export_section(self):
         # --- PROJEKT SAVE/LOAD ---
         dpg.add_text("Projekt", color=Theme.TEXT_SECONDARY)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         with dpg.group(horizontal=True):
             dpg.add_button(
                 label="💾 Speichern",
@@ -1435,7 +1497,7 @@ class AudioVisualizerGUI:
         dpg.add_spacer(height=8)
 
         dpg.add_text("Auflösung", color=Theme.TEXT_SECONDARY)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         dpg.add_combo(
             label="",
             items=["1920x1080 (Full HD)", "1280x720 (HD)", "854x480 (SD)"],
@@ -1481,7 +1543,7 @@ class AudioVisualizerGUI:
         self._add_tooltip("~5-10x schneller mit Grafikkarte")
         dpg.add_spacer(height=8)
         dpg.add_text("Output", color=Theme.TEXT_SECONDARY)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         dpg.add_input_text(
             label="",
             default_value=self.state.output_dir,
@@ -1511,7 +1573,7 @@ class AudioVisualizerGUI:
             tag="render_progress",
         )
         dpg.add_text("", tag="render_status_text", wrap=340, color=Theme.TEXT_MUTED)
-        dpg.bind_item_font(dpg.last_item(), self._font_small)
+        self._safe_bind_font(dpg.last_item(), self._font_small)
         dpg.add_button(
             label="📁 Ordner öffnen",
             callback=self._on_open_output_folder,
@@ -1529,7 +1591,7 @@ class AudioVisualizerGUI:
         val_str = format % default_val if format.startswith("%") else str(default_val)
         with dpg.group(horizontal=True):
             dpg.add_text(label, color=Theme.TEXT_SECONDARY)
-            dpg.bind_item_font(dpg.last_item(), self._font_small)
+            self._safe_bind_font(dpg.last_item(), self._font_small)
             dpg.add_slider_float(
                 min_value=min_val, max_value=max_val,
                 default_value=default_val,
@@ -1538,7 +1600,7 @@ class AudioVisualizerGUI:
                 format=format,
             )
             dpg.add_text(val_str, color=Theme.TEXT_MUTED, tag=value_tag)
-            dpg.bind_item_font(dpg.last_item(), self._font_mono)
+            self._safe_bind_font(dpg.last_item(), self._font_mono)
         if tooltip:
             self._add_tooltip(tooltip, parent=tag)
 
@@ -1558,7 +1620,7 @@ class AudioVisualizerGUI:
         """Tooltip mit dezentem Styling."""
         with dpg.tooltip(parent=parent if parent else dpg.last_item()):
             dpg.add_text(text, color=Theme.TEXT_MUTED)
-            dpg.bind_item_font(dpg.last_item(), self._font_small)
+            self._safe_bind_font(dpg.last_item(), self._font_small)
 
     # -------------------------------------------------------------------------
     # Preview Panel
@@ -1582,14 +1644,14 @@ class AudioVisualizerGUI:
                 # Header mit Info
                 with dpg.group(horizontal=True):
                     dpg.add_text("Preview", color=Theme.ACCENT_PRIMARY)
-                    dpg.bind_item_font(dpg.last_item(), self._font_card_title)
+                    self._safe_bind_font(dpg.last_item(), self._font_card_title)
                     dpg.add_spacer(width=12)
                     dpg.add_text(
                         f"{self.state.preview_width}x{self.state.preview_height} @ {self.state.preview_fps}fps",
                         color=Theme.TEXT_MUTED,
                         tag="preview_resolution_text",
                     )
-                    dpg.bind_item_font(dpg.last_item(), self._font_small)
+                    self._safe_bind_font(dpg.last_item(), self._font_small)
 
                 dpg.add_separator()
                 dpg.add_spacer(height=6)
@@ -1602,13 +1664,13 @@ class AudioVisualizerGUI:
                     with dpg.group(tag="welcome_overlay"):
                         dpg.add_spacer(height=50)
                         dpg.add_text("🎵 Audio Visualizer Pro", color=Theme.TEXT_PRIMARY, tag="welcome_title")
-                        dpg.bind_item_font(dpg.last_item(), self._font_header)
+                        self._safe_bind_font(dpg.last_item(), self._font_header)
                         dpg.add_spacer(height=12)
                         dpg.add_text(
                             "So geht's:",
                             color=Theme.ACCENT_PRIMARY, tag="welcome_subtitle",
                         )
-                        dpg.bind_item_font(dpg.last_item(), self._font_card_title)
+                        self._safe_bind_font(dpg.last_item(), self._font_card_title)
                         dpg.add_spacer(height=8)
                         dpg.add_text(
                             "1. Audio-Datei laden (MP3, WAV, FLAC...)\n"
@@ -1621,13 +1683,13 @@ class AudioVisualizerGUI:
                             "💡 Tipp: Nutze die Tastenkürzel Ctrl+O und Ctrl+B für schnelles Laden.",
                             color=Theme.TEXT_MUTED, wrap=400, tag="welcome_drag_hint",
                         )
-                        dpg.bind_item_font(dpg.last_item(), self._font_small)
+                        self._safe_bind_font(dpg.last_item(), self._font_small)
                         dpg.add_spacer(height=8)
                         dpg.add_text(
                             "",
                             color=Theme.ACCENT_AUDIO, wrap=400, tag="welcome_loading",
                         )
-                        dpg.bind_item_font(dpg.last_item(), self._font_mono)
+                        self._safe_bind_font(dpg.last_item(), self._font_mono)
                         dpg.add_spacer(height=20)
                         dpg.add_button(
                             label="📁 Audio laden",
@@ -1645,7 +1707,7 @@ class AudioVisualizerGUI:
                         tag="preview_loading_text",
                         show=False,
                     )
-                    dpg.bind_item_font(dpg.last_item(), self._font_mono)
+                    self._safe_bind_font(dpg.last_item(), self._font_mono)
 
                     # Eigentliches Bild (initial versteckt)
                     dpg.add_image(
@@ -1664,14 +1726,14 @@ class AudioVisualizerGUI:
                         color=Theme.TEXT_MUTED,
                         tag="preview_time_text",
                     )
-                    dpg.bind_item_font(dpg.last_item(), self._font_mono)
+                    self._safe_bind_font(dpg.last_item(), self._font_mono)
                     dpg.add_spacer(width=12)
                     dpg.add_text(
                         "",
                         color=Theme.TEXT_MUTED,
                         tag="audio_info_text",
                     )
-                    dpg.bind_item_font(dpg.last_item(), self._font_small)
+                    self._safe_bind_font(dpg.last_item(), self._font_small)
 
             self._apply_card_theme(preview_card, Theme.ACCENT_PRIMARY)
 
@@ -1695,7 +1757,7 @@ class AudioVisualizerGUI:
                 color=Theme.TEXT_SECONDARY,
                 tag="status_text",
             )
-            dpg.bind_item_font(dpg.last_item(), self._font_small)
+            self._safe_bind_font(dpg.last_item(), self._font_small)
 
     def _set_status(self, msg: str, level: str = "info"):
         """Aktualisiert die Status-Zeile."""
@@ -1821,7 +1883,7 @@ class AudioVisualizerGUI:
         with dpg.window(label="Über", tag=tag, modal=True, width=440, height=320, no_resize=True):
             dpg.add_spacer(height=12)
             dpg.add_text("Audio Visualizer Pro", color=Theme.TEXT_PRIMARY)
-            dpg.bind_item_font(dpg.last_item(), self._font_header)
+            self._safe_bind_font(dpg.last_item(), self._font_header)
             dpg.add_text("Version 3.0", color=Theme.TEXT_MUTED)
             dpg.add_separator()
             dpg.add_spacer(height=8)
@@ -1853,7 +1915,7 @@ class AudioVisualizerGUI:
             dpg.delete_item(tag)
         with dpg.window(label="Tastenkürzel", tag=tag, modal=True, width=380, height=220, no_resize=True):
             dpg.add_text("Steuerung", color=Theme.TEXT_PRIMARY)
-            dpg.bind_item_font(dpg.last_item(), self._font_card_title)
+            self._safe_bind_font(dpg.last_item(), self._font_card_title)
             dpg.add_separator()
             dpg.add_spacer(height=8)
             with dpg.table(header_row=False):
@@ -2450,14 +2512,16 @@ class AudioVisualizerGUI:
         self._update_status_indicators()
 
         target_path = self.state.audio_path
+        self._analyze_thread_id = getattr(self, '_analyze_thread_id', 0) + 1
+        current_thread_id = self._analyze_thread_id
 
         def _analyze():
             try:
                 analyzer = AudioAnalyzer()
                 features = analyzer.analyze(target_path, fps=self.state.preview_fps)
-                self._analyze_result = ("ok", target_path, features)
+                self._analyze_result = ("ok", target_path, features, current_thread_id)
             except Exception as e:
-                self._analyze_result = ("error", target_path, str(e))
+                self._analyze_result = ("error", target_path, str(e), current_thread_id)
 
         self._analyze_result = None
         threading.Thread(target=_analyze, daemon=True).start()
@@ -2466,12 +2530,12 @@ class AudioVisualizerGUI:
         """Wird im Main Thread aufgerufen, um Analyse-Ergebnisse sicher zu verarbeiten."""
         if self._analyze_result is None:
             return
-        status, path, data = self._analyze_result
+        status, path, data, thread_id = self._analyze_result
         self._analyze_result = None
         self.state.is_analyzing = False
 
-        # Falls der Nutzer zwischenzeitlich eine andere Datei geladen hat
-        if self.state.audio_path != path:
+        # Falls der Nutzer zwischenzeitlich eine andere Datei geladen hat oder ein neuer Thread gestartet wurde
+        if self.state.audio_path != path or getattr(self, '_analyze_thread_id', 0) != thread_id:
             if self.state.audio_path and os.path.exists(self.state.audio_path):
                 self._analyze_audio()
             self._update_status_indicators()
@@ -2900,6 +2964,13 @@ class AudioVisualizerGUI:
             "lossless": "Lossless",
         }.get(self.state.quality, "High")
         dpg.set_value("quality_combo", quality_display)
+        # Resolution
+        res_display = {
+            (1920, 1080): "1920x1080 (Full HD)",
+            (1280, 720): "1280x720 (HD)",
+            (854, 480): "854x480 (SD)",
+        }.get((self.state.render_width, self.state.render_height), f"{self.state.render_width}x{self.state.render_height}")
+        dpg.set_value("res_combo", res_display)
         # Quotes
         dpg.set_value("chk_quotes_enabled", self.state.quotes_enabled)
         dpg.set_value("quote_font_color", self.state.quote_config.font_color)
@@ -3010,6 +3081,7 @@ class AudioVisualizerGUI:
             dpg.configure_item("btn_render", label="▶ Video exportieren")
             dpg.set_value("render_status_text", "")
             self._set_status(f"Render-Fehler: {error_msg}", "error")
+            self._show_error_modal(f"Render-Fehler:\n\n{error_msg}")
             self._update_status_indicators()
 
     def _estimate_time_remaining(self, frame: int, total: int) -> str:
