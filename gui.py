@@ -228,6 +228,8 @@ class AppState:
             f"{self.quotes_enabled}_{len(self.quotes)}_{qc.position}_{qc.font_size}_{qc.display_duration}_"
             f"{qc.fade_duration:.1f}_{qc.max_chars_per_line}_{qc.line_spacing}_{qc.slide_animation}_"
             f"{qc.scale_in}_{qc.glow_pulse}_{qc.compensation_blur:.1f}_{qc.latency_offset:.1f}_"
+            f"{qc.box_padding}_{qc.box_radius}_{qc.box_margin_bottom}_{qc.max_width_ratio:.2f}_{qc.scale:.2f}_"
+            f"{hash(qc.font_color)}_{hash(qc.box_color)}_"
             f"{hash(frozenset(self.viz_extra_params.items())) if self.viz_extra_params else 0}"
         )
 
@@ -262,6 +264,8 @@ class AppState:
             "quote_config": {
                 "position": qc.position,
                 "font_size": qc.font_size,
+                "font_color": list(qc.font_color),
+                "box_color": list(qc.box_color),
                 "display_duration": qc.display_duration,
                 "fade_duration": qc.fade_duration,
                 "max_chars_per_line": qc.max_chars_per_line,
@@ -271,6 +275,11 @@ class AppState:
                 "glow_pulse": qc.glow_pulse,
                 "compensation_blur": qc.compensation_blur,
                 "latency_offset": qc.latency_offset,
+                "box_padding": qc.box_padding,
+                "box_radius": qc.box_radius,
+                "box_margin_bottom": qc.box_margin_bottom,
+                "max_width_ratio": qc.max_width_ratio,
+                "scale": qc.scale,
             },
             "quotes": [
                 {
@@ -316,6 +325,8 @@ class AppState:
         state.quote_config = QuoteOverlayConfig(
             position=qc_data.get("position", "bottom"),
             font_size=qc_data.get("font_size", 52),
+            font_color=tuple(qc_data.get("font_color", [255, 255, 255])),
+            box_color=tuple(qc_data.get("box_color", [26, 26, 46, 200])),
             display_duration=qc_data.get("display_duration", 8.0),
             fade_duration=qc_data.get("fade_duration", 0.6),
             max_chars_per_line=qc_data.get("max_chars_per_line", 40),
@@ -325,6 +336,11 @@ class AppState:
             glow_pulse=qc_data.get("glow_pulse", False),
             compensation_blur=qc_data.get("compensation_blur", 12.0),
             latency_offset=qc_data.get("latency_offset", 0.0),
+            box_padding=qc_data.get("box_padding", 32),
+            box_radius=qc_data.get("box_radius", 16),
+            box_margin_bottom=qc_data.get("box_margin_bottom", 100),
+            max_width_ratio=qc_data.get("max_width_ratio", 0.75),
+            scale=qc_data.get("scale", 1.0),
         )
 
         # Quotes
@@ -1092,6 +1108,30 @@ class AudioVisualizerGUI:
 
         dpg.add_text("Erscheinungsbild", color=Theme.TEXT_SECONDARY)
         dpg.bind_item_font(dpg.last_item(), self._font_small)
+        # Farben
+        with dpg.group(horizontal=True):
+            dpg.add_text("Textfarbe", color=Theme.TEXT_SECONDARY)
+            dpg.bind_item_font(dpg.last_item(), self._font_small)
+            dpg.add_color_edit(
+                default_value=self.state.quote_config.font_color,
+                callback=self._on_quote_config_changed,
+                tag="quote_font_color",
+                uint8=True,
+                no_alpha=True,
+                width=120,
+            )
+            dpg.add_spacer(width=8)
+            dpg.add_text("Box-Farbe", color=Theme.TEXT_SECONDARY)
+            dpg.bind_item_font(dpg.last_item(), self._font_small)
+            dpg.add_color_edit(
+                default_value=self.state.quote_config.box_color,
+                callback=self._on_quote_config_changed,
+                tag="quote_box_color",
+                uint8=True,
+                no_alpha=False,
+                width=120,
+            )
+        dpg.add_spacer(height=4)
         dpg.add_combo(
             label="Position",
             items=["bottom", "center", "top"],
@@ -1169,6 +1209,47 @@ class AudioVisualizerGUI:
             tooltip="Weichzeichnung unter dem Text",
             format="%.1f",
         )
+        self._styled_slider(
+            label="Box-Padding (px)",
+            tag="quote_box_padding",
+            min_val=10, max_val=80, default_val=self.state.quote_config.box_padding,
+            callback=self._on_quote_config_changed,
+            tooltip="Innenabstand der Box",
+            format="%.0f",
+        )
+        self._styled_slider(
+            label="Box-Radius (px)",
+            tag="quote_box_radius",
+            min_val=0, max_val=50, default_val=self.state.quote_config.box_radius,
+            callback=self._on_quote_config_changed,
+            tooltip="Eckenrundung",
+            format="%.0f",
+        )
+        self._styled_slider(
+            label="Abstand unten (px)",
+            tag="quote_box_margin_bottom",
+            min_val=20, max_val=300, default_val=self.state.quote_config.box_margin_bottom,
+            callback=self._on_quote_config_changed,
+            tooltip="Abstand vom unteren Bildrand",
+            format="%.0f",
+        )
+        self._styled_slider(
+            label="Max. Breite (%)",
+            tag="quote_max_width_ratio",
+            min_val=0.3, max_val=0.95, default_val=self.state.quote_config.max_width_ratio,
+            callback=self._on_quote_config_changed,
+            tooltip="Maximale Box-Breite relativ zur Bildbreite",
+            format="%.2f",
+        )
+        self._styled_slider(
+            label="Skalierung",
+            tag="quote_scale",
+            min_val=0.5, max_val=2.0, default_val=self.state.quote_config.scale,
+            callback=self._on_quote_config_changed,
+            tooltip="Gesamtskalaierung der Quote-Box",
+            format="%.2f",
+        )
+        dpg.add_spacer(height=4)
         self._styled_slider(
             label="Latenz-Offset (s)",
             tag="quote_latency_offset",
@@ -2218,6 +2299,22 @@ class AudioVisualizerGUI:
             self.state.quote_config.compensation_blur = float(dpg.get_value(sender))
         elif tag == "quote_latency_offset":
             self.state.quote_config.latency_offset = float(dpg.get_value(sender))
+        elif tag == "quote_font_color":
+            val = dpg.get_value(sender)
+            self.state.quote_config.font_color = tuple(int(v) for v in val)
+        elif tag == "quote_box_color":
+            val = dpg.get_value(sender)
+            self.state.quote_config.box_color = tuple(int(v) for v in val)
+        elif tag == "quote_box_padding":
+            self.state.quote_config.box_padding = int(dpg.get_value(sender))
+        elif tag == "quote_box_radius":
+            self.state.quote_config.box_radius = int(dpg.get_value(sender))
+        elif tag == "quote_box_margin_bottom":
+            self.state.quote_config.box_margin_bottom = int(dpg.get_value(sender))
+        elif tag == "quote_max_width_ratio":
+            self.state.quote_config.max_width_ratio = float(dpg.get_value(sender))
+        elif tag == "quote_scale":
+            self.state.quote_config.scale = float(dpg.get_value(sender))
         self._request_preview_update()
 
     # -------------------------------------------------------------------------
@@ -2800,6 +2897,8 @@ class AudioVisualizerGUI:
         dpg.set_value("quality_combo", quality_display)
         # Quotes
         dpg.set_value("chk_quotes_enabled", self.state.quotes_enabled)
+        dpg.set_value("quote_font_color", self.state.quote_config.font_color)
+        dpg.set_value("quote_box_color", self.state.quote_config.box_color)
         dpg.set_value("quote_position", self.state.quote_config.position)
         self._set_slider_and_value("quote_font_size", self.state.quote_config.font_size)
         self._set_slider_and_value("quote_display_duration", self.state.quote_config.display_duration)
@@ -2810,6 +2909,11 @@ class AudioVisualizerGUI:
         dpg.set_value("quote_scale_in", self.state.quote_config.scale_in)
         dpg.set_value("quote_glow_pulse", self.state.quote_config.glow_pulse)
         self._set_slider_and_value("quote_compensation_blur", self.state.quote_config.compensation_blur)
+        self._set_slider_and_value("quote_box_padding", self.state.quote_config.box_padding)
+        self._set_slider_and_value("quote_box_radius", self.state.quote_config.box_radius)
+        self._set_slider_and_value("quote_box_margin_bottom", self.state.quote_config.box_margin_bottom)
+        self._set_slider_and_value("quote_max_width_ratio", self.state.quote_config.max_width_ratio)
+        self._set_slider_and_value("quote_scale", self.state.quote_config.scale)
         self._set_slider_and_value("quote_latency_offset", self.state.quote_config.latency_offset)
         self._rebuild_viz_param_controls()
         self._refresh_quotes_list()

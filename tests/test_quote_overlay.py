@@ -396,3 +396,31 @@ class TestQuoteDisplayDuration:
         # Bei 4.5s (nach display_duration) -> nicht mehr sichtbar
         r2 = renderer.apply(frame.copy(), time_seconds=4.5, frame_idx=135)
         np.testing.assert_array_equal(r2, frame)
+
+    def test_rgba_font_color_handled(self):
+        """RGBA font_color sollte korrekt auf RGB + Fade-Alpha reduziert werden."""
+        frame = create_test_frame()
+        quotes = [Quote(text="Test", start_time=1.0, end_time=5.0, confidence=1.0)]
+        config = QuoteOverlayConfig(
+            font_color=(255, 0, 0, 128),  # RGBA
+            display_duration=4.0,
+            fade_duration=0.1,
+        )
+        renderer = QuoteOverlayRenderer(quotes, config)
+        result = renderer.apply(frame.copy(), time_seconds=2.0)
+        assert np.any(result != frame)
+        # Die rote Farbe sollte im Resultat sichtbar sein
+        assert np.any(result[:, :, 0] > result[:, :, 2])
+
+    def test_rgb_box_color_gets_default_alpha(self):
+        """RGB box_color sollte Default-Alpha erhalten."""
+        frame = create_test_frame()
+        quotes = [Quote(text="Test", start_time=1.0, end_time=5.0, confidence=1.0)]
+        config = QuoteOverlayConfig(
+            box_color=(0, 0, 255),  # RGB ohne Alpha
+            display_duration=4.0,
+            fade_duration=0.1,
+        )
+        renderer = QuoteOverlayRenderer(quotes, config)
+        result = renderer.apply(frame.copy(), time_seconds=2.0)
+        assert np.any(result != frame)

@@ -359,7 +359,7 @@ class QuoteOverlayRenderer:
         )
         
         # Text zeichnen
-        font_color = list(self.config.font_color) + [int(255 * alpha)]
+        font_color = list(self.config.font_color)[:3] + [int(255 * alpha)]
         
         # Vertikale Zentrierung des Text-Blocks in der Box
         if hasattr(self._font, 'getbbox'):
