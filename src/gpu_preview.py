@@ -165,7 +165,7 @@ def render_gpu_preview(
         renderer.ctx.clear(0.05, 0.05, 0.05)
 
         if bg_texture is not None:
-            renderer._render_background(bg_texture, background_opacity)
+            renderer._render_background(bg_texture, background_opacity, background_vignette)
 
         # Visualizer in temporären viz_fbo rendern
         renderer.viz_fbo.use()

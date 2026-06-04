@@ -2952,7 +2952,16 @@ class AudioVisualizerGUI:
         while True:
             try:
                 msg = self._render_queue.get_nowait()
-                final_msg = msg
+                if msg.get("type") == "progress":
+                    frame = msg["frame"]
+                    total = msg["total"]
+                    progress = frame / total
+                    dpg.set_value("render_progress", progress)
+                    pct = progress * 100
+                    self._set_status(f"Rendering... {pct:.1f}% ({frame}/{total})", "warn")
+                    dpg.set_value("render_status_text", f"Geschätzte Restzeit: {self._estimate_time_remaining(frame, total)}")
+                else:
+                    final_msg = msg
             except queue.Empty:
                 break
 

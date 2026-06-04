@@ -60,12 +60,19 @@ class AudioAnalyzer:
         try:
             with open(path, 'rb') as f:
                 hasher.update(f.read(1024 * 1024))  # Erste 1MB
-                if file_stat.st_size > 2 * 1024 * 1024:
+                if file_stat.st_size > 4 * 1024 * 1024:
+                    # Mitte der Datei (reduziert Kollisionswahrscheinlichkeit)
+                    mid = file_stat.st_size // 2
+                    f.seek(mid - 512 * 1024)
+                    hasher.update(f.read(1024 * 1024))
+                    f.seek(-1024 * 1024, 2)
+                    hasher.update(f.read())  # Letzte 1MB
+                elif file_stat.st_size > 2 * 1024 * 1024:
                     f.seek(-1024 * 1024, 2)
                     hasher.update(f.read())  # Letzte 1MB
         except Exception:
             pass
-        hasher.update(f"_{fps}_v5".encode())
+        hasher.update(f"_{fps}_v6".encode())
         return self.cache_dir / f"{hasher.hexdigest()}.npz"
     
     def _progress(self, msg: str, step: int, total: int, callback: Optional[Callable] = None):
@@ -154,7 +161,7 @@ class AudioAnalyzer:
         
         hop_length = 256
         n_fft = 2048
-        expected_frames = int(duration * fps)
+        expected_frames = int(np.ceil(duration * fps))
         
         # === Pre-Emphasis Filter (0.97) ===
         # Hebt hochfrequente Anteile (Konsonanten, S-Laute) fuer Sprach-Analyse an
@@ -187,7 +194,10 @@ class AudioAnalyzer:
         
         # Chroma (aus bereits windowed STFT)
         self._progress("Erkenne Tonart...", step := step + 1, total_steps, progress_callback)
-        chroma = librosa.feature.chroma_stft(S=stft, sr=sr)
+        chroma_raw = librosa.feature.chroma_stft(S=stft, sr=sr)
+        chroma = np.zeros((12, expected_frames), dtype=np.float32)
+        for i in range(12):
+            chroma[i, :] = self._interpolate_to_length(chroma_raw[i, :], expected_frames)
         
         # NEU: Transient-Detection (fuer Kick/Snare)
         self._progress("Erkenne Transienten...", step := step + 1, total_steps, progress_callback)
@@ -225,9 +235,15 @@ class AudioAnalyzer:
         ema.reset()
         voice_clarity_smooth = ema.process(voice_clarity)
         
-        chroma_frames = chroma.shape[1]
-        mfcc = np.zeros((13, chroma_frames), dtype=np.float32)
-        tempogram = np.zeros((384, chroma_frames), dtype=np.float32)
+        mfcc_raw = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13, hop_length=hop_length)
+        mfcc = np.zeros((13, expected_frames), dtype=np.float32)
+        for i in range(13):
+            mfcc[i, :] = self._interpolate_to_length(mfcc_raw[i, :], expected_frames)
+        
+        tempogram_raw = librosa.feature.tempogram(onset_envelope=onset_env, sr=sr, hop_length=hop_length)
+        tempogram = np.zeros((tempogram_raw.shape[0], expected_frames), dtype=np.float32)
+        for i in range(tempogram_raw.shape[0]):
+            tempogram[i, :] = self._interpolate_to_length(tempogram_raw[i, :], expected_frames)
         
         features = AudioFeatures(
             duration=duration,
@@ -381,7 +397,9 @@ class AudioAnalyzer:
     def _save_cache(self, path: Path, features: AudioFeatures):
         data = {}
         for k, v in features.model_dump().items():
-            if isinstance(v, str):
+            if v is None:
+                data[k] = np.array("", dtype='<U100')
+            elif isinstance(v, str):
                 data[k] = np.array(v, dtype='<U100')
             else:
                 data[k] = v

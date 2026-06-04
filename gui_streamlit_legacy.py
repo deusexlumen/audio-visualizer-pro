@@ -1565,11 +1565,11 @@ def render_settings_page():
     gpu_params = _reconstruct_gpu_params(gpu_viz)
     
     # Read post-processing from session state
-    pp_contrast = st.session_state.get("pp_contrast", 1.0)
-    pp_saturation = st.session_state.get("pp_saturation", 1.0)
-    pp_brightness = st.session_state.get("pp_brightness", 0.0)
-    pp_warmth = st.session_state.get("pp_warmth", 0.0)
-    pp_grain = st.session_state.get("pp_grain", 0.0)
+    pp_contrast = st.session_state.get("pp_contrast_state", 1.0)
+    pp_saturation = st.session_state.get("pp_saturation_state", 1.0)
+    pp_brightness = st.session_state.get("pp_brightness_state", 0.0)
+    pp_warmth = st.session_state.get("pp_warmth_state", 0.0)
+    pp_grain = st.session_state.get("pp_film_grain_state", 0.0)
     beat_sync = st.session_state.get("beat_sync", False)
     
     # Read background from session state
