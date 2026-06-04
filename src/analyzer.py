@@ -155,6 +155,8 @@ class AudioAnalyzer:
         try:
             y, sr = librosa.load(audio_path, sr=44100, mono=True)
             duration = librosa.get_duration(y=y, sr=sr)
+        except Exception as e:
+            raise RuntimeError(f"Audio-Datei konnte nicht geladen werden: {audio_path}") from e
         finally:
             if temp_wav and os.path.exists(temp_wav.name):
                 os.unlink(temp_wav.name)
@@ -336,7 +338,7 @@ class AudioAnalyzer:
             video_frame_duration = 1.0 / fps
             
             beat_times = beats * hop_duration
-            beat_video_frames = (beat_times / video_frame_duration).astype(np.int32)
+            beat_video_frames = np.round(beat_times / video_frame_duration).astype(np.int32)
             
             # Entferne Duplikate und clamp auf gueltigen Bereich
             beat_video_frames = np.unique(beat_video_frames)

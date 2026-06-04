@@ -2561,12 +2561,17 @@ class AudioVisualizerGUI:
                 # render_gpu_preview hat intern einen Fehler gefangen und None zurückgegeben
                 self._preview_last_error_time = time.time()
                 self._preview_error_params_hash = params_hash
+                dpg.configure_item("preview_loading_text", show=True, color=Theme.STATUS_ERR)
+                dpg.set_value("preview_loading_text", "❌ Preview-Fehler. Konsole prüfen.")
         except Exception as e:
             print(f"[Preview] Fehler: {e}")
             self._preview_last_error_time = time.time()
             self._preview_error_params_hash = params_hash
+            dpg.configure_item("preview_loading_text", show=True, color=Theme.STATUS_ERR)
+            dpg.set_value("preview_loading_text", "❌ Preview-Fehler. Konsole prüfen.")
         finally:
-            dpg.configure_item("preview_loading_text", show=False)
+            # loading_text wird bei Erfolg in _upload_texture ausgeblendet
+            pass
 
     def _render_background_only(self):
         """Zeigt das Hintergrundbild allein an, wenn kein Audio geladen ist."""

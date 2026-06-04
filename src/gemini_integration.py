@@ -587,7 +587,7 @@ class GeminiIntegration:
             - Dominante Frequenz: {audio_features.get('spectral_mean', 0.5):.2f}
             
             VISUALIZER: {visualizer_type}
-            AKTUELLE PARAMETER: {json.dumps(current_params, indent=2)}
+            AKTUELLE PARAMETER: {json.dumps(GeminiIntegration._sanitize_for_json(current_params), indent=2)}
             
             GIB DIE OPTIMALEN PARAMETER ZURUECK als JSON-Objekt.
             
@@ -620,6 +620,21 @@ class GeminiIntegration:
         except Exception as e:
             print(f"[Gemini] Parameter-Optimierung fehlgeschlagen: {e}")
             return current_params
+
+    @staticmethod
+    def _sanitize_for_json(obj):
+        """Rekursive Konvertierung von numpy-Typen zu nativen Python-Typen."""
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (np.floating, np.float32, np.float64)):
+            return float(obj)
+        if isinstance(obj, (np.integer, np.int32, np.int64)):
+            return int(obj)
+        if isinstance(obj, dict):
+            return {k: GeminiIntegration._sanitize_for_json(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [GeminiIntegration._sanitize_for_json(v) for v in obj]
+        return obj
 
     def optimize_all_settings(self, visualizer_type: str, current_params: dict,
                               audio_features: dict, colors: dict,
@@ -797,10 +812,10 @@ AUDIO-ANALYSE
 VISUALIZER: {visualizer_type}
 ================================================================================
 AKTUELLE PARAMETER (diese sind dein Ausgangspunkt):
-{json.dumps(current_params, indent=2)}
+{json.dumps(GeminiIntegration._sanitize_for_json(current_params), indent=2)}
 
 AKTUELLE FARBEN:
-{json.dumps(colors, indent=2)}
+{json.dumps(GeminiIntegration._sanitize_for_json(colors), indent=2)}
 
 ================================================================================
 PARAMETER-SPEZIFIKATIONEN
