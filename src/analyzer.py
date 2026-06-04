@@ -209,9 +209,14 @@ class AudioAnalyzer:
         self._progress("Analysiere Sprach-Präsenz...", step := step + 1, total_steps, progress_callback)
         voice_clarity = self._detect_voice_clarity(y, sr, hop_length, expected_frames, stft=stft)
         
-        # NEU: Voice Band (FFT Bins 4-20 für gezielte Sprach-Triggerung)
+        # NEU: Voice Band (80Hz - 3kHz fuer gezielte Sprach-Triggerung)
         self._progress("Analysiere Sprach-Band...", step := step + 1, total_steps, progress_callback)
-        voice_band_raw = np.mean(stft[4:21, :], axis=0)
+        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+        idx_80 = np.searchsorted(freqs, 80.0)
+        idx_3k = np.searchsorted(freqs, 3000.0)
+        idx_80 = max(1, min(idx_80, len(freqs) - 1))
+        idx_3k = max(idx_80 + 1, min(idx_3k, len(freqs)))
+        voice_band_raw = np.mean(stft[idx_80:idx_3k, :], axis=0)
         voice_band = self._normalize(voice_band_raw)
         voice_band = self._interpolate_to_length(voice_band, expected_frames)
         
@@ -392,9 +397,44 @@ class AudioAnalyzer:
             return "hybrid"
     
     def _estimate_key(self, chroma: np.ndarray) -> str:
+        """
+        Schaetzt Tonart mit Krumhansl-Schmuckler Key-Profilen.
+        Beruecksichtigt Major und Minor, waehlt den besten Korrelations-Score.
+        """
         chroma_avg = np.mean(chroma, axis=1)
         keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-        return keys[np.argmax(chroma_avg)] + " major"
+        
+        # Krumhansl-Schmuckler Key-Profile (normalisiert)
+        major_profile = np.array([
+            6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88
+        ])
+        minor_profile = np.array([
+            6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17
+        ])
+        
+        major_profile = major_profile / np.sum(major_profile)
+        minor_profile = minor_profile / np.sum(minor_profile)
+        chroma_norm = chroma_avg / (np.sum(chroma_avg) + 1e-10)
+        
+        best_score = -np.inf
+        best_key = "C major"
+        
+        for shift in range(12):
+            # Major-Korrelation
+            major_shifted = np.roll(major_profile, shift)
+            major_score = np.corrcoef(chroma_norm, major_shifted)[0, 1]
+            if major_score > best_score:
+                best_score = major_score
+                best_key = f"{keys[shift]} major"
+            
+            # Minor-Korrelation
+            minor_shifted = np.roll(minor_profile, shift)
+            minor_score = np.corrcoef(chroma_norm, minor_shifted)[0, 1]
+            if minor_score > best_score:
+                best_score = minor_score
+                best_key = f"{keys[shift]} minor"
+        
+        return best_key
     
     def _save_cache(self, path: Path, features: AudioFeatures):
         data = {}
