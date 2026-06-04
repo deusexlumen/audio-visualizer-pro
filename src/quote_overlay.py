@@ -201,20 +201,22 @@ class QuoteOverlayRenderer:
         Berechnet den Fade-Alpha-Wert (0.0 - 1.0) fuer ein Zitat.
         
         Fade-In am Anfang, Fade-Out am Ende.
-        Beruecksichtigt die maximale Anzeigedauer.
+        Beruecksichtigt Latenz-Kompensation und maximale Anzeigedauer.
         """
         fade = self.config.fade_duration
         effective_end = quote.start_time + self.config.display_duration
-        duration = effective_end - quote.start_time
+        latency = self.config.latency_offset
+        adj_start = quote.start_time + latency
+        adj_end = effective_end + latency
         
-        # Am Anfang: Fade-In
-        if time_seconds < quote.start_time + fade:
-            progress = (time_seconds - quote.start_time) / fade
+        # Am Anfang: Fade-In (mit Latenz-Kompensation)
+        if time_seconds < adj_start + fade:
+            progress = (time_seconds - adj_start) / fade
             return max(0.0, min(1.0, progress))
         
-        # Am Ende: Fade-Out
-        elif time_seconds > effective_end - fade:
-            progress = (effective_end - time_seconds) / fade
+        # Am Ende: Fade-Out (mit Latenz-Kompensation)
+        elif time_seconds > adj_end - fade:
+            progress = (adj_end - time_seconds) / fade
             return max(0.0, min(1.0, progress))
         
         # In der Mitte: Voll sichtbar

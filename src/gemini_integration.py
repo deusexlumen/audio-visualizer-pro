@@ -16,7 +16,7 @@ from typing import List, Optional
 from dataclasses import dataclass
 from pathlib import Path
 
-from .quote_cache import save_upload_id, load_upload_id, save_transcript
+from .quote_cache import save_upload_id, load_upload_id, save_transcript, load_transcript
 from .types import Quote
 
 try:
@@ -351,7 +351,7 @@ class GeminiIntegration:
                 if progress_callback:
                     progress_callback(f"Upload Versuch {attempt}/{max_retries} fehlgeschlagen")
                 if attempt < max_retries:
-                    wait = attempt * 2  # Exponential Backoff: 2s, 4s, 6s
+                    wait = 2 * (2 ** (attempt - 1))  # Exponential Backoff: 2s, 4s, 8s
                     print(f"[Gemini] Warte {wait}s vor naechstem Versuch...")
                     time.sleep(wait)
         
@@ -375,6 +375,12 @@ class GeminiIntegration:
             audio_path = Path(audio_path)
             if not audio_path.exists():
                 raise FileNotFoundError(f"Audio nicht gefunden: {audio_path}")
+
+            # Transkript-Cache prüfen
+            cached = load_transcript(str(audio_path))
+            if cached:
+                print("[Gemini] Gecachtes Transkript verwendet.")
+                return cached
 
             uploaded_file = self._upload_audio_with_retry(str(audio_path))
 
@@ -502,11 +508,21 @@ class GeminiIntegration:
                 char_count = len(text)
                 if word_count < 3 and char_count < 6:
                     continue
+                try:
+                    start_t = float(q.get("start_time", 0.0))
+                    end_t = float(q.get("end_time", 0.0))
+                    conf = float(q.get("confidence", 0.5))
+                except (ValueError, TypeError):
+                    print(f"[Gemini] Ungültige Zeitstempel fuer Zitat '{text[:30]}...', überspringe.")
+                    continue
+                # Endzeit darf nicht vor Startzeit liegen
+                if end_t < start_t:
+                    end_t = start_t + 0.5
                 quotes.append(Quote(
                     text=text,
-                    start_time=float(q.get("start_time", 0.0)),
-                    end_time=float(q.get("end_time", 0.0)),
-                    confidence=float(q.get("confidence", 0.5))
+                    start_time=start_t,
+                    end_time=end_t,
+                    confidence=conf
                 ))
 
             # --- ADAPTIVE CONFIDENCE-FILTERUNG ---
