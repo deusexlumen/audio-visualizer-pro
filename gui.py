@@ -2919,6 +2919,16 @@ class AudioVisualizerGUI:
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self.state = AppState.from_dict(data)
+            # Validierung: Pruefe ob referenzierte Dateien noch existieren
+            missing = []
+            if self.state.audio_path and not os.path.exists(self.state.audio_path):
+                missing.append(f"Audio: {Path(self.state.audio_path).name}")
+            if self.state.background_path and not os.path.exists(self.state.background_path):
+                missing.append(f"Background: {Path(self.state.background_path).name}")
+            if missing:
+                self._show_error_modal(
+                    f"Projekt '{name}' geladen, aber folgende Dateien fehlen:\n\n" + "\n".join(missing)
+                )
             self._sync_ui_to_state()
             if modal_tag and dpg.does_item_exist(modal_tag):
                 dpg.delete_item(modal_tag)
@@ -3154,6 +3164,9 @@ class AudioVisualizerGUI:
         user_prompt = getattr(self.state, 'ki_prompt', '')
 
         try:
+            # Altes Future cancellen falls noch laufend
+            if self._ki_future is not None and not self._ki_future.done():
+                self._ki_future.cancel()
             self._ki_future = self.gemini.optimize_all_settings_async(
                 visualizer_type=self.state.visualizer_type,
                 current_params=current_params,
@@ -3312,6 +3325,11 @@ class AudioVisualizerGUI:
         except KeyboardInterrupt:
             pass
         finally:
+            if self.gemini:
+                try:
+                    self.gemini.shutdown()
+                except Exception:
+                    pass
             dpg.destroy_context()
 
 

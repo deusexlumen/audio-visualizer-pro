@@ -351,8 +351,10 @@ class GeminiIntegration:
                 if progress_callback:
                     progress_callback(f"Upload Versuch {attempt}/{max_retries} fehlgeschlagen")
                 if attempt < max_retries:
-                    wait = 2 * (2 ** (attempt - 1))  # Exponential Backoff: 2s, 4s, 8s
-                    print(f"[Gemini] Warte {wait}s vor naechstem Versuch...")
+                    import random
+                    base_wait = 2 * (2 ** (attempt - 1))  # Exponential: 2s, 4s, 8s
+                    wait = base_wait + random.uniform(0, 1.0)  # + Jitter bis 1s
+                    print(f"[Gemini] Warte {wait:.1f}s vor naechstem Versuch...")
                     time.sleep(wait)
         
         # Cleanup temp file bei Fehler
