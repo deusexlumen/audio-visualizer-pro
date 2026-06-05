@@ -1,5 +1,48 @@
 # Session Notes – Audio Visualizer Pro
 
+## 2026-06-04 – Comprehensive Audit Fixes (P0/P1/P2)
+
+**Commits:** `3da88fe`, `5a44c36`, `23dc66d`, `268a36e` auf `master`
+
+**Enthaltene Änderungen:**
+- `gui.py` – Cross-Platform Font-Fallback, Render-Error-Modal, Resolution-Combo-Sync, Audio-Analyse Thread-Cancellation, Projekt-Validierung, KI-Future-Cancel
+- `src/quote_overlay.py` – Dynamische Font-Skalierung (`_get_font()`), Phantom-Features entfernt
+- `src/gemini_integration.py` – Upload-Backoff mit Jitter, Executor-Shutdown
+- `src/analyzer.py` – Voice-Band-Frequenzen dynamisch (80Hz-3kHz), Key-Detection mit Krumhansl-Schmuckler Major+Minor
+
+**Audit-Items abgearbeitet:**
+- P0: Audio-Interpolation, Gemini safe_float/cache/backoff, Quote display_duration/latency/fade, Preview/Streamlit fixes, GUI stability
+- P1: Quote Phantom-Features entfernt, Font-Skalierung, Serialization aller 38 Felder, Projekt-Validierung
+- P2: Gemini Executor-Shutdown, Future-Cancel, Jitter, Audio Voice-Band-Bins, Key-Detection Major+Minor
+
+**Status:** ✅ Alle Audit-Findings erledigt. 145 Tests passed, 1 failed (bekannter SDF-Dead-Code).
+
+---
+
+## 2026-05-26 – Git-Commit: GPU-Text-Rendering, Quote-System und GUI-Integration
+
+**Commit:** `3ce07f3` auf `master`
+
+**Enthaltene Änderungen:**
+- `src/gpu_text_renderer.py` – GPU-Text-Rendering Verbesserungen
+- `src/gpu_quote_renderer.py` – Quote-Rendering Updates
+- `src/gpu_renderer.py` – GPU-Renderer Anpassungen
+- `src/gpu_visualizers/frequency_flower.py` – Frequency Flower Visualizer Fixes
+- `src/gemini_integration.py` – KI-Integration Updates
+- `src/quote_refiner.py` – Quote-Refiner Verbesserungen
+- `gui.py` – GUI-Integration und Styling
+- `start_gui.bat` – Start-Skript angepasst
+- `SESSION_NOTES.md` – Dokumentation aktualisiert
+- `projects/podcast.json` – Podcast-Projekt-Preset hinzugefügt
+
+**Nicht committet (außen vor gelassen):**
+- `dpg_layout.ini` (User-spezifische GUI-Layout-Datei)
+- Debug-Dateien (`debug_font_atlas.png`, `debug_font_atlas.py`, `debug_text_render.png`, `debug_text_render.py`, etc.) – temporäre Debug-Outputs
+
+**Status:** ✅ Live auf GitHub.
+
+---
+
 ## 2026-05-02 – Dark-Glassmorphism GUI Redesign (Phase 3)
 
 **Problem:**
