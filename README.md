@@ -1,597 +1,456 @@
-<div align="center">
+[![Version](https://img.shields.io/badge/SOTA-v2.1.0-blue)](https://github.com/audio-visualizer-pro/audio-visualizer-pro)
+[![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
+[![Tests](https://img.shields.io/badge/tests-134%20passed-brightgreen)](https://github.com/audio-visualizer-pro/audio-visualizer-pro/actions)
+[![Coverage](https://img.shields.io/badge/coverage-77%25-yellowgreen)](https://github.com/audio-visualizer-pro/audio-visualizer-pro/actions)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-<br>
+# Audio Visualizer Pro v2.1.0
 
-```
-╔══════════════════════════════════════════════════════════════════════╗
-║                                                                      ║
-║           🎵    A U D I O   V I S U A L I Z E R   P R O    ✨        ║
-║                                                                      ║
-╚══════════════════════════════════════════════════════════════════════╝
-```
+**Professionelles Audio-Visualisierungs-System mit GPU-Beschleunigung und KI-Unterstützung**
 
-<h1>Audio Visualizer Pro</h1>
-
-<p><strong>Transformiere Audio in atemberaubende Visuals.</strong><br>
-KI-gestützt. GPU-beschleunigt. Für Musikvideos, Podcasts & Creative Coding.</p>
-
-<p>
-  <a href="#-schnellstart"><img src="https://img.shields.io/badge/⚡_Schnellstart-FF4B4B?style=for-the-badge&logoColor=white" alt="Schnellstart"></a>
-  <a href="#-demo"><img src="https://img.shields.io/badge/🎬_Demo-9146FF?style=for-the-badge&logoColor=white" alt="Demo"></a>
-  <a href="#-dokumentation"><img src="https://img.shields.io/badge/📖_Docs-00C7B7?style=for-the-badge&logoColor=white" alt="Docs"></a>
-</p>
-
-<p>
-  <img src="https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
-  <img src="https://img.shields.io/badge/Tests-142%20Passing-success" alt="Tests">
-  <img src="https://img.shields.io/badge/GUI-DearPyGui-2E8B57?logo=python&logoColor=white" alt="DearPyGui">
-  <img src="https://img.shields.io/badge/GPU-OpenGL-5586A4?logo=opengl&logoColor=white" alt="OpenGL">
-  <img src="https://img.shields.io/badge/Video-FFmpeg-007808?logo=ffmpeg&logoColor=white" alt="FFmpeg">
-</p>
-
-<br>
-
-</div>
+Erstelle atemberaubende Musikvideos, Podcast-Visuals und kreative Projekte mit 16 GPU-beschleunigten Visualizern, KI-gestützter Zitat-Extraktion und professionellem Video-Encoding.
 
 ---
 
-## 📋 Inhaltsverzeichnis
+## 🎯 Überblick
 
-- [🎬 Demo](#-demo)
-- [✨ Features](#-features)
-- [🚀 Schnellstart](#-schnellstart)
-- [🏗️ Architektur](#-architektur)
-- [🎨 Visualizer](#-visualizer)
-- [🎙️ Podcast-Workflow](#-podcast-workflow)
-- [🤖 KI-Auto-Modus](#-ki-auto-modus)
-- [⚙️ Konfiguration](#-konfiguration)
-- [🧪 Tests](#-tests)
-- [📁 Projektstruktur](#-projektstruktur)
-- [🔧 System-Voraussetzungen](#-system-voraussetzungen)
-- [🛣️ Roadmap](#-roadmap)
-- [🤝 Mitmachen](#-mitmachen)
-- [📄 Lizenz](#-lizenz)
+Audio Visualizer Pro ist ein modulares System zur Erstellung hochwertiger Audio-Visualisierungen. Es kombiniert GPU-beschleunigtes Rendering (ModernGL/OpenGL), KI-gestützte Audio-Analyse (Gemini) und eine professionelle DearPyGui-Oberfläche.
 
----
+### Kernfunktionen
 
-## 🎬 Demo
-
-<div align="center">
-
-### 🎵 Musik-Visualizer in Aktion
-
-> *Lade ein Audio hoch, wähle einen Look und sieh sofort das Ergebnis — dank GPU-beschleunigter Live-Vorschau.*
-
-<br>
-
-| 🎨 **Pulsing Core** | 📊 **Spectrum Bars** | 🌸 **Frequency Flower** |
-|:---:|:---:|:---:|
-| 🔴⭕🔴 Pulsierender Beat-Kern | ▁▂▃▅▇ Klassischer Equalizer | 🌺 Organische Blüten-Animation |
-| *EDM, Pop, Trap* | *Rock, Hip-Hop, Metal* | *Indie, Folk, Pop* |
-
-<br>
-
-| 💥 **Particle Swarm** | 🫧 **Liquid Blobs** | 🔯 **Sacred Mandala** |
-|:---:|:---:|:---:|
-| 💥✨💥 Explosive Partikel | 🫧🫧🫧 Flüssige MetaBalls | 🔯🕉️🔯 Heilige Geometrie |
-| *Dubstep, Trap, DnB* | *House, Techno, Deep* | *Meditation, Ambient* |
-
-<br>
-
-**🚀 So einfach geht's:**
-
-```bash
-# 1. GUI starten
-python start_gui.py
-
-# 2. Audio hochladen → Live-Vorschau erscheint sofort
-# 3. Look wählen → Farben anpassen → Video rendern
-```
-
-</div>
-
----
-
-## ✨ Features
-
-<div align="center">
-
-<table>
-<tr>
-<td width="33%" align="center">
-
-### 🤖 KI-Auto-Modus
-Die KI analysiert dein Audio und empfiehlt **automatisch** den perfekten Visualizer, die passende Farbpalette und optimale Parameter.
-
-</td>
-<td width="33%" align="center">
-
-### 🎨 18 GPU-Visualizer
-Von minimalistisch bis psychedelisch — alle Visualizer nutzen **Hardware-beschleunigtes OpenGL-Rendering** für flüssige 60fps.
-
-</td>
-<td width="33%" align="center">
-
-### 💬 KI-Zitat-Overlays
-Gemini extrahiert automatisch die besten **Key-Zitate** aus deinem Audio. **Editierbar, zeitbasiert, animiert** — mit GPU-beschleunigtem Text-Rendering.
-
-</td>
-</tr>
-<tr>
-<td width="33%" align="center">
-
-### ⚡ Aggressives Caching
-Audio-Analyse, Zitate und Upload-IDs werden **persistent** gecached. Millionen Renders ohne Wartezeit.
-
-</td>
-<td width="33%" align="center">
-
-### 📁 Projekt-Presets
-Speichere und lade **komplette Projekte** inkl. aller Einstellungen, Zitate und Parameter. Auto-Save beim Rendern.
-
-</td>
-<td width="33%" align="center">
-
-### 🖥️ DearPyGui Desktop-GUI
-**Native Desktop-App** mit GPU-Live-Preview, dynamischen Parameter-Slidern pro Visualizer und One-Click-Render.
-
-</td>
-</tr>
-</table>
-
-</div>
+- **🎨 16 GPU-Visualizer**: Shader-basierte Visualisierung mit ModernGL (10 Classic + 6 Signature Pro)
+- **🤖 KI-Integration**: Automatische Transkription und Zitat-Extraktion mit Gemini 3.1 Flash-Lite
+- **🖥️ DearPyGui GUI**: Premium Dark UI mit Echtzeit-Vorschau
+- **✨ Post-Processing**: Bloom, Film Grain, Vignette, Chromatic Aberration, LUTs
+- **🎬 Multi-Codec**: H.264, HEVC, ProRes Encoding via FFmpeg
+- **🎵 Beat-Sync**: Synchronisierte Zitat-Einblendungen und Visual-Effekte
+- **🔌 Plugin-System**: Einfache Erweiterung um eigene Visualizer
+- **🧪 134 Tests**: Umfassende Testabdeckung mit 77% Coverage
+- **🧠 Evo-Agent Framework**: State Ledger, Root Orchestrator & Skill-Dispatcher
 
 ---
 
 ## 🚀 Schnellstart
-
-### Installation
-
+### Voraussetzungen
 ```bash
-# 1. Repository klonen
-git clone https://github.com/dein-user/audio_visualizer_pro.git
-cd audio_visualizer_pro
-
-# 2. Abhängigkeiten installieren
-pip install -r requirements.txt
-
-# 3. FFmpeg installieren (system-seitig)
-# Ubuntu:  sudo apt-get install ffmpeg
-# macOS:   brew install ffmpeg
+# Python 3.10+ erforderlich
+python --version
+# FFmpeg installieren (systemweit)
+# Ubuntu/Debian:
+sudo apt-get install ffmpeg
+# macOS:
+brew install ffmpeg
 # Windows: https://ffmpeg.org/download.html
 ```
-
-### Option A: GUI starten (Empfohlen)
-
+### Installation
 ```bash
-# Windows
-double-click start_gui.bat
-# oder direkt:
+# Repository klonen
+git clone https://github.com/audio-visualizer-pro/audio-visualizer-pro.git
+cd audio-visualizer-pro
+# Abhängigkeiten installieren
+pip install -r requirements.txt
+```
+### GUI starten
+```bash
+# DearPyGui Oberfläche starten
 python gui.py
-
-# Oder überall
-python start_gui.py
 ```
-
-Öffnet automatisch **[http://localhost:8501](http://localhost:8501)** im Browser.
-
-### Option B: Kommandozeile
-
+### CLI Nutzung
 ```bash
-# 5-Sekunden Vorschau rendern
-python main.py render song.mp3 --visual pulsing_core --preview
-
-# Volles Video mit KI-Empfehlung
-python main.py render podcast.mp3 --config config/auto_recommended.json -o output.mp4
-
-# Alle verfügbaren Visualizer anzeigen
-python main.py list-visuals
+# Audio analysieren
+python main.py analyze dein_audio.mp3
+# Vorschau rendern (5 Sekunden, 480p)
+python main.py render dein_audio.mp3 --visual lumina_core --preview
+# Vollständiges Video rendern
+python main.py render dein_audio.mp3 --visual spectrum_bars -o output.mp4 --resolution 1920x1080 --fps 60
+# Mit benutzerdefinierten Parametern
+python main.py render dein_audio.mp3 --visual neon_wave_circle \
+  --param viz_scale=1.2 \
+  --param color_mode=chroma \
+  -o custom.mp4
 ```
+
+---
+
+## 🎨 Verfügbare Visualizer
+### Classic Visualizer (10)
+| Name | Beschreibung | Ideal für |
+|------|--------------|-----------|
+| `spectrum_bars` | Klassischer 40-Balken Equalizer | Rock, Hip-Hop, Pop |
+| `pulsing_core` | Pulsierender Kern mit Glow-Effekten | EDM, Techno, House |
+| `particle_swarm` | Physik-basierte Partikel-Schwärme | Dubstep, Trap, Bass |
+| `neon_oscilloscope` | Retro Oszilloskop mit Neon-Trails | Synthwave, Cyberpunk |
+| `chroma_field` | Partikel-Feld basierend auf Tonart | Jazz, Ambient, Klassik |
+| `typographic` | Minimalistische Wellenform-Darstellung | Podcasts, Sprache |
+| `sacred_mandala` | Rotierende geometrische Muster | Meditation, Spiritual |
+| `liquid_blobs` | Flüssige MetaBall-Animation | Deep House, Liquid DnB |
+| `neon_wave_circle` | Konzentrische Neon-Ringe | Trance, Progressive |
+| `frequency_flower` | Organische Blumen-Petal Animation | Indie, Folk, Acoustic |
+### Signature Pro Visualizer (6) — Neu in v2.0+
+| Name | Beschreibung | Ideal für |
+|------|--------------|-----------|
+| `lumina_core` | Intelligenter Hybrid-Visualizer | Allrounder |
+| `voice_flow` | Sprach-optimierte Visualisierung | Podcasts, Interviews |
+| `spectrum_genesis` | Evolvierendes Spektrum-Design | Elektronische Musik |
+| `speech_focus` | Fokus auf Sprachfrequenzen | Hörbücher, Vorträge |
+| `bass_temple` | Bass-zentrierte Tempel-Architektur | Bass Music, Trap |
+| `orchestral_swell` | Orchestrale Wellenbewegungen | Filmmusik, Klassik |
+
+---
+
+## 🤖 KI-Features
+### Automatisierte Zitat-Extraktion
+Nutzt Gemini 3.1 Flash-Lite für:
+- **Audio-Transkription**: Wandelt Sprache zu Text mit Zeitstempeln
+- **Key-Zitat-Erkennung**: Identifiziert die wichtigsten Passagen
+- **Beat-Sync**: Synchronisiert Zitate mit musikalischen Highlights
+```python
+from src.gemini_integration import GeminiIntegration
+gemini = GeminiIntegration()
+# Transkription
+transcript = gemini.transcribe_audio("podcast.mp3")
+# Zitate extrahieren (max. 5 Key-Zitate)
+quotes = gemini.extract_quotes("podcast.mp3", max_quotes=5)
+for quote in quotes:
+    print(f"[{quote.start_time:.1f}s - {quote.end_time:.1f}s]")
+    print(f"{quote.text} ({quote.confidence*100:.0f}% Confidence)")
+```
+### Smart Parameter Matching
+Die KI analysiert Audio-Eigenschaften und empfiehlt:
+- Passenden Visualizer-Typ
+- Optimierte Farbpaletten (basierend auf erkannter Tonart)
+- Angepasste Parameter (Partikel-Dichte, Geschwindigkeit, Intensität)
 
 ---
 
 ## 🏗️ Architektur
-
-```mermaid
-graph TD
-    subgraph "Layer 1: Audio-Analyse"
-        A[🎵 Audio-Datei] -->|librosa| B[📊 AudioFeatures]
-        B -->|cached| C[(💾 .cache/ )]
-    end
-
-    subgraph "Layer 2: KI & Config"
-        B -->|SmartMatcher| D[🤖 AIRecommendation]
-        D -->|generiert| E[⚙️ ProjectConfig]
-    end
-
-    subgraph "Layer 3: GPU-Rendering"
-        E -->|wählt| F[🎨 GPU Visualizer]
-        B -->|steuert| F
-        F -->|rendert| G[🖼️ GPU Renderer]
-    end
-
-    subgraph "Layer 4: Post-Production"
-        G -->|color grade| H[✨ Post-Processing]
-        H -->|text overlays| I[💬 Quote Overlay]
-        I -->|encode| J[🎬 FFmpeg]
-    end
-
-    J --> K[📹 output.mp4]
 ```
-
-**Technologie-Stack:**
-
-| Layer | Bibliothek | Zweck |
-|-------|-----------|-------|
-| Audio-Analyse | `librosa` | Feature-Extraktion (RMS, Onset, Chroma, Beat-Frames) |
-| GPU-Rendering | `moderngl` | OpenGL Shader-Pipeline für 60fps Visuals |
-| Text-Rendering | `Pillow` + GPU | Schriftarten, Zitat-Overlays |
-| Video-Encoding | `FFmpeg` | libx264 + AAC, Hardware-Encode optional |
-| Datenvalidierung | `pydantic` | Config-Models & Feature-Schemas |
-| GUI | `streamlit` | Web-Oberfläche mit Live-Preview |
-| KI | `Google Gemini` | Zitat-Extraktion & Smart Matching |
-
----
-
-## 🎨 Visualizer
-
-<div align="center">
-
-### 🎵 Musik-Visuals
-
-| Visualizer | Preview | Beschreibung | Genre | Key-Parameter |
-|------------|---------|--------------|-------|---------------|
-| `pulsing_core` | 🔴⭕🔴 | Pulsierender Kern mit Beat-Reaktion | EDM, Pop, Trap | `pulse_intensity`, `glow_layers` |
-| `spectrum_bars` | ▁▂▃▅▇ | Klassischer 40-Balken Equalizer | Rock, Hip-Hop | `bar_count`, `smoothing` |
-| `chroma_field` | ✨✨✨ | Partikel-Feld basierend auf Tonart | Ambient, Jazz | `field_resolution` |
-| `particle_swarm` | 💥✨💥 | Physik-basierte Partikel-Explosionen | Dubstep, Trap | `particle_count`, `explosion_threshold` |
-| `neon_oscilloscope` | ﹋﹋﹋ | Retro-futuristischer Oszilloskop | Synthwave, Cyberpunk | `line_thickness`, `trail_length` |
-| `liquid_blobs` | 🫧🫧🫧 | Flüssige MetaBall-Blob-Animation | House, Techno | `blob_count`, `fluidity` |
-| `neon_wave_circle` | ⭕〰️⭕ | Konzentrische Neon-Ringe mit Wellen | EDM, Techno | `circle_count`, `wave_amplitude` |
-| `frequency_flower` | 🌸🌺🌸 | Organische Blumen mit Audio-Blütenblättern | Indie, Folk, Pop | `num_petals`, `layer_count` |
-| `bass_temple` | 🔲🔳🔲 | Bass-getriebener Tempel-Look | Drum & Bass | `bass_reactivity`, `temple_size` |
-| `lumina_core` | 💡✨💡 | Leuchtender Kern mit Flare-Effekten | Cinematic Pop | `flare_intensity`, `core_glow` |
-| `orchestral_swell` | 🎻🌊🎻 | Schwelgende Orchester-Visuals | Klassik, Film | `swell_speed`, `orchestra_depth` |
-| `spectrum_genesis` | 🌌🌠🌌 | Kosmischer Spectrum-Genesis-Stil | Sci-Fi, Ambient | `star_density`, `genesis_speed` |
-
-### 🎙️ Sprach-Visuals
-
-| Visualizer | Preview | Beschreibung | Genre | Key-Parameter |
-|------------|---------|--------------|-------|---------------|
-| `typographic` | 𝚃𝚎𝚡𝚝 | Minimalistisch mit Wellenform-Text | Podcasts, News | `text_size`, `animation_speed` |
-| `speech_focus` | 🎙️📢🎙️ | Fokussierte Sprach-Visualisierung | Podcasts, News | `focus_radius`, `speech_color` |
-| `voice_flow` | 〰️🎙️〰️ | Fließende Voice-Wellen-Animation | Storytelling | `flow_speed`, `wave_smoothness` |
-| `sacred_mandala` | 🔯🕉️🔯 | Heilige Geometrie mit Rotation | Meditation, Ambient | `rotation_speed`, `sacred_depth` |
-
-### ⚡ Universelle Effekt-Parameter
-
-Jeder Visualizer hat **dynamische Parameter-Slider** in der GUI:
-
-| Parameter | Beschreibung |
-|-----------|--------------|
-| `line_width` | Linien-Dicke für Linien-Visualisierungen |
-| `trail_length` | Anzahl Echo-/Trail-Frames |
-| `trail_decay` | Verblass-Geschwindigkeit der Trails |
-| `brightness` | Gesamt-Helligkeit |
-
-**Visualizer-spezifisch:** z.B. `pulse_intensity`, `ring_count`, `glow_radius`, `bar_count`, `particle_count`, `explosion_threshold` — automatisch je nach Visualizer angezeigt.
-
-</div>
-
----
-
-## 🎙️ Podcast-Workflow
-
-```mermaid
-flowchart LR
-    A[📤 Audio hochladen] --> B[🤖 KI analysiert]
-    B --> C{Modus wählen}
-    C -->|Auto| D[Smart Matcher<br/>empfiehlt Look & Farben]
-    C -->|Manual| E[Genre Preset<br/>News / Interview / Story / Mixed]
-    D --> F[💬 Key-Zitate extrahieren]
-    E --> F
-    F --> G[✏️ Zitate reviewen]
-    G --> H[🎬 Video rendern]
-    H --> I[📹 Fertiges Video<br/>mit animierten Overlays]
-
-    style A fill:#FF4B4B,stroke:#fff,color:#fff
-    style I fill:#00C7B7,stroke:#fff,color:#fff
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 4: Quote Overlays                                    │
+│  → GPUTextRenderer mit SDF-Fonts                            │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 3: Post-Processing                                   │
+│  → Bloom, Grain, Vignette, Chromatic Aberration, LUTs       │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 2: GPU Visualization                                 │
+│  → ModernGL Shader, 16 Visualizer, Real-time Preview        │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 1: Audio Analysis                                    │
+│  → librosa Features, Beat Detection, Voice Clarity          │
+└─────────────────────────────────────────────────────────────┘
 ```
-
-### Zitat-Overlay-Features
-
-- ⏱️ **Zeitbasiert**: Erscheint bei `start_time`, verschwindet bei `end_time`
-- ✨ **Animiert**: Fade-In/Out, Slide-In (up/down/left/right), Scale-In, Glow-Pulse
-- 🎨 **Stilvoll**: Abgerundete Box mit Schatten, Auto-Skalierung, Zeilenabstand, Hintergrund-Blur
-- ✏️ **Vollständig editierbar**: Text, Start/End-Zeit, Löschen, Manuell hinzufügen — alles im GUI
-- 💾 **Persistent**: Zitate werden automatisch gecacht und beim nächsten Audio-Wechsel geladen
-- 🔤 **Eigene Schriftarten**: `.ttf`-Upload für Custom Branding
-- 🎯 **Zeitstempel-Verfeinerung**: Automatische Korrektur an Onset-Peaks und Beat-Frames
-- 💻 **Offline-Fallback**: Lokale `faster-whisper`-Transkription wenn Gemini nicht verfügbar
-
----
-
-## 🤖 KI-Auto-Modus
-
-Der **Smart Matcher** analysiert dein Audio und generiert eine optimierte Config:
-
-```bash
-# GUI: "Auto-Modus (KI empfiehlt)" wählen
-# CLI: Mit generierter Config rendern
-python main.py render podcast.mp3 --config config/auto_recommended.json --preview
-```
-
-### Was die KI analysiert
-
-| Feature | Bedeutung | Einfluss |
-|---------|-----------|----------|
-| **RMS-Verteilung** | Lautstärke-Dynamik | Opazität, Partikel-Intensität |
-| **Onset-Rate** | Beat-Dichte | Trigger-Schwellen, Animationsgeschwindigkeit |
-| **Tempo (BPM)** | Geschwindigkeit | Rotationsgeschwindigkeit, Flow-Rate |
-| **Key & Mode** | Tonart & Stimmung | Farbpalette (warm/kalt/hell/dunkel) |
-| **Voice-Clarity** | Sprach-Anteil | Visualizer-Auswahl (Sprache vs. Musik) |
-
-### Was die KI empfiehlt
-
-- 🎨 **Besten Visualizer**: `speech_focus` für Sprache, `spectrum_bars` für Musik
-- 🌈 **Farbpalette**: Passend zum erkannten Key (z.B. C-Dur = warme Oranges)
-- ⚙️ **Parameter**: Partikel-Anzahl, Geschwindigkeit, Glow-Intensität
+### Datenfluss
+1. **Audio-Analyse**: Extrahiert RMS, Onset, Chroma, MFCC, Tempogram
+2. **GPU-Rendering**: ModernGL Shader verarbeiten Features in Echtzeit
+3. **Quote Overlay**: SDF-basiertes Text-Rendering mit Fade-Animation
+4. **Post-Processing**: Color Grading und Effekte
+5. **Video-Encoding**: FFmpeg mit Multi-Codec Support
 
 ---
 
 ## ⚙️ Konfiguration
-
-### Beispiel-Config erstellen
-
+### Config-Presets
+Vordefinierte Presets im `config/` Ordner:
+#### Musik-Presets
+- `default.json` — Ausgewogene Standardeinstellungen
+- `music_aggressive.json` — Hoher Kontrast, intensive Effekte
+- `chromatic_dream.json` — Weiche Farben, Chromatic Aberration
+- `neon_cyberpunk.json` — Cyan/Magenta Neon-Effekte
+- `sacred_geometry.json` — Spirituelle Farbpalette
+- `liquid_blobs.json` — Flüssige Blau/Pink Animation
+- `neon_circle.json` — Grün/Rot konzentrische Ringe
+- `flower_bloom.json` — Sanfte Pastellfarben
+#### Podcast-Presets
+- `podcast_minimal.json` — Sauber, minimalistisch
+- `podcast_news.json` — Sachlich, professionell
+- `podcast_interview.json` — Warm, einladend
+- `podcast_story.json` — Dramatisch, atmosphärisch
+- `podcast_mixed.json` — Ausgewogen für gemischte Formate
+### Eigene Parameter
 ```bash
-python main.py create-config --output meine_config.json
-```
-
-### Vollständige Config-Struktur
-
-```json
-{
-  "audio_file": "song.mp3",
-  "output_file": "output.mp4",
-  "visual": {
-    "type": "pulsing_core",
-    "resolution": [1920, 1080],
-    "fps": 60,
-    "colors": {
-      "primary": "#FF0055",
-      "secondary": "#00CCFF",
-      "background": "#0A0A0A",
-      "accent": "#FFAA00"
-    },
-    "params": {
-      "pulse_intensity": 0.8,
-      "glow_layers": 3,
-      "glow_radius": 20
-    }
-  },
-  "postprocess": {
-    "contrast": 1.1,
-    "saturation": 1.2,
-    "brightness": 0.0,
-    "warmth": 0.1,
-    "film_grain": 0.05,
-    "vignette": 0.3,
-    "chromatic_aberration": 0.02
-  },
-  "quotes": [
-    {
-      "text": "Das ist ein Key-Zitat aus dem Audio!",
-      "start_time": 10.5,
-      "end_time": 15.2,
-      "confidence": 0.95
-    }
-  ],
-  "background_image": null,
-  "background_blur": 0.0,
-  "background_vignette": 0.0,
-  "background_opacity": 0.3
-}
+# Beispiel: Custom Parameter setzen
+python main.py render audio.mp3 --visual particle_swarm \
+  --param particle_count=200 \
+  --param explosion_threshold=0.5 \
+  --param trail_length=15 \
+  -o custom.mp4
 ```
 
 ---
 
-### GPU Visual Effect Parameter
-
-Alle GPU-Visualizer unterstützen diese universellen Effekt-Parameter, die über `params` in der Config oder via GUI-Slider gesteuert werden:
-
-| Parameter | Bereich | Default | Beschreibung |
-|-----------|---------|---------|--------------|
-| `line_width` | 0.001 – 0.02 | 0.003 | Linien-Dicke (Multiplier für Linien-Visualisierungen) |
-| `trail_length` | 0 – 12 | 0 | Anzahl der Echo/Trail-Frames (0 = kein Trail) |
-| `trail_decay` | 0.1 – 0.95 | 0.7 | Verblass-Geschwindigkeit der Trails (höher = langsamer) |
-| `brightness` | 0.5 – 2.0 | 1.0 | Gesamt-Helligkeit des finalen Bildes |
-
-**Verwendung in der Config:**
-
-```json
-{
-  "visual": {
-    "type": "neon_oscilloscope",
-    "params": {
-      "line_thickness": 4,
-      "trail_length": 8,
-      "trail_decay": 0.7,
-      "brightness": 1.2
-    }
-  }
-}
-```
-
-> 💡 **Tipp:** Nicht jeder Visualizer unterstützt jeden Parameter nativ. `brightness` funktioniert jedoch garantiert in **allen** GPU-Visualizern. `line_width` wirkt sich primär auf Linien-basierte Visualizer aus (Oscilloscope, Wave Circle, Mandala), während `trail_length` bei Visualizern mit Bewegungsechos zum Tragen kommt (Oscilloscope, Wave Circle, Particle Swarm, Pulsing Core).
-
----
-
-## 🧪 Tests
-
+## 🧪 Testing
 ```bash
-# Alle Tests ausführen (142 Tests)
+# Alle Tests ausführen (134 Tests)
 pytest tests/ -v
-
-# Spezifische Test-Suites
-pytest tests/test_visuals.py -v       # GPU-Visualisierung
-pytest tests/test_analyzer.py -v      # Audio-Feature-Extraktion
-pytest tests/test_ai_matcher.py -v    # KI-Empfehlungen
-pytest tests/test_quote_overlay.py -v # Text-Overlays
-pytest tests/test_gemini_integration.py -v # KI-Integration
+# Spezifische Test-Suiten
+pytest tests/test_gpu_renderer.py -v        # GPU Rendering
+pytest tests/test_visuals.py -v             # Visualizer Tests
+pytest tests/test_gemini_integration.py -v  # KI Integration
+pytest tests/test_postprocess.py -v         # Post-Processing
+pytest tests/test_quote_overlay.py -v       # Quote Overlays
 ```
+### Coverage
+| Modul | Coverage |
+|-------|----------|
+| `postprocess.py` | 100% |
+| `gpu_preview.py` | 95% |
+| `gpu_text_renderer.py` | 78% |
+| `quote_overlay.py` | 93% |
+| `types.py` | 100% |
+| **Gesamt** | **77%** |
 
 ---
 
 ## 📁 Projektstruktur
-
 ```
-audio_visualizer_pro/
-├── 📂 config/                      # 14 Konfigurations-Presets
+audio-visualizer-pro/
+├── main.py                     # CLI Entry Point
+├── gui.py                      # DearPyGui Frontend
+├── pyproject.toml              # Project Configuration
+├── requirements.txt            # Python Dependencies
+├── config/                     # JSON Presets
+│   ├── schemas.py              # Pydantic Validation
 │   ├── default.json
 │   ├── music_aggressive.json
-│   ├── podcast_minimal.json
-│   ├── podcast_news.json
 │   ├── podcast_interview.json
-│   ├── podcast_story.json
-│   ├── podcast_mixed.json
 │   └── ...
-│
-├── 📂 src/
-│   ├── 📄 analyzer.py              # Audio-Feature-Extraktion mit Caching
-│   ├── 📄 ai_matcher.py            # SmartMatcher — KI-gestützte Empfehlung
-│   ├── 📄 gemini_integration.py    # Gemini API für Zitat-Extraktion
-│   ├── 📄 quote_overlay.py         # Animierter Text-Overlay Renderer
-│   ├── 📄 gpu_quote_renderer.py    # GPU-beschleunigtes Zitat-Rendering
-│   ├── 📄 quote_cache.py           # Zitat-Persistenz & Upload-ID-Cache
-│   ├── 📄 quote_refiner.py         # Zeitstempel-Verfeinerung mit Audio-Analyse
-│   ├── 📄 local_transcription.py   # Lokaler Whisper-Fallback (optional)
-│   ├── 📄 gpu_renderer.py          # OpenGL GPU Render-Pipeline
-│   ├── 📄 gpu_preview.py           # Schneller Live-Preview (Einzel-Frame)
-│   ├── 📄 gpu_text_renderer.py     # GPU-beschleunigtes Schrift-Rendering
-│   ├── 📄 postprocess.py           # Color Grading & Effekte
-│   ├── 📄 types.py                 # Pydantic Models & Schemas
-│   ├── 📄 beat_sync.py             # Beat-Synchronisation
-│   └── 📂 gpu_visualizers/         # 18 GPU-basierte Visualizer
-│       ├── base.py
-│       ├── pulsing_core.py
-│       ├── spectrum_bars.py
-│       ├── chroma_field.py
-│       ├── particle_swarm.py
-│       ├── typographic.py
-│       ├── neon_oscilloscope.py
-│       ├── sacred_mandala.py
-│       ├── liquid_blobs.py
-│       ├── neon_wave_circle.py
-│       ├── frequency_flower.py
-│       ├── bass_temple.py
-│       ├── lumina_core.py
-│       ├── orchestral_swell.py
-│       ├── spectrum_genesis.py
-│       ├── speech_focus.py
-│       └── voice_flow.py
-│
-├── 📂 tests/                       # 142 Unit- & Integration-Tests
-├── 📄 gui.py                       # DearPyGui Desktop-Interface
-├── 📄 main.py                      # CLI Entry Point (click)
-├── 📄 start_gui.py                 # GUI-Start-Skript
-├── 📄 start_gui.bat                # Windows-Launcher
-├── 📄 requirements.txt             # Python-Abhängigkeiten
-├── 📄 pyproject.toml               # Projekt-Konfiguration
-├── 📄 README.md                    # Diese Datei
-├── 📄 QUICKSTART.md                # Schritt-für-Schritt-Anleitung
-├── 📄 AGENTS.md                    # Kontext für KI-Coding-Agenten
-└── 📄 LICENSE                      # MIT License
+├── src/
+│   ├── __init__.py
+│   ├── analyzer.py             # Audio Feature Extraction
+│   ├── ai_matcher.py           # KI Parameter Matching
+│   ├── beat_sync.py            # Beat Synchronization
+│   ├── gemini_integration.py   # Gemini KI Client
+│   ├── gpu_preview.py          # Live Preview Renderer
+│   ├── gpu_renderer.py         # Batch GPU Renderer
+│   ├── gpu_text_renderer.py    # SDF Text Rendering
+│   ├── gpu_visualizers/        # 16 GPU Visualizer
+│   │   ├── __init__.py
+│   │   ├── base.py
+│   │   ├── spectrum_bars.py
+│   │   ├── pulsing_core.py
+│   │   ├── particle_swarm.py
+│   │   ├── neon_oscilloscope.py
+│   │   ├── chroma_field.py
+│   │   ├── typographic.py
+│   │   ├── sacred_mandala.py
+│   │   ├── liquid_blobs.py
+│   │   ├── neon_wave_circle.py
+│   │   ├── frequency_flower.py
+│   │   ├── lumina_core.py         # Signature Pro
+│   │   ├── voice_flow.py          # Signature Pro
+│   │   ├── spectrum_genesis.py    # Signature Pro
+│   │   ├── speech_focus.py        # Signature Pro
+│   │   ├── bass_temple.py         # Signature Pro
+│   │   └── orchestral_swell.py    # Signature Pro
+│   ├── local_transcription.py  # Lokale Transkription
+│   ├── postprocess.py          # Post-Processing Effects
+│   ├── quote_cache.py          # Quote Caching
+│   ├── quote_overlay.py        # Quote Overlay Logic
+│   ├── quote_refiner.py        # Quote Timestamp Refinement
+│   └── types.py                # Pydantic Models
+├── tests/                      # Test Suite (134 Tests)
+│   ├── conftest.py
+│   ├── test_ai_matcher.py
+│   ├── test_analyzer.py
+│   ├── test_beat_sync.py
+│   ├── test_e2e.py
+│   ├── test_gemini_integration.py
+│   ├── test_gpu_preview.py
+│   ├── test_gpu_renderer.py
+│   ├── test_gpu_text_renderer.py
+│   ├── test_postprocess.py
+│   ├── test_quote_overlay.py
+│   ├── test_quote_refiner.py
+│   └── test_visuals.py
+└── cognitive_core/             # Evo-Agent Framework
+    ├── agents.md
+    ├── system_prompt.md
+    └── tool.md
 ```
 
 ---
 
-## 🔧 System-Voraussetzungen
-
-| Komponente | Minimum | Empfohlen | Installationsbefehl |
-|-----------|---------|-----------|---------------------|
-| **Python** | 3.9 | 3.11+ | — |
-| **FFmpeg** | 4.4 | 5.0+ | `sudo apt install ffmpeg` / `brew install ffmpeg` |
-| **GPU** | Optional | NVIDIA/AMD mit OpenGL 3.3+ | — |
-| **RAM** | 4 GB | 8 GB+ | — |
-| **API-Key** | Optional | `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/) |
-
-> 💡 **Tipp für Windows-Nutzer**: FFmpeg muss im System-PATH verfügbar sein. Lade es von [ffmpeg.org](https://ffmpeg.org/download.html) herunter und füge den `bin`-Ordner zu PATH hinzu.
-
----
-
-## 🎯 Performance-Tipps
-
-1. 🚀 **Vorschau zuerst**: Nutze `--preview` für schnelles Testen (5 Sekunden, 480p)
-2. 💾 **Caching**: Audio-Analyse wird automatisch gecached (`.cache/audio_features/`)
-3. 🎞️ **Niedrigere FPS**: 30fps statt 60fps für schnelleres Rendering
-4. 🤖 **KI-Auto-Modus**: Spart Zeit bei der Visualizer-Auswahl
-5. 🎨 **GPU-Preview**: Nutze den GPU-Renderer für blitzschnelle Live-Vorschau in der GUI
-6. ⚡ **Frame-Skip**: In der GUI: "Turbo-Modus" für schnelleres Preview-Rendering
+## 💻 Systemanforderungen
+| Komponente | Minimum | Empfohlen |
+|------------|---------|-----------|
+| Python | 3.10 | 3.12 |
+| RAM | 8 GB | 16 GB |
+| GPU | OpenGL 3.3+ | Vulkan/DX12 |
+| VRAM | 2 GB | 4 GB+ |
+| Speicher | 500 MB | 1 GB+ |
+| FFmpeg | 4.0+ | 6.0+ |
 
 ---
 
 ## 🛣️ Roadmap
 
-- [x] 🎨 18 GPU-Visualizer mit OpenGL
-- [x] 🤖 KI-Auto-Modus (Smart Matcher)
-- [x] 💬 Gemini Zitat-Extraktion mit adaptivem Confidence-Filter
-- [x] ✏️ Vollständiges Zitat-CRUD (Edit, Delete, Add, Save)
-- [x] 🎙️ Podcast-Genre-Presets
-- [x] 🖥️ DearPyGui Desktop-GUI mit GPU-Live-Preview & dynamischen Parametern
-- [x] ⚡ Aggressives Caching (Audio, Zitate, Upload-IDs)
-- [x] 💾 Projekt-Preset-System (Save/Load/Auto-Save)
-- [x] 🎬 FFmpeg-Hardware-Encoding (h264/h265/prores)
-- [x] 💻 Lokaler Whisper-Fallback für Offline-Betrieb
-- [x] 🎯 Zeitstempel-Verfeinerung via Onset/Beat-Detection
-- [ ] 🌐 Web-Export (HTML5 Canvas)
-- [ ] 🎚️ Echtzeit-Mikrofon-Visualizer
-- [ ] 📱 Mobile-App (Flutter/React Native)
-- [ ] 🔄 Batch-Rendering (Playlist-Modus)
-- [ ] 🎞️ Überblendungen (Transitions zwischen Visualizern)
+### ✅ Abgeschlossen (v2.0 - v2.5)
+
+#### 2024-2025 — Foundation & Core Features
+- ✅ GPU-basiertes Rendering mit ModernGL/OpenGL
+- ✅ 16 GPU-Visualizer implementiert (10 Classic + 6 Signature Pro)
+- ✅ DearPyGui Premium UI mit Live-Preview
+- ✅ Gemini KI-Integration (Transkription & Zitat-Extraktion)
+- ✅ Test-Suite: 134 Tests mit 77% Coverage
+- ✅ Post-Processing Pipeline (Bloom, Grain, Vignette, LUTs, Chromatic Aberration)
+- ✅ SDF-basiertes Text-Rendering für Quote Overlays
+- ✅ Multi-Codec Support (H.264, HEVC, ProRes)
+- ✅ Evo-Agent Framework (`cognitive_core/`)
+- ✅ 5 Skill-Spezifikationen implementiert
 
 ---
 
-## 🤝 Mitmachen
+### 🎯 Aktuell (v2.6 - v3.0) — 2026
 
-Dieses Projekt lebt von Experimenten und kreativen Ideen! 🧪
+#### Q1-Q2 2026 — Stabilisierung & Usability ✓ Im Fokus
+Da dieses Projekt von einem Ein-Personen-Team (mit KI-Unterstützung) entwickelt wird, liegt der Fokus auf **pragmatischen Verbesserungen** statt Feature-Creep:
 
-**So kannst du beitragen:**
-- 🐛 **Bug gefunden?** Erstelle ein Issue mit Fehlermeldung und Repro-Schritten
-- 💡 **Neue Idee?** Eröffne ein Feature-Request-Issue
-- 🎨 **Neuer Visualizer?** Nutze `python main.py create-template mein_visualizer` als Startpunkt
-- 📝 **Doku verbessern?** Pull Requests für README & QUICKSTART sind willkommen
+- ✅ **Code-Qualität**: Refactoring für bessere Wartbarkeit ohne Programmier-Kenntnisse
+- ✅ **Dokumentation**: Ausführliche Anleitungen für Nicht-Entwickler
+- ✅ **Fehlerbehandlung**: Robuste Error-Messages für Endnutzer
+- [ ] **One-Click Installer**: Vereinfachte Installation ohne manuelle Dependency-Konfiguration
+- [ ] **GUI-Verbesserungen**: Intuitivere Bedienung für Power-User-Funktionen
+- [ ] **Preset-Bibliothek**: 10+ zusätzliche vordefinierte Presets für häufige Anwendungsfälle
 
-**Coding-Style:**
-- Code-Kommentare auf Deutsch
-- Neue Visualizer erben von `BaseVisualizer` und nutzen `@register_visualizer`
-- Tests für neue Features schreiben (`pytest tests/ -v`)
+#### Q3-Q4 2026 — Geplante Erweiterungen (realistisch für Solo-Entwicklung)
+- [ ] **Batch-Rendering**: Mehrere Audio-Dateien nacheinander verarbeiten
+- [ ] **Auto-Update Mechanismus**: Einfache Updates ohne manuelle Git-Operationen
+- [ ] **Video-Tutorials**: Schritt-für-Schritt Anleitungen für alle Kernfunktionen
+- [ ] **Community-Support**: Discord/Forum für Nutzeraustausch
 
 ---
 
-## 🙏 Credits & Abhängigkeiten
+### 🔮 Langfristige Vision (v3.0+) — 2027+
 
+#### Priorisierte Features (nur wenn wirklich benötigt)
+Diese Features werden **nur implementiert**, wenn konkrete Nachfrage besteht:
+
+- [ ] **Echtzeit-Audio-Input**: Mikrofon/Live-Stream Unterstützung
+- [ ] **Multi-Track Support**: Separates Rendering von Audio-Stems
+- [ ] **Custom Shader Editor**: GUI-basierter Editor für Visual-Anpassungen
+- [ ] **Mobile Companion App**: iOS/Android für Remote-Steuerung
+
+#### Experimentelle Features (KI-getrieben)
+- [ ] **Style Transfer**: Musikvideo-Stil von Referenzvideos lernen
+- [ ] **Generative Visuals**: KI-generierte Visualizer basierend auf Text-Beschreibung
+- [ ] **Automatische Schnittsetzung**: KI-generierte Cuts synchron zur Musik
+
+---
+
+### ⚠️ Nicht Geplant (bewusste Entscheidungen)
+
+Als Ein-Personen-Projekt mit Fokus auf **Stabilität und Einfachheit** werden folgende Features bewusst **nicht** verfolgt:
+
+- ❌ Cloud-Rendering Pipeline (zu komplex, zu teuer)
+- ❌ VR/AR Visualizer (zu spezialisiert)
+- ❌ Unreal Engine Integration (Overkill für Use-Case)
+- ❌ WebAssembly-Export (Performance-Einbußen inakzeptabel)
+- ❌ Plugin Marketplace (Wartungsaufwand zu hoch)
+- ❌ Trainierbare KI-Modelle (API-Lösung ist pragmatischer)
+
+---
+
+### 📊 Entwicklungs-Prinzipien
+
+| Prinzip | Beschreibung |
+|---------|--------------|
+| **KI-First** | Alle Code-Änderungen werden primär durch KI generiert |
+| **No-Code Friendly** | Features müssen ohne Programmierkenntnisse nutzbar sein |
+| **Stability > Features** | Lieber weniger Features, dafür stabil und gut getestet |
+| **Documentation Driven** | Jede Funktion wird ausführlich dokumentiert |
+| **Pragmatic Evolution** | Nur Features implementieren, die wirklich gebraucht werden |
+
+---
+
+### 📈 Meilensteine
+
+| Version | Ziel | Status | Zeitraum |
+|---------|------|--------|-----------|
+| v2.0 | GPU-Rendering Launch | ✅ Abgeschlossen | 2024 |
+| v2.1 | Testing & Stability | ✅ Abgeschlossen | Q1 2025 |
+| v2.2-v2.5 | Evo-Agent Framework, Quality Improvements | ✅ Abgeschlossen | 2025 |
+| v2.6 | Usability & One-Click Setup | 🔄 In Arbeit | Q2 2026 |
+| v2.7 | Batch Processing & Auto-Updates | 📅 Geplant | Q3 2026 |
+| v3.0 | Documentation Complete & Community Ready | 📅 Geplant | Q4 2026 |
+| v3.1+ | Community-Driven Features | 💭 Evaluierung | 2027+ |
+
+---
+
+### 💡 Entwicklungshintergrund
+
+**Team-Struktur:**
+- 👤 **Projektinitiator**: Keine Programmierkenntnisse, fokussiert auf Vision, Testing & Dokumentation
+- 🤖 **KI-Assistenten**: Code-Generierung, Refactoring, Testing, Debugging
+
+**Entwicklungs-Geschwindigkeit:**
+- Realistische Feature-Umsetzung: 1-2 größere Features pro Quartal
+- Fokus auf Qualität statt Quantität
+- Alle Änderungen werden umfassend getestet (77%+ Coverage)
+- Dokumentation hat gleiche Priorität wie Code
+
+**Warum dieser Ansatz?**
+Dieses Projekt beweist, dass moderne Softwareentwicklung auch ohne traditionelle Programmierkenntnisse möglich ist. Durch die Kombination aus menschlicher Vision, domänenspezifischem Wissen und KI-gestützter Implementierung entstehen robuste, professionelle Tools – in realistischer Geschwindigkeit und mit nachhaltiger Wartbarkeit.
+
+---
+
+
+## 🤝 Contributing
+
+Wir freuen uns über Beiträge! Bitte beachte folgende Richtlinien:
+
+### Entwicklungsumgebung einrichten
+```bash
+# Fork klonen
+git clone https://github.com/YOUR_USERNAME/audio-visualizer-pro.git
+cd audio-visualizer-pro
+# Development Dependencies
+pip install -e ".[dev]"
+# Pre-Commit Hooks
+black src/ tests/
+flake8 src/ tests/
+```
+
+### Pull Request Prozess
+1. Issue erstellen oder existierendes kommentieren
+2. Feature-Branch erstellen (`git checkout -b feature/mein-feature`)
+3. Änderungen commiten (`git commit -m 'feat: neues Feature hinzugefügt'`)
+4. Tests ausführen (`pytest tests/ -v`)
+5. Branch pushen (`git push origin feature/mein-feature`)
+6. Pull Request öffnen
+
+### Code Style
+- **Sprache**: Kommentare und Dokumentation auf Deutsch
+- **Formatierung**: Black-konform (88 Zeichen pro Zeile)
+- **Typisierung**: Type Hints für alle Funktionen
+- **Tests**: Mindestens 80% Coverage für neue Features
+
+---
+
+## 📄 Lizenz
+MIT License — Siehe [LICENSE](LICENSE) für Details.
+
+---
+
+## 🙏 Credits
+| Projekt | Zweck |
+|---------|-------|
+| [ModernGL](https://moderngl.readthedocs.io/) | GPU Rendering Engine |
+| [librosa](https://librosa.org/) | Audio-Analyse |
+| [DearPyGui](https://dearpygui.readthedocs.io/) | GUI Framework |
+| [Gemini API](https://ai.google.dev/) | KI Transkription |
+| [FFmpeg](https://ffmpeg.org/) | Video Encoding |
+| [Pydantic](https://docs.pydantic.dev/) | Datenvalidierung |
+
+---
+
+## 📬 Support
+- **Issues**: [GitHub Issues](https://github.com/audio-visualizer-pro/audio-visualizer-pro/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/audio-visualizer-pro/audio-visualizer-pro/discussions)
+- **E-Mail**: support@audio-visualizer.pro
+
+---
 <div align="center">
-
-| | | |
-|:---:|:---:|:---:|
-| **Audio-Analyse** | **GPU-Rendering** | **GUI** |
-| [Librosa](https://librosa.org/) | [ModernGL](https://moderngl.readthedocs.io/) | [DearPyGui](https://github.com/hoffstadt/DearPyGui) |
-| **Bildverarbeitung** | **Video-Encoding** | **KI** |
-| [Pillow](https://python-pillow.org/) | [FFmpeg](https://ffmpeg.org/) | [Google Gemini](https://ai.google.dev/) |
-| **Datenvalidierung** | **CLI** | **Tests** |
-| [Pydantic](https://docs.pydantic.dev/) | [Click](https://click.palletsprojects.com/) | [Pytest](https://docs.pytest.org/) |
-
-</div>
-
----
-
-<div align="center">
-
-### 📄 Lizenz
-
-Dieses Projekt steht unter der **MIT License** — siehe [LICENSE](LICENSE) für Details.
-
-**Made with ❤️, 🤖 und 🎵**
-
+**Audio Visualizer Pro v2.1.0**
+Mit ❤️ erstellt vom Audio Visualizer Pro Team
+[Documentation](https://github.com/audio-visualizer-pro/audio-visualizer-pro/blob/main/README.md) · [Changelog](CHANGELOG.md) · [Quickstart](QUICKSTART.md)
 </div>
