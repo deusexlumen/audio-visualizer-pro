@@ -278,16 +278,12 @@ class AppState:
                 "auto_scale_font": qc.auto_scale_font,
                 "min_font_size": qc.min_font_size,
                 "max_font_size": qc.max_font_size,
-                "slide_animation": qc.slide_animation,
-                "slide_distance": qc.slide_distance,
-                "slide_out_animation": qc.slide_out_animation,
-                "slide_out_distance": qc.slide_out_distance,
-                "scale_in": qc.scale_in,
-                "typewriter": qc.typewriter,
-                "typewriter_speed": qc.typewriter_speed,
-                "typewriter_mode": qc.typewriter_mode,
-                "glow_pulse": qc.glow_pulse,
-                "glow_pulse_intensity": qc.glow_pulse_intensity,
+                "text_shadow_enabled": qc.text_shadow_enabled,
+                "text_shadow_color": list(qc.text_shadow_color) if isinstance(qc.text_shadow_color, tuple) else qc.text_shadow_color,
+                "box_gradient": qc.box_gradient,
+                "accent_line": qc.accent_line,
+                "accent_line_color": list(qc.accent_line_color) if isinstance(qc.accent_line_color, tuple) else qc.accent_line_color,
+                "accent_line_height": qc.accent_line_height,
                 "spatial_compensation": qc.spatial_compensation,
                 "compensation_blur": qc.compensation_blur,
                 "compensation_darken": qc.compensation_darken,
@@ -364,16 +360,12 @@ class AppState:
             auto_scale_font=qc_data.get("auto_scale_font", True),
             min_font_size=qc_data.get("min_font_size", 16),
             max_font_size=qc_data.get("max_font_size", 72),
-            slide_animation=qc_data.get("slide_animation", "none"),
-            slide_distance=qc_data.get("slide_distance", 100.0),
-            slide_out_animation=qc_data.get("slide_out_animation", "none"),
-            slide_out_distance=qc_data.get("slide_out_distance", 100.0),
-            scale_in=qc_data.get("scale_in", False),
-            typewriter=qc_data.get("typewriter", False),
-            typewriter_speed=qc_data.get("typewriter_speed", 15.0),
-            typewriter_mode=qc_data.get("typewriter_mode", "char"),
-            glow_pulse=qc_data.get("glow_pulse", False),
-            glow_pulse_intensity=qc_data.get("glow_pulse_intensity", 0.5),
+            text_shadow_enabled=qc_data.get("text_shadow_enabled", True),
+            text_shadow_color=_tuple_or(qc_data.get("text_shadow_color"), (0, 0, 0, 180)),
+            box_gradient=qc_data.get("box_gradient", True),
+            accent_line=qc_data.get("accent_line", True),
+            accent_line_color=_tuple_or(qc_data.get("accent_line_color"), (255, 200, 100, 255)),
+            accent_line_height=qc_data.get("accent_line_height", 3),
             spatial_compensation=qc_data.get("spatial_compensation", True),
             compensation_blur=qc_data.get("compensation_blur", 12.0),
             compensation_darken=qc_data.get("compensation_darken", 0.55),
@@ -1223,7 +1215,6 @@ class AudioVisualizerGUI:
                 default_value=self.state.quote_config.font_color,
                 callback=self._on_quote_config_changed,
                 tag="quote_font_color",
-                uint8=True,
                 no_alpha=True,
                 width=120,
             )
@@ -1234,7 +1225,6 @@ class AudioVisualizerGUI:
                 default_value=self.state.quote_config.box_color,
                 callback=self._on_quote_config_changed,
                 tag="quote_box_color",
-                uint8=True,
                 no_alpha=False,
                 width=120,
             )
@@ -1357,7 +1347,7 @@ class AudioVisualizerGUI:
             )
             dpg.bind_item_theme(dpg.last_item(), self._make_accent_button_theme(Theme.ACCENT_BG))
             dpg.add_spacer(width=8)
-            dpg.add_text("Kein Bild", tag="bg_status_text", color=Theme.TEXT_MUTED)
+            dpg.add_text("Kein Hintergrund", tag="bg_status_text", color=Theme.TEXT_MUTED)
             dpg.add_button(
                 label="↺",
                 callback=lambda s, a: self._reset_background_params(),
@@ -1852,7 +1842,7 @@ class AudioVisualizerGUI:
             dpg.set_value("bg_status_text", Path(self.state.background_path).name)
             dpg.configure_item("bg_status_text", color=Theme.TEXT_PRIMARY)
         else:
-            dpg.set_value("bg_status_text", "Kein Bild")
+            dpg.set_value("bg_status_text", "Kein Hintergrund")
             dpg.configure_item("bg_status_text", color=Theme.TEXT_MUTED)
 
     def _update_chip(self, chip_tag: str, color: tuple):
@@ -1886,7 +1876,7 @@ class AudioVisualizerGUI:
             width=700,
             height=500,
         ):
-            dpg.add_file_extension("Bilder (.png .jpg .jpeg .webp){.png,.jpg,.jpeg,.webp}")
+            dpg.add_file_extension("Bilder & Videos (.png .jpg .jpeg .webp .mp4 .mov .avi .mkv .webm .gif){.png,.jpg,.jpeg,.webp,.mp4,.mov,.avi,.mkv,.webm,.gif}")
             dpg.add_file_extension(".*")
 
     # -------------------------------------------------------------------------
@@ -2658,11 +2648,34 @@ class AudioVisualizerGUI:
             # loading_text wird bei Erfolg in _upload_texture ausgeblendet
             pass
 
+    def _is_video_bg(self, path: str) -> bool:
+        """Prüft ob eine Datei ein Video/GIF ist."""
+        return os.path.splitext(path)[1].lower() in {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.gif'}
+
     def _render_background_only(self):
         """Zeigt das Hintergrundbild allein an, wenn kein Audio geladen ist."""
         w, h = self.state.preview_width, self.state.preview_height
         try:
-            img = Image.open(self.state.background_path).convert("RGB")
+            bg_path = self.state.background_path
+            if self._is_video_bg(bg_path):
+                # Extrahiere erstes Frame aus Video mit FFmpeg
+                temp_file = __import__('tempfile').NamedTemporaryFile(suffix='.png', delete=False)
+                temp_file.close()
+                cmd = [
+                    'ffmpeg', '-y', '-ss', '0', '-i', bg_path,
+                    '-vframes', '1',
+                    '-vf', f'scale={w}:{h}',
+                    '-pix_fmt', 'rgb24',
+                    temp_file.name
+                ]
+                result = __import__('subprocess').run(cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    os.unlink(temp_file.name)
+                    raise RuntimeError(f'FFmpeg Frame-Extraktion fehlgeschlagen')
+                img = Image.open(temp_file.name).convert('RGB')
+                os.unlink(temp_file.name)
+            else:
+                img = Image.open(bg_path).convert('RGB')
             img = img.resize((w, h), Image.LANCZOS)
 
             # Blur anwenden falls konfiguriert

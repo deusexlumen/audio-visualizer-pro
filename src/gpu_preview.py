@@ -110,6 +110,7 @@ def render_gpu_preview(
     Returns:
         PIL.Image oder None bei Fehler
     """
+    temp_bg_frame = None
     try:
         # Audio analysieren (gecached) nur wenn nicht schon vorhanden
         if features is None:
@@ -126,9 +127,22 @@ def render_gpu_preview(
         # Hintergrundbild laden
         bg_texture = None
         if background_image:
-            bg_texture = renderer._load_background_texture(
-                background_image, background_blur
-            )
+            if renderer._is_video_file(background_image):
+                preview_time = features.duration * preview_time_percent
+                try:
+                    temp_bg_frame = renderer._extract_video_frame_at_time(
+                        background_image, preview_time, width, height
+                    )
+                    bg_texture = renderer._load_background_texture(
+                        temp_bg_frame, background_blur
+                    )
+                except Exception as e:
+                    print(f'[GPU Preview] Konnte Video-Frame nicht laden: {e}')
+                    bg_texture = None
+            else:
+                bg_texture = renderer._load_background_texture(
+                    background_image, background_blur
+                )
 
         # Beat-Intensity vektorisiert berechnen (fuer Visualizer die es brauchen)
         frame_count = features.frame_count
@@ -218,3 +232,6 @@ def render_gpu_preview(
         # Cache invalidieren damit beim naechsten Versuch ein frischer Visualizer erstellt wird
         _release_preview_cache()
         return None
+    finally:
+        if temp_bg_frame and os.path.exists(temp_bg_frame):
+            os.unlink(temp_bg_frame)

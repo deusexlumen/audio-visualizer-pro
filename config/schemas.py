@@ -54,9 +54,9 @@ class QuoteOverlayConfigSchema(BaseModel):
     line_spacing: int = Field(default=10, ge=0, le=30)
     display_duration: float = Field(default=8.0, ge=2.0, le=20.0)
     position: Literal["bottom", "center", "top"] = "bottom"
-    slide_animation: Literal["none", "up", "down", "left", "right"] = "none"
-    scale_in: bool = False
-    glow_pulse: bool = False
+    text_shadow_enabled: bool = True
+    box_gradient: bool = True
+    accent_line: bool = True
     compensation_blur: float = Field(default=12.0, ge=0.0, le=30.0)
     latency_offset: float = Field(default=0.0, ge=-2.0, le=2.0)
 

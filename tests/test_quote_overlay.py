@@ -311,16 +311,14 @@ class TestQuoteOverlayConfig:
         assert config.auto_scale_font is True
         assert config.min_font_size == 16
         assert config.max_font_size == 72
-        assert config.slide_animation == "none"
-        assert config.slide_distance == 100.0
-        assert config.slide_out_animation == "none"
-        assert config.slide_out_distance == 100.0
-        assert config.scale_in is False
-        assert config.typewriter is False
-        assert config.typewriter_speed == 15.0
-        assert config.typewriter_mode == "char"
-        assert config.glow_pulse is False
-        assert config.glow_pulse_intensity == 0.5
+        # Text-Design
+        assert config.text_shadow_enabled is True
+        assert config.text_shadow_color == (0, 0, 0, 180)
+        # Box-Design
+        assert config.box_gradient is True
+        assert config.accent_line is True
+        assert config.accent_line_color == (255, 200, 100, 255)
+        assert config.accent_line_height == 3
     
     def test_custom_values(self):
         """Eigene Werte setzen."""
@@ -330,28 +328,24 @@ class TestQuoteOverlayConfig:
             fade_duration=1.0,
             auto_scale_font=False,
             min_font_size=12,
-            slide_animation="up",
-            slide_distance=150.0,
-            scale_in=True,
-            typewriter=True,
-            typewriter_speed=20.0,
-            typewriter_mode="word",
-            glow_pulse=True,
-            glow_pulse_intensity=0.8,
+            text_shadow_enabled=False,
+            text_shadow_color=(50, 50, 50, 100),
+            box_gradient=False,
+            accent_line=False,
+            accent_line_color=(255, 0, 0, 255),
+            accent_line_height=5,
         )
         assert config.font_size == 48
         assert config.font_color == (0, 255, 0)
         assert config.fade_duration == 1.0
         assert config.auto_scale_font is False
         assert config.min_font_size == 12
-        assert config.slide_animation == "up"
-        assert config.slide_distance == 150.0
-        assert config.scale_in is True
-        assert config.typewriter is True
-        assert config.typewriter_speed == 20.0
-        assert config.typewriter_mode == "word"
-        assert config.glow_pulse is True
-        assert config.glow_pulse_intensity == 0.8
+        assert config.text_shadow_enabled is False
+        assert config.text_shadow_color == (50, 50, 50, 100)
+        assert config.box_gradient is False
+        assert config.accent_line is False
+        assert config.accent_line_color == (255, 0, 0, 255)
+        assert config.accent_line_height == 5
 
 
 class TestQuoteDisplayDuration:

@@ -210,30 +210,8 @@ class GPUQuoteRenderer:
             else:  # center
                 raw_box_y = (self.height - box_h) / 2.0 + offset_y
 
-            # --- Slide-In/Out Animation (FE-4) ---
-            slide_offset_x = 0.0
-            slide_offset_y = 0.0
-            if alpha < 1.0:
-                is_fade_in = (time_seconds - latency) < quote.start_time + fade
-                if is_fade_in:
-                    anim = getattr(config, 'slide_animation', 'none')
-                    dist = getattr(config, 'slide_distance', 100.0)
-                else:
-                    anim = getattr(config, 'slide_out_animation', 'none')
-                    dist = getattr(config, 'slide_out_distance', 100.0)
-                
-                slide_factor = (1.0 - alpha) * dist
-                if anim == "left":
-                    slide_offset_x = -slide_factor
-                elif anim == "right":
-                    slide_offset_x = slide_factor
-                elif anim == "up":
-                    slide_offset_y = -slide_factor
-                elif anim == "down":
-                    slide_offset_y = slide_factor
-
-            box_x = raw_box_x + slide_offset_x
-            box_y = raw_box_y + slide_offset_y
+            box_x = raw_box_x
+            box_y = raw_box_y
 
             # Clamp
             box_x = max(0.0, min(box_x, self.width - box_w))
@@ -319,9 +297,6 @@ class GPUQuoteRenderer:
             total_text_h = len(lines) * line_px
             text_y = box_y + padding + (box_h - 2 * padding - total_text_h) / 2.0 + font_size * 0.85
 
-            glow = getattr(config, 'glow_pulse', False) and alpha < 1.0
-            glow_val = 0.3 if glow else 0.0
-
             align = getattr(config, 'text_align', 'center')
 
             self._text_renderer.render_multiline_text(
@@ -329,7 +304,7 @@ class GPUQuoteRenderer:
                 line_height=1.4, size=font_size,
                 color=text_rgb, alpha=alpha,
                 align=align,
-                glow=glow_val, glow_color=text_rgb,
+                glow=0.0, glow_color=text_rgb,
                 smoothing=0.25,
                 outline_width=0.0,
                 shadow_offset=(1.0, 1.0),

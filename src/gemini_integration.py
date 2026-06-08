@@ -66,7 +66,6 @@ SEMANTIC_PARAM_DESCRIPTIONS = {
     # Typographic
     "text_size": "Schriftgroesse in Pixeln. 24 = klein/untertitel-artig, 48 = lesbar, 72 = dominant/gross. Auf 1080p 36-48, auf 4K 56-72.",
     "animation_speed": "Geschwindigkeit der Text-Animation. 0.1 = sehr langsam, 0.5 = moderat, 1.0 = extrem schnell. Bei langsamen Songs < 0.4, bei schnellen > 0.6.",
-    "typewriter_speed": "Geschwindigkeit des Typewriter-Effekts in Zeichen/Sekunde. 5 = langsame Morse-artige Darbietung, 15 = normal, 50 = unlesbar schnell.",
 
     # Neon Oscilloscope
     "line_thickness": "Liniendicke in Pixeln. 1 = duenn/fragil, 4 = markant, 10 = dick/massiv. Bei hoher Aufloesung (>1080p) dicker.",
@@ -736,8 +735,8 @@ class GeminiIntegration:
                 return {
                     "font_size": 56, "box_color": "#1a1a2e", "font_color": "#FFFFFF",
                     "position": "bottom", "display_duration": 8.0, "auto_scale_font": True,
-                    "slide_animation": "none", "slide_out_animation": "none", "scale_in": False,
-                    "typewriter": False, "glow_pulse": False, "box_padding": 36,
+                    "text_shadow_enabled": True, "box_gradient": True, "accent_line": True,
+                    "accent_line_color": "#FFC864", "box_padding": 36,
                     "box_radius": 20, "box_margin_bottom": 100, "max_width_ratio": 0.7,
                     "fade_duration": 0.8, "line_spacing": 1.5, "max_font_size": 72,
                     "max_chars_per_line": 40,
@@ -746,8 +745,8 @@ class GeminiIntegration:
                 return {
                     "font_size": 48, "box_color": "#0d0d1a", "font_color": "#FFFFFF",
                     "position": "bottom", "display_duration": 6.0, "auto_scale_font": True,
-                    "slide_animation": "up", "slide_out_animation": "none", "scale_in": True,
-                    "typewriter": False, "glow_pulse": True, "box_padding": 24,
+                    "text_shadow_enabled": True, "box_gradient": True, "accent_line": True,
+                    "accent_line_color": "#FFC864", "box_padding": 24,
                     "box_radius": 12, "box_margin_bottom": 80, "max_width_ratio": 0.8,
                     "fade_duration": 0.5, "line_spacing": 1.25, "max_font_size": 56,
                     "max_chars_per_line": 45,
@@ -870,8 +869,8 @@ Post-Process-Regeln:
 - Vintage:        contrast 0.9,  saturation 0.75, warmth 0.4, film_grain 0.35
 
 Quote-Regeln:
-- Podcast/News: grosse Schrift (52-64px), Position bottom, keine Animationen
-- Musik/Energy: mittlere Schrift (40-48px), Position center, Slide-In up, Glow-Pulse
+- Podcast/News: grosse Schrift (52-64px), Position bottom, Text-Schatten, Box-Gradient, Accent-Linie
+- Musik/Energy: mittlere Schrift (40-48px), Position center, Accent-Linie in warmem Gold
 - Ruhig:        sehr grosse Schrift (56-72px), Position center, nur Fade
 
 ================================================================================
@@ -887,8 +886,8 @@ Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown-Code-Block.
   "quotes": {{
     "font_size": 52, "box_color": "#1a1a2e", "font_color": "#FFFFFF",
     "position": "bottom", "display_duration": 8.0, "auto_scale_font": true,
-    "slide_animation": "none", "slide_out_animation": "none", "scale_in": false,
-    "typewriter": false, "glow_pulse": false, "box_padding": 32,
+    "text_shadow_enabled": true, "box_gradient": true, "accent_line": true,
+    "accent_line_color": "#FFC864", "box_padding": 32,
     "box_radius": 16, "box_margin_bottom": 100, "max_width_ratio": 0.75,
     "fade_duration": 0.6, "line_spacing": 1.35, "max_font_size": 72,
     "max_chars_per_line": 40
@@ -920,8 +919,8 @@ WICHTIGE HINWEISE:
             default_quotes = {
                 "font_size": 52, "box_color": "#1a1a2e", "font_color": "#FFFFFF",
                 "position": "bottom", "display_duration": 8.0, "auto_scale_font": True,
-                "slide_animation": "none", "slide_out_animation": "none", "scale_in": False,
-                "typewriter": False, "glow_pulse": False, "box_padding": 32,
+                "text_shadow_enabled": True, "box_gradient": True, "accent_line": True,
+                "accent_line_color": "#FFC864", "box_padding": 32,
                 "box_radius": 16, "box_margin_bottom": 100, "max_width_ratio": 0.75,
                 "fade_duration": 0.6, "line_spacing": 1.35, "max_font_size": 72,
                 "max_chars_per_line": 40,

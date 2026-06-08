@@ -42,17 +42,17 @@ class QuoteOverlayConfig:
     min_font_size: int = 16
     max_font_size: int = 72
     
-    # Animationen
-    slide_animation: str = "none"   # 'none', 'up', 'down', 'left', 'right'
-    slide_distance: float = 100.0   # Pixel Slide-Distanz
-    slide_out_animation: str = "none"  # 'none', 'up', 'down', 'left', 'right'
-    slide_out_distance: float = 100.0  # Pixel Slide-Out Distanz
-    scale_in: bool = False          # Box zoomt von 0.8 -> 1.0 rein
-    typewriter: bool = False
-    typewriter_speed: float = 15.0  # Buchstaben pro Sekunde
-    typewriter_mode: str = "char"   # 'char' oder 'word'
-    glow_pulse: bool = False        # Glow pulsiert beim Erscheinen
-    glow_pulse_intensity: float = 0.5  # Max Glow waehrend Pulse
+    # Text-Schatten fuer bessere Lesbarkeit
+    text_shadow_enabled: bool = True
+    text_shadow_color: tuple = (0, 0, 0, 180)
+    text_shadow_offset: tuple = (2, 2)
+    text_shadow_blur: float = 2.0
+    
+    # Box-Design
+    box_gradient: bool = True       # Subtiler vertikaler Gradient
+    accent_line: bool = True        # Dünne Accent-Linie oben
+    accent_line_color: tuple = (255, 200, 100, 255)  # Warmes Gold
+    accent_line_height: int = 3
     
     # Spatial Frequency Compensation (Hintergrund-Blur unter dem Text)
     spatial_compensation: bool = True
@@ -348,33 +348,83 @@ class QuoteOverlayRenderer:
                 region = enhancer.enhance(comp_darken)
                 img.paste(region, (cx1, cy1))
         
-        # Schatten zeichnen
+        # === WEICHER BOX-SCHATTEN ===
         shadow = self.config.shadow_offset
         scaled_shadow = (int(shadow[0] * config_scale), int(shadow[1] * config_scale))
         shadow_rect = [
             box_x + scaled_shadow[0], box_y + scaled_shadow[1],
             box_x + box_width + scaled_shadow[0], box_y + box_height + scaled_shadow[1]
         ]
-        draw.rounded_rectangle(
-            shadow_rect, 
+        # Shadow-Layer erstellen und weichzeichnen
+        shadow_layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
+        shadow_draw = ImageDraw.Draw(shadow_layer)
+        shadow_draw.rounded_rectangle(
+            shadow_rect,
             radius=box_radius,
             fill=self.config.shadow_color
         )
+        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=max(2, int(6 * config_scale))))
+        overlay = Image.alpha_composite(overlay, shadow_layer)
+        draw = ImageDraw.Draw(overlay)  # Neuen Draw nach Shadow-Composite
         
-        # Hintergrund-Box zeichnen (mit Fade-Alpha)
-        box_color = list(self.config.box_color)
-        if len(box_color) < 4:
-            box_color = list(self.config.box_color) + [160]
-        box_color[3] = int(box_color[3] * alpha)
-        draw.rounded_rectangle(
-            [box_x, box_y, box_x + box_width, box_y + box_height],
-            radius=box_radius,
-            fill=tuple(box_color)
-        )
+        # === HINTERGRUND-BOX MIT GRADIENT ===
+        base_color = list(self.config.box_color)
+        if len(base_color) < 4:
+            base_color = list(self.config.box_color) + [180]
+        base_color[3] = int(base_color[3] * alpha)
         
-        # Text zeichnen
+        if self.config.box_gradient:
+            # Subtiler vertikaler Gradient: oben 10% heller
+            grad_layer = Image.new('RGBA', (box_width, box_height), (0, 0, 0, 0))
+            grad_draw = ImageDraw.Draw(grad_layer)
+            for y in range(box_height):
+                t = y / box_height
+                factor = 1.0 + (1.0 - t) * 0.10
+                r = min(255, int(base_color[0] * factor))
+                g = min(255, int(base_color[1] * factor))
+                b = min(255, int(base_color[2] * factor))
+                grad_draw.line([(0, y), (box_width, y)], fill=(r, g, b, base_color[3]))
+            # Abgerundete Maske
+            mask = Image.new('L', (box_width, box_height), 0)
+            mask_draw = ImageDraw.Draw(mask)
+            mask_draw.rounded_rectangle([0, 0, box_width, box_height], radius=box_radius, fill=255)
+            grad_layer.putalpha(mask)
+            overlay.paste(grad_layer, (int(box_x), int(box_y)), grad_layer)
+        else:
+            draw.rounded_rectangle(
+                [box_x, box_y, box_x + box_width, box_y + box_height],
+                radius=box_radius,
+                fill=tuple(base_color)
+            )
+        
+        # === ACCENT-LINIE OBEN ===
+        if self.config.accent_line:
+            accent_color = list(self.config.accent_line_color)
+            if len(accent_color) < 4:
+                accent_color = accent_color + [255]
+            accent_color[3] = int(accent_color[3] * alpha)
+            line_h = max(1, int(self.config.accent_line_height * config_scale))
+            line_pad = int(padding * 0.6)
+            # Runde die Ecken der Accent-Linie
+            draw.rounded_rectangle(
+                [box_x + line_pad, box_y + 3,
+                 box_x + box_width - line_pad, box_y + 3 + line_h],
+                radius=line_h // 2,
+                fill=tuple(accent_color)
+            )
+        
+        # === TEXT MIT SCHATTEN ===
         font_color = list(self.config.font_color)[:3] + [int(255 * alpha)]
         font = self._get_font()
+        
+        # Text-Schatten vorbereiten
+        text_shadow_enabled = self.config.text_shadow_enabled
+        ts_color = None
+        if text_shadow_enabled:
+            ts_color = list(self.config.text_shadow_color)
+            if len(ts_color) < 4:
+                ts_color = ts_color + [180]
+            ts_color[3] = int(ts_color[3] * alpha)
         
         # Vertikale Zentrierung des Text-Blocks in der Box
         if hasattr(font, 'getbbox'):
@@ -405,6 +455,15 @@ class QuoteOverlayRenderer:
                 line_x = box_x + box_width - line_width - padding
             else:  # left
                 line_x = box_x + padding
+            
+            # Text-Schatten: mehrere leicht versetzte Passen fuer weichen Schatten
+            if text_shadow_enabled and ts_color is not None:
+                for dx, dy in [(1, 1), (2, 2), (1, 2), (2, 1)]:
+                    draw.text(
+                        (line_x + dx, current_y + dy),
+                        line, font=font, fill=tuple(ts_color)
+                    )
+            
             draw.text((line_x, current_y), line, font=font, fill=tuple(font_color))
             current_y += line_height_actual + self.config.line_spacing
         

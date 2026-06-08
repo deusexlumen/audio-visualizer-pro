@@ -60,7 +60,7 @@ def cli():
 @click.option('--fps', default=60, type=int)
 @click.option('--preview', is_flag=True, help='Schnelle Vorschau')
 @click.option('--preview-duration', default=5.0, type=float, help='Dauer der Vorschau in Sekunden')
-@click.option('--background-image', '-bg', type=click.Path(), help='Hintergrundbild')
+@click.option('--background-image', '-bg', type=click.Path(), help='Hintergrundbild oder -video (Bild: jpg/png/webp, Video: mp4/mov/avi/mkv/webm/gif)')
 @click.option('--background-blur', default=0.0, type=float, help='Hintergrund-Blur Radius')
 @click.option('--background-vignette', default=0.0, type=float, help='Vignette Staerke (0.0-1.0)')
 @click.option('--background-opacity', default=0.3, type=float, help='Hintergrund-Opazitaet (0.0-1.0)')

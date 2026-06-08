@@ -22,6 +22,9 @@ from .gpu_visualizers import get_visualizer
 from .gpu_text_renderer import SDFFontAtlas, GPUTextRenderer
 from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
 
+# Video-Erweiterungen für automatische Erkennung im Hintergrund
+VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.gif'}
+
 
 class GPUBatchRenderer:
     """GPU-Renderer fuer Audio-Visualisierungen mit ModernGL.
@@ -175,10 +178,22 @@ class GPUBatchRenderer:
         
         # Hintergrundbild vorbereiten
         bg_texture = None
+        bg_video_frames = None
+        bg_video_temp_dir = None
+
         if background_image and os.path.exists(background_image):
-            bg_texture = self._load_background_texture(
-                background_image, background_blur
-            )
+            if self._is_video_file(background_image):
+                bg_video_frames, bg_video_temp_dir = self._extract_video_frames(
+                    background_image, self.fps, self.width, self.height
+                )
+                # Erstes Frame als initiale Textur laden
+                bg_texture = self._load_background_texture(
+                    bg_video_frames[0], background_blur
+                )
+            else:
+                bg_texture = self._load_background_texture(
+                    background_image, background_blur
+                )
 
         # Feature-Dictionary fuer den Visualizer vorbereiten
         features_dict = {
@@ -265,6 +280,18 @@ class GPUBatchRenderer:
                         self._save_debug(self.fbo, "debug_step1_after_clear.png")
                     
                     if bg_texture is not None:
+                        if bg_video_frames is not None:
+                            # Video-Background: Aktuelles Frame basierend auf Zeit (Loop)
+                            video_frame_idx = int(time * self.fps) % len(bg_video_frames)
+                            if video_frame_idx != getattr(self, '_last_bg_frame_idx', -1):
+                                # Textur-Daten aktualisieren (schneller als neu erstellen)
+                                from PIL import Image, ImageFilter
+                                img = Image.open(bg_video_frames[video_frame_idx]).convert('RGB')
+                                if background_blur > 0.01:
+                                    img = img.filter(ImageFilter.GaussianBlur(radius=background_blur))
+                                data = np.array(img, dtype=np.uint8)
+                                bg_texture.write(data.tobytes())
+                                self._last_bg_frame_idx = video_frame_idx
                         self._render_background(bg_texture, background_opacity, background_vignette)
                         if _DEBUG and i == 0:
                             self._save_debug(self.fbo, "debug_step2_after_bg.png")
@@ -419,6 +446,12 @@ class GPUBatchRenderer:
                 except Exception:
                     pass
 
+            # Background-Video Frames aufräumen
+            if bg_video_temp_dir and os.path.exists(bg_video_temp_dir):
+                import shutil
+                shutil.rmtree(bg_video_temp_dir, ignore_errors=True)
+            self._last_bg_frame_idx = -1
+
     def _save_debug(self, fbo_obj, filename: str):
         """Speichert den aktuellen FBO-Inhalt als PNG fuer Debugging."""
         try:
@@ -455,7 +488,98 @@ class GPUBatchRenderer:
         # sind konsistent mit PIL-TopDown-Orientierung
         texture = self.ctx.texture((self.width, self.height), 3, data.tobytes())
         return texture
-    
+
+    def _is_video_file(self, path: str) -> bool:
+        """Prüft ob eine Datei ein Video ist (basierend auf Endung)."""
+        return os.path.splitext(path)[1].lower() in VIDEO_EXTENSIONS
+
+    def _extract_video_frames(self, video_path: str, fps: int, width: int, height: int):
+        """Extrahiert alle Frames aus einem Video mit FFmpeg.
+
+        Args:
+            video_path: Pfad zum Video.
+            fps: Ziel-Framerate für die Extraktion.
+            width: Ziel-Breite.
+            height: Ziel-Höhe.
+
+        Returns:
+            Tuple(List[str], str): Liste der Frame-Pfade und Temp-Verzeichnis.
+        """
+        temp_dir = tempfile.mkdtemp(prefix="avp_bg_frames_")
+        pattern = os.path.join(temp_dir, "frame_%05d.png")
+
+        cmd = [
+            "ffmpeg", "-y", "-i", video_path,
+            "-vf", f"fps={fps},scale={width}:{height}",
+            "-pix_fmt", "rgb24",
+            pattern
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise RuntimeError(
+                f"FFmpeg konnte Video-Frames nicht extrahieren:\n{result.stderr[:800]}"
+            )
+
+        frames = sorted([
+            os.path.join(temp_dir, f)
+            for f in os.listdir(temp_dir)
+            if f.endswith('.png')
+        ])
+
+        if not frames:
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise RuntimeError("Keine Frames aus dem Video extrahiert.")
+
+        print(f"[GPU] {len(frames)} Background-Frames aus Video extrahiert")
+        return frames, temp_dir
+
+    def _extract_video_frame_at_time(self, video_path: str, time_sec: float, width: int, height: int) -> str:
+        """Extrahiert ein einzelnes Frame aus einem Video zur gegebenen Zeit.
+
+        Args:
+            video_path: Pfad zum Video.
+            time_sec: Zeitpunkt in Sekunden.
+            width: Ziel-Breite.
+            height: Ziel-Höhe.
+
+        Returns:
+            Pfad zur extrahierten PNG-Datei.
+        """
+        temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+        temp_file.close()
+
+        # Video-Dauer ermitteln für Loop
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", video_path],
+                capture_output=True, text=True, timeout=10
+            )
+            duration = float(result.stdout.strip())
+            if duration > 0:
+                time_sec = time_sec % duration
+        except Exception:
+            pass
+
+        cmd = [
+            "ffmpeg", "-y", "-ss", str(time_sec), "-i", video_path,
+            "-vframes", "1",
+            "-vf", f"scale={width}:{height}",
+            "-pix_fmt", "rgb24",
+            temp_file.name
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            os.unlink(temp_file.name)
+            raise RuntimeError(
+                f"FFmpeg konnte Frame nicht extrahieren:\n{result.stderr[:500]}"
+            )
+        return temp_file.name
+
     def _build_ffmpeg_cmd(self, output_path: str, codec: str, quality: str, gpu_encode: bool = False):
         """Baut den FFmpeg-Befehl basierend auf Codec und Qualitaet auf.
         
