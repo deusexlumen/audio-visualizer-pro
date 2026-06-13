@@ -45,8 +45,14 @@ target/
 .gradle/
 
 # Python cache
+__pycache__/
+*.pyc
 .mypy_cache/
 .pytest_cache/
+
+# Runtime / output artifacts
+.cache/
+output/
 
 # Compressed files
 *.zip
