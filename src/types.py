@@ -29,7 +29,8 @@ class AudioFeatures(BaseModel):
     def model_post_init(self, __context):
         """Berechnet frame_count automatisch, wenn nicht gesetzt."""
         if self.frame_count == 0:
-            self.frame_count = int(self.duration * self.fps)
+            import numpy as np
+            self.frame_count = int(np.ceil(self.duration * self.fps))
     
     # Zeitliche Features (Frame-basiert)
     rms: np.ndarray = Field(..., description="Loudness 0.0-1.0")

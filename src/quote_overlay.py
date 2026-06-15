@@ -23,6 +23,7 @@ class QuoteOverlayConfig:
     font_size: int = 52
     font_color: tuple = (255, 255, 255)  # RGB - Weiss
     box_color: tuple = (26, 26, 46, 200)  # RGBA - Dunkelblau, halbtransparent
+    box_alpha: int = 200  # Alternative Alpha-Steuerung fuer box_color
     box_padding: int = 32
     box_radius: int = 16
     box_margin_bottom: int = 100  # Abstand vom unteren Rand
@@ -153,6 +154,14 @@ class QuoteOverlayRenderer:
             self.quotes.append(quote)
             self._dirty = True
     
+    def _effective_end_time(self, quote: Quote) -> float:
+        """
+        Berechnet das effektive Ende eines Zitats.
+        Respektiert quote.end_time, aber display_duration als Obergrenze.
+        """
+        display_end = quote.start_time + self.config.display_duration
+        return min(quote.end_time, display_end)
+
     def build_frame_index(self, frame_count: int, fps: int):
         """
         Baut einen vorberechneten Frame-Index fuer O(1) Lookups.
@@ -162,17 +171,17 @@ class QuoteOverlayRenderer:
             self._frame_count = frame_count
             self._fps = fps
             self._frame_index = [[] for _ in range(frame_count)]
-            
+
             for quote in self.quotes:
                 adj_start = quote.start_time + self.config.latency_offset
-                effective_end = quote.start_time + self.config.display_duration
+                effective_end = self._effective_end_time(quote)
                 adj_end = effective_end + self.config.latency_offset
                 start_frame = max(0, min(int(adj_start * fps), frame_count - 1))
                 end_frame = max(0, min(int(adj_end * fps), frame_count - 1))
-                
+
                 for f in range(start_frame, end_frame + 1):
                     self._frame_index[f].append(quote)
-                    
+
             self._dirty = False
     
     def _get_active_quote(self, time_seconds: float, frame_idx: int = None) -> Optional[Quote]:
@@ -190,32 +199,32 @@ class QuoteOverlayRenderer:
             if 0 <= frame_idx < self._frame_count:
                 candidates = self._frame_index[frame_idx]
                 for quote in candidates:
-                    effective_end = quote.start_time + self.config.display_duration
+                    effective_end = self._effective_end_time(quote)
                     adj_start = quote.start_time + self.config.latency_offset
                     adj_end = effective_end + self.config.latency_offset
                     if adj_start <= time_seconds <= adj_end:
                         return quote
                 return None
-        
+
         # Fallback: lineare Suche (kompatibel mit alten Aufrufen)
         for quote in self.quotes:
-            effective_end = quote.start_time + self.config.display_duration
+            effective_end = self._effective_end_time(quote)
             adj_start = quote.start_time + self.config.latency_offset
             adj_end = effective_end + self.config.latency_offset
             if adj_start <= time_seconds <= adj_end:
                 return quote
         return None
     
-    def _calculate_fade_alpha(self, time_seconds: float, 
+    def _calculate_fade_alpha(self, time_seconds: float,
                              quote: Quote) -> float:
         """
         Berechnet den Fade-Alpha-Wert (0.0 - 1.0) fuer ein Zitat.
-        
+
         Fade-In am Anfang, Fade-Out am Ende.
         Beruecksichtigt Latenz-Kompensation und maximale Anzeigedauer.
         """
         fade = self.config.fade_duration
-        effective_end = quote.start_time + self.config.display_duration
+        effective_end = self._effective_end_time(quote)
         latency = self.config.latency_offset
         adj_start = quote.start_time + latency
         adj_end = effective_end + latency
@@ -370,7 +379,7 @@ class QuoteOverlayRenderer:
         # === HINTERGRUND-BOX MIT GRADIENT ===
         base_color = list(self.config.box_color)
         if len(base_color) < 4:
-            base_color = list(self.config.box_color) + [180]
+            base_color = list(self.config.box_color) + [self.config.box_alpha]
         base_color[3] = int(base_color[3] * alpha)
         
         if self.config.box_gradient:
@@ -383,11 +392,12 @@ class QuoteOverlayRenderer:
                 r = min(255, int(base_color[0] * factor))
                 g = min(255, int(base_color[1] * factor))
                 b = min(255, int(base_color[2] * factor))
-                grad_draw.line([(0, y), (box_width, y)], fill=(r, g, b, base_color[3]))
-            # Abgerundete Maske
+                grad_draw.line([(0, y), (box_width, y)], fill=(r, g, b, 255))
+            # Abgerundete Maske mit Fade-Alpha skalieren
             mask = Image.new('L', (box_width, box_height), 0)
             mask_draw = ImageDraw.Draw(mask)
             mask_draw.rounded_rectangle([0, 0, box_width, box_height], radius=box_radius, fill=255)
+            mask = mask.point(lambda a: int(a * base_color[3] / 255.0))
             grad_layer.putalpha(mask)
             overlay.paste(grad_layer, (int(box_x), int(box_y)), grad_layer)
         else:

@@ -7,26 +7,28 @@ Dieses Dokument enthält alle relevanten Informationen für KI-Code-Agents, die 
 **Audio Visualizer Pro** ist ein modulares, KI-optimiertes Audio-Visualisierungs-System für professionelle Musikvideos, Podcast-Visuals und kreative Projekte.
 
 ### Kern-Features
-- **10 integrierte Visualizer**: Pulsing Core, Spectrum Bars, Chroma Field, Particle Swarm, Typographic, Neon Oscilloscope, Sacred Mandala, Liquid Blobs, Neon Wave Circle, Frequency Flower
-- **Plugin-System**: Einfache Erweiterung mit `@register_visualizer` Decorator
-- **Intelligente Audio-Analyse**: Beat-Erkennung, Key-Erkennung, Chroma-Features, Mode-Detection (speech/music/hybrid)
+- **16 integrierte GPU-Visualizer**: 10 Classic (Pulsing Core, Spectrum Bars, Chroma Field, Particle Swarm, Typographic, Neon Oscilloscope, Sacred Mandala, Liquid Blobs, Neon Wave Circle, Frequency Flower) + 6 Signature Pro (Lumina Core, Voice Flow, Spectrum Genesis, Speech Focus, Bass Temple, Orchestral Swell)
+- **GPU-basiertes Rendering**: ModernGL/OpenGL Offscreen-Rendering mit FFmpeg-Encoding
+- **Intelligente Audio-Analyse**: Beat-Erkennung, Key-Erkennung, Chroma-Features, Mode-Detection (speech/music/hybrid), Transienten, Voice-Clarity
 - **KI-gestützter Auto-Modus**: Smart Matcher analysiert Audio und empfehlt automatisch Visualizer + Farbpalette + Parameter
-- **Streamlit-GUI**: Web-basierte Oberfläche mit Drag & Drop, Live-Analyse und One-Click-Render
+- **DearPyGui-Oberfläche**: Desktop-GUI mit Drag & Drop, Live-Analyse und One-Click-Render
 - **Aggressives Caching**: Analysiere einmal, rendere millionenmal
-- **Professionelle Codecs**: FFmpeg-basiert mit libx264 und AAC
-- **Post-Processing**: LUTs, Film Grain, Vignette, Chromatic Aberration
+- **Professionelle Codecs**: FFmpeg-basiert mit libx264/libx265/prores und AAC
+- **Post-Processing**: Kontrast, Sättigung, Helligkeit, Wärme, Film Grain, Vignette, Chromatic Aberration
 
 ## Technologie-Stack
 
 | Komponente | Bibliothek | Zweck |
-|------------|------------|-------|
+|------------|------------|--------|
 | Audio-Analyse | librosa>=0.10.0 | Feature-Extraktion (RMS, Onset, Chroma, etc.) |
-| Bildverarbeitung | Pillow>=9.0.0 | Frame-Generierung |
-| Datenvalidierung | pydantic>=1.10.0 | Konfiguration-Models |
+| Bildverarbeitung | Pillow>=9.0.0 | Quote-Overlays, CPU-Fallbacks |
+| Datenvalidierung | pydantic>=2.0.0 | Konfiguration-Models (Pydantic v2) |
 | CLI | click>=8.0.0 | Kommandozeilen-Interface |
 | Numerik | numpy>=1.21.0 | Array-Operationen |
 | Testing | pytest>=7.0.0 | Test-Framework |
-| Video-Encoding | FFmpeg (system) | H.264/AAC Encoding |
+| GPU-Rendering | moderngl>=5.0 | OpenGL Offscreen-Rendering |
+| GUI | dearpygui>=2.0 | Desktop-GUI |
+| Video-Encoding | FFmpeg (system) | H.264/H.265/ProRes Encoding |
 
 **System-Voraussetzung**: FFmpeg muss system-seitig installiert sein.
 - Ubuntu: `sudo apt-get install ffmpeg`
@@ -38,9 +40,11 @@ Dieses Dokument enthält alle relevanten Informationen für KI-Code-Agents, die 
 ```
 audio_visualizer_pro/
 ├── main.py                 # CLI Entry Point (Click-basiert)
+├── gui.py                  # DearPyGui Desktop-GUI
 ├── requirements.txt        # Python-Abhängigkeiten
 ├── config/                 # Konfigurations-Presets und Validierung
-│   ├── schemas.py          # Pydantic-Schemas für Config-Validierung
+│   ├── __init__.py
+│   ├── schemas.py          # Pydantic v2 Schemas für Config-Validierung
 │   ├── default.json        # Standard-Konfiguration
 │   ├── music_aggressive.json
 │   ├── podcast_minimal.json
@@ -49,35 +53,47 @@ audio_visualizer_pro/
 │   ├── __init__.py
 │   ├── analyzer.py         # AudioAnalyzer mit Caching
 │   ├── ai_matcher.py       # SmartMatcher - KI-gestützte Visualizer-Empfehlung
-│   ├── gpu_renderer.py     # GPUBatchRenderer, GPUPreviewRenderer (GPU-beschleunigt)
+│   ├── gpu_renderer.py     # GPUBatchRenderer, GPUPreviewRenderer
+│   ├── gpu_preview.py      # Einzel-Frame Preview-Renderer
+│   ├── gpu_text_renderer.py # SDF Text-Rendering auf der GPU
+│   ├── gpu_quote_renderer.py # GPU-basierter Quote-Renderer (aktuell nicht aktiv)
 │   ├── types.py            # Pydantic Models (AudioFeatures, VisualConfig, etc.)
-│   ├── postprocess.py      # PostProcessor für Color Grading
-│   ├── quote_overlay.py    # QuoteOverlayRenderer für Key-Zitat Text-Overlays
+│   ├── postprocess.py      # PIL-basierter PostProcessor (Fallback)
+│   ├── quote_overlay.py    # PIL-basierter QuoteOverlayRenderer (aktiv im Render-Loop)
+│   ├── quote_refiner.py    # Zeitstempel-Verfeinerung für Quotes
+│   ├── quote_cache.py      # Caching für Gemini Uploads/Transkripte
 │   ├── gemini_integration.py # Gemini KI für Transkription und Zitat-Extraktion
-│   ├── visuals/            # Plugin-System
-│   │   ├── __init__.py
-│   │   ├── base.py         # BaseVisualizer (abstrakte Basisklasse)
-│   │   ├── registry.py     # VisualizerRegistry mit @register_visualizer
-│   │   ├── 01_pulsing_core.py
-│   │   ├── 02_spectrum_bars.py
-│   │   ├── 03_chroma_field.py
-│   │   ├── 04_particle_swarm.py
-│   │   ├── 05_typographic.py
-│   │   ├── 06_neon_oscilloscope.py
-│   │   ├── 07_sacred_mandala.py
-│   │   ├── 08_liquid_blobs.py
-│   │   ├── 09_neon_wave_circle.py
-│   │   └── 10_frequency_flower.py
-│   └── renderers/
-│       ├── __init__.py
-│       └── (entfernt in v2.0 — GPU-Renderer ersetzt PIL-Pipeline)
-├── gui.py                  # Streamlit-GUI für One-Click-Bedienung
+│   ├── local_transcription.py # faster-whisper Fallback
+│   ├── beat_sync.py        # Beat-Synchronisation
+│   └── gpu_visualizers/    # GPU-Visualizer Plugin-System
+│       ├── __init__.py     # VISUALIZER_MAP Registry
+│       ├── base.py         # BaseGPUVisualizer (abstrakte Basisklasse)
+│       ├── pulsing_core.py
+│       ├── spectrum_bars.py
+│       ├── chroma_field.py
+│       ├── particle_swarm.py
+│       ├── typographic.py
+│       ├── neon_oscilloscope.py
+│       ├── sacred_mandala.py
+│       ├── liquid_blobs.py
+│       ├── neon_wave_circle.py
+│       ├── frequency_flower.py
+│       ├── lumina_core.py
+│       ├── voice_flow.py
+│       ├── spectrum_genesis.py
+│       ├── speech_focus.py
+│       ├── bass_temple.py
+│       └── orchestral_swell.py
 └── tests/
     ├── __init__.py
+    ├── conftest.py         # Shared fixtures
     ├── test_analyzer.py    # Tests für AudioAnalyzer
     ├── test_ai_matcher.py  # Tests für SmartMatcher
     ├── test_quote_overlay.py # Tests für Quote Overlay Renderer
-    └── test_visuals.py     # Tests für alle Visualizer
+    ├── test_gpu_renderer.py # Tests für GPU-Renderer
+    ├── test_gpu_preview.py # Tests für GPU-Preview
+    ├── test_gemini_integration.py # Tests für Gemini
+    └── ...
 ```
 
 ## Build- und Test-Kommandos
@@ -91,30 +107,34 @@ pip install -r requirements.txt
 ```bash
 # Audio analysieren
 python main.py analyze song.mp3
+python main.py analyze song.mp3 --fps 30
 
 # Verfügbare Visualizer anzeigen
 python main.py list-visuals
 
 # 5-Sekunden Vorschau rendern
-python main.py render song.mp3 --visual pulsing_core --preview
+python main.py render song.mp3 --visual lumina_core --preview
 
 # Volles Video rendern
 python main.py render song.mp3 --visual spectrum_bars -o output.mp4
 
-# Mit KI-Auto-Modus (Config wird automatisch generiert)
-python main.py render song.mp3 --config config/auto_recommended.json -o output.mp4
-
-# GUI starten
-streamlit run gui.py
-
-# Mit Config-Datei
+# Mit Config-Datei (wird in config/schemas.py validiert)
 python main.py render song.mp3 --config config/music_aggressive.json
 
-# Neues Visualizer-Template erstellen
+# Mit Quote-Config und Hintergrund
+python main.py render song.mp3 --config config/podcast_interview.json
+
+# GUI starten
+python gui.py
+
+# Neues GPU-Visualizer-Template erstellen
 python main.py create-template mein_visualizer
 
 # Beispiel-Config erstellen
 python main.py create-config --output meine_config.json
+
+# Batch-Jobs ausführen
+python main.py batch jobs.json
 ```
 
 ### Testing
@@ -125,22 +145,23 @@ pytest tests/ -v
 # Spezifische Tests
 pytest tests/test_visuals.py -v
 pytest tests/test_analyzer.py -v
+pytest tests/test_gpu_renderer.py -v
 ```
 
 ## Architektur
 
-### 3-Schichten-Architektur
+### Layer-Architektur
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Layer 4: Quote Overlays (Key-Zitat Text-Overlays)         │
 │  → QuoteOverlayRenderer.apply(frame, time_seconds)         │
 ├─────────────────────────────────────────────────────────────┤
-│  Layer 3: Post-Processing (LUTs, Grain, Vignette)          │
-│  → PostProcessor.apply(frame)                              │
+│  Layer 3: Post-Processing (Kontrast, Sättigung, Grain)     │
+│  → GPU-PostProcess Shader in GPUBatchRenderer              │
 ├─────────────────────────────────────────────────────────────┤
-│  Layer 2: Visualization (Frame-Generierung)                │
-│  → BaseVisualizer.render_frame(frame_idx)                  │
+│  Layer 2: Visualization (GPU Frame-Generierung)            │
+│  → BaseGPUVisualizer.render(features, time)                │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 1: Audio-Analyse (Feature-Extraktion)               │
 │  → AudioAnalyzer.analyze(audio_path, fps)                  │
@@ -150,56 +171,82 @@ pytest tests/test_analyzer.py -v
 ### Datenfluss
 
 1. **Audio-Analyse** (`analyzer.py`):
-   - Extrahiert Features: RMS, Onset, Chroma, Spectral Centroid, etc.
+   - Extrahiert Features: RMS, Onset, Chroma, Spectral Centroid, Transient, Voice-Clarity, etc.
    - Caching in `.cache/audio_features/` (NPZ-Format)
    - Deterministisch und thread-safe
 
-2. **Visualization** (`visuals/`):
-   - Jeder Visualizer erbt von `BaseVisualizer`
-   - Registrierung via `@register_visualizer("name")`
-   - `render_frame(frame_idx)` gibt RGB-Array zurück
+2. **Visualization** (`gpu_visualizers/`):
+   - Jeder Visualizer erbt von `BaseGPUVisualizer`
+   - Registrierung via Eintrag in `VISUALIZER_MAP` in `src/gpu_visualizers/__init__.py`
+   - `render(features, time)` rendert in den aktiven OpenGL-Framebuffer
 
 3. **Rendering** (`gpu_renderer.py`):
    - `GPUBatchRenderer` steuert den kompletten GPU-beschleunigten Flow
    - FFmpeg-Subprozess für Video-Encoding
-   - Quote Overlays werden zeitbasiert auf Frames angewendet
+   - Quote Overlays werden zeitbasiert auf Frames angewendet (aktuell PIL-basiert)
    - Audio-Muxing zum Schluss
 
 4. **KI-Integration** (`gemini_integration.py`):
    - `GeminiIntegration.transcribe_audio()` - Audio-Transkription
    - `GeminiIntegration.extract_quotes()` - Key-Zitate mit Zeitstempeln
+   - `GeminiIntegration.optimize_all_settings()` - Parameter/Farben/Post-Process Optimierung
    - Quotes werden in der GUI reviewt, editiert und gefiltert
 
 ## Code-Style Guidelines
 
-### Visualizer erstellen
+### GPU-Visualizer erstellen
 
-**WICHTIG**: Neue Visualizer MÜSSEN diese Struktur folgen:
+**WICHTIG**: Neue GPU-Visualizer MÜSSEN diese Struktur folgen:
 
 ```python
-from .base import BaseVisualizer
-from .registry import register_visualizer
+import numpy as np
+import moderngl
+from .base import BaseGPUVisualizer
 
-@register_visualizer("einzigartiger_name")  # 1. Decorator
-class MeinVisualizer(BaseVisualizer):        # 2. Erbe von BaseVisualizer
+class MeinVisualizer(BaseGPUVisualizer):
     """Dokumentation hier."""
-    
-    def setup(self):                         # 3. setup() implementieren
-        """Einmalige Initialisierung."""
-        self.center = (self.width // 2, self.height // 2)
-    
-    def render_frame(self, frame_idx: int) -> np.ndarray:  # 4. render_frame() implementieren
-        """Rendert EINEN Frame als RGB-Array (H, W, 3), dtype uint8."""
-        # Features holen
-        f = self.get_feature_at_frame(frame_idx)
-        rms = f['rms']        # 0.0-1.0 Lautstärke
-        onset = f['onset']    # 0.0-1.0 Beat-Trigger
-        chroma = f['chroma']  # 12 Werte für Halbtöne
-        
-        # Deine Zeichen-Logik...
-        img = Image.new('RGB', (self.width, self.height), (0, 0, 0))
-        
-        return np.array(img)
+
+    # Parameter: (default, min, max, step)
+    PARAMS = {
+        "intensity": (1.0, 0.0, 3.0, 0.1),
+        "speed": (1.0, 0.0, 5.0, 0.1),
+    }
+
+    def _setup(self):
+        """Einmalige Initialisierung: Shader, VAOs, Texturen erstellen."""
+        self._build_program()
+        self._setup_quad()
+
+    def _build_program(self):
+        self.prog = self.ctx.program(
+            vertex_shader="""
+            #version 330
+            in vec2 in_pos;
+            void main() { gl_Position = vec4(in_pos, 0.0, 1.0); }
+            """,
+            fragment_shader="""
+            #version 330
+            uniform vec2 u_resolution;
+            uniform float u_time;
+            uniform float u_rms;
+            uniform float u_onset;
+            out vec4 f_color;
+            void main() {
+                vec2 uv = gl_FragCoord.xy / u_resolution;
+                f_color = vec4(vec3(u_rms), 1.0);
+            }
+            """,
+        )
+
+    def render(self, features: dict, time: float):
+        """Rendert EINEN Frame in den aktiven Framebuffer."""
+        frame_idx = int(time * features.get("fps", 30))
+        f = self._get_feature_at_frame(features, frame_idx)
+        self.prog["u_time"].value = time
+        self.prog["u_rms"].value = f["rms"]
+        self.prog["u_onset"].value = f["onset"]
+        self.prog["u_resolution"].value = (self.width, self.height)
+        self.vao.render(mode=moderngl.TRIANGLE_STRIP)
 ```
 
 ### Feature-Keys
@@ -212,11 +259,18 @@ class MeinVisualizer(BaseVisualizer):        # 2. Erbe von BaseVisualizer
 | `spectral_centroid` | 0.0-1.0 | Helligkeit/Detail |
 | `spectral_rolloff` | 0.0-1.0 | Bandbreite |
 | `zero_crossing_rate` | 0.0-1.0 | Noise vs Tonal |
+| `transient` | 0.0-1.0 | Kick/Snare-Transienten |
+| `voice_clarity` | 0.0-1.0 | Sprach-Präsenz |
+| `voice_band` | 0.0-1.0 | Sprach-Band-Energie |
+| `beat_intensity` | 0.0-1.0 | Beat-Decay-Envelope |
+| `beat_frames` | Array[int] | Frame-Indizes der erkannten Beats |
+| `tempo` | float | BPM |
+| `mode` | str | "music", "speech", "hybrid" |
 | `progress` | 0.0-1.0 | Zeit-Fortschritt |
 
 ### Konfiguration
 
-Pfade und Einstellungen werden in `src/types.py` als Pydantic-Models definiert:
+Pfade und Einstellungen werden in `src/types.py` als Pydantic v2 Models definiert:
 
 ```python
 # AudioFeatures: Schema für alle Audio-Features
@@ -224,7 +278,11 @@ Pfade und Einstellungen werden in `src/types.py` als Pydantic-Models definiert:
 # ProjectConfig: Gesamtkonfiguration einer Render-Job
 ```
 
-JSON-Configs werden in `config/schemas.py` validiert.
+JSON-Configs werden in `config/schemas.py` validiert. Das Schema erwartet:
+- Flache `background_*` Felder (nicht verschachtelt)
+- `visual.params` als offenes Dict (jeder Visualizer hat eigene PARAMS)
+- `quotes` als Liste von Dicts mit `text`, `start_time`, `end_time`, `confidence`
+- Farben in `quote_overlay` als Hex-String oder RGBA-Liste
 
 ## Testing Strategie
 
@@ -239,11 +297,18 @@ JSON-Configs werden in `config/schemas.py` validiert.
   - Empfiehlt korrekte Visualizer basierend auf Audio-Features
   - Validiert KI-Parameter und Farbpaletten
 
-- **`test_visuals.py`**: Testet alle Visualizer
+- **`test_visuals.py`**: Testet alle GPU-Visualizer
   - Rückgabe muss `np.ndarray` sein
   - Shape muss `(H, W, 3)` sein
   - `dtype` muss `uint8` sein
   - Werte müssen in 0-255 liegen
+
+- **`test_gpu_renderer.py`**: Testet GPU-Renderer
+  - FFmpeg-Cmd-Builder
+  - Render-Flow mit gemocktem FFmpeg
+
+- **`test_quote_overlay.py`**: Testet Quote-Overlays
+  - Timing, Fade, Text-Wrapping, Thread-Safety
 
 ### Test-Hilfsfunktionen
 
@@ -271,16 +336,16 @@ dummy_features = AudioFeatures(
 1. **Vorschau zuerst**: Nutze `--preview` für schnelles Testen (5 Sekunden, 480p)
 2. **Caching**: Audio-Analyse wird automatisch gecached (`.cache/audio_features/`)
 3. **Niedrigere FPS**: 30fps statt 60fps für schnelleres Rendering
-4. **Niedrigere Auflösung**: GPUPreviewRenderer nutzt automatisch 480p
+4. **Niedrigere Auflösung**: Preview nutzt automatisch 854x480
 
 ## Wichtige Dateien für KI-Agents
 
 | Datei | Beschreibung |
 |-------|--------------|
-| `src/visuals/base.py` | Muss gelesen werden für neue Visualizer |
-| `src/visuals/registry.py` | Plugin-System verstehen |
+| `src/gpu_visualizers/base.py` | Muss gelesen werden für neue GPU-Visualizer |
+| `src/gpu_visualizers/__init__.py` | VISUALIZER_MAP Registry |
 | `src/types.py` | Alle Pydantic Models |
-| `config/schemas.py` | Config-Validierung |
+| `config/schemas.py` | Config-Validierung (Pydantic v2) |
 | `src/analyzer.py` | Audio-Feature-Extraktion (NICHT ÄNDERN, nur erweitern) |
 | `src/ai_matcher.py` | KI-Empfehlungslogik (Smart Matcher) |
 | `src/quote_overlay.py` | Text-Overlay Rendering für Quotes |
@@ -296,43 +361,51 @@ dummy_features = AudioFeatures(
 
 ## Häufige Aufgaben
 
-### Neuen Visualizer hinzufügen
+### Neuen GPU-Visualizer hinzufügen
 
 1. `python main.py create-template mein_visualizer` ausführen
-2. `src/visuals/mein_visualizer.py` implementieren
-3. In `test_visuals.py` automatisch getestet (Registry-Autoload)
+2. `src/gpu_visualizers/mein_visualizer.py` implementieren
+3. In `src/gpu_visualizers/__init__.py` in `VISUALIZER_MAP` registrieren
+4. In `test_visuals.py` automatisch getestet (sofern in Registry)
 
 ### Neue Config-Preset erstellen
 
 1. `python main.py create-config --output config/mein_preset.json`
 2. Werte anpassen
 3. Schema in `config/schemas.py` bei Bedarf erweitern
+4. Config mit `python -c "from config.schemas import load_and_validate_config; load_and_validate_config('config/mein_preset.json')"` testen
 
 ### KI-Parameter für Visualizer nutzen
 
-Jeder Visualizer liest in `setup()` Parameter aus `self.config.params` (mit Defaults):
+Jeder GPU-Visualizer liest Parameter aus `self.params` (merge von `EFFECTS`, `COLOR_PARAMS`, `PARAMS`):
 
 ```python
-def setup(self):
-    p = self.config.params
+def _setup(self):
+    p = self.params
     self.num_particles = p.get('particle_count', 150)
     self.explosion_threshold = p.get('explosion_threshold', 0.4)
 ```
 
-Wichtige KI-Parameter pro Visualizer:
+Wichtige KI-Parameter pro Visualizer (siehe `PARAMS` in jeder Datei):
 
-| Visualizer | Parameter | Default |
-|-----------|-----------|---------|
-| pulsing_core | pulse_intensity, glow_layers, glow_radius, trail_length | 0.8, 3, 20, 20 |
-| spectrum_bars | bar_count, smoothing | 40, 0.3 |
-| chroma_field | field_resolution | 100 |
-| particle_swarm | particle_count, explosion_threshold | 150, 0.4 |
-| typographic | text_size, animation_speed, bar_width, bar_spacing | 72, 0.2, 3, 1 |
-| neon_oscilloscope | line_thickness, trail_length, num_points | 4, 8, 200 |
-| sacred_mandala | rotation_speed | 0.005 |
-| liquid_blobs | blob_count, fluidity | 6, 0.7 |
-| neon_wave_circle | circle_count, wave_amplitude | 5, 1.0 |
-| frequency_flower | num_petals, layer_count | 8, 3 |
+| Visualizer | Parameter |
+|-----------|-----------|
+| pulsing_core | pulse_intensity, ring_count, glow_radius, bg_brightness |
+| spectrum_bars | bar_count, height_scale, spacing, color_shift |
+| chroma_field | field_resolution, connection_dist, particle_size |
+| particle_swarm | particle_count, explosion_threshold, glow_size, trail_length |
+| typographic | bar_width, bar_spacing, animation_speed |
+| neon_oscilloscope | line_thickness, trail_length, num_points, glow_radius |
+| sacred_mandala | rotation_speed |
+| liquid_blobs | blob_count, fluidity |
+| neon_wave_circle | circle_count, wave_amplitude |
+| frequency_flower | num_petals, layer_count |
+| lumina_core | core_intensity, ring_count, noise_scale, glow_strength |
+| voice_flow | flow_speed, wave_depth, breathe_intensity, line_count |
+| spectrum_genesis | bar_count, wave_intensity, glow_radius, beat_flash |
+| speech_focus | line_thickness, vu_segments, response_speed, accent_color |
+| bass_temple | bass_intensity, strobe_threshold, shockwave_speed |
+| orchestral_swell | swell_intensity, particle_count, dynamics_response |
 
 ### Audio-Analyse erweitern
 
@@ -341,6 +414,7 @@ Stattdessen neue Features hinzufügen:
 1. Neues Feature in `AudioFeatures` Model (`src/types.py`) ergänzen
 2. Extraktion in `analyzer.py` hinzufügen
 3. Caching-Logik bleibt unverändert
+4. Feature in `GPUBatchRenderer`/`GPUPreviewRenderer` `features_dict` hinzufügen
 
 ## Lizenz
 

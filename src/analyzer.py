@@ -107,7 +107,11 @@ class AudioAnalyzer:
                 if isinstance(val, np.ndarray):
                     if val.dtype.kind == 'U':
                         # Unicode-String
-                        loaded_data[k] = str(val.item())
+                        s = str(val.item())
+                        if s == self._NONE_SENTINEL:
+                            loaded_data[k] = None
+                        else:
+                            loaded_data[k] = s
                     elif k in array_fields:
                         # Array-Felder: immer als ndarray behalten
                         if val.size == 0:
@@ -422,25 +426,32 @@ class AudioAnalyzer:
         for shift in range(12):
             # Major-Korrelation
             major_shifted = np.roll(major_profile, shift)
-            major_score = np.corrcoef(chroma_norm, major_shifted)[0, 1]
-            if major_score > best_score:
+            with np.errstate(invalid='ignore', divide='ignore'):
+                major_score = np.corrcoef(chroma_norm, major_shifted)[0, 1]
+            if not np.isnan(major_score) and major_score > best_score:
                 best_score = major_score
                 best_key = f"{keys[shift]} major"
-            
+
             # Minor-Korrelation
             minor_shifted = np.roll(minor_profile, shift)
-            minor_score = np.corrcoef(chroma_norm, minor_shifted)[0, 1]
-            if minor_score > best_score:
+            with np.errstate(invalid='ignore', divide='ignore'):
+                minor_score = np.corrcoef(chroma_norm, minor_shifted)[0, 1]
+            if not np.isnan(minor_score) and minor_score > best_score:
                 best_score = minor_score
                 best_key = f"{keys[shift]} minor"
-        
+
+        # Wenn keine sinnvolle Korrelation gefunden (z.B. Stille), None zurueckgeben
+        if np.isinf(best_score) or np.isnan(best_score):
+            return None
         return best_key
     
+    _NONE_SENTINEL = "__NONE__"
+
     def _save_cache(self, path: Path, features: AudioFeatures):
         data = {}
         for k, v in features.model_dump().items():
             if v is None:
-                data[k] = np.array("", dtype='<U100')
+                data[k] = np.array(self._NONE_SENTINEL, dtype='<U100')
             elif isinstance(v, str):
                 data[k] = np.array(v, dtype='<U100')
             else:

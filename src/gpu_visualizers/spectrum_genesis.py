@@ -156,8 +156,7 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
             hue = (color[0] + i / bar_count * color_shift + color_shift) % 1.0
             sat = 0.7 + uniforms["u_energy"] * 0.3
             val = 0.5 + h / max_h * 0.5
-            from .base import BaseGPUVisualizer
-            bar_rgb = BaseGPUVisualizer._hsv_to_rgb(hue, sat, val)
+            bar_rgb = self._hsv_to_rgb(hue, sat, val)
 
             x = i * bar_w + bar_w / 2.0
             cy = self.height / 2.0

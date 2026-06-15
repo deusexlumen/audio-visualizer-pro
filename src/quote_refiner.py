@@ -38,7 +38,6 @@ def refine_quote_timestamps(
     Returns:
         Neue Liste von Quote-Objekten mit verfeinerten Zeitstempeln
     """
-    print(f"[QUOTE_REFINER] LADE NEUE VERSION - features type: {type(features)}")
     if not quotes:
         return quotes
 

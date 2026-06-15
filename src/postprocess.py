@@ -195,8 +195,8 @@ class PostProcessor:
                 lg = int(g * (lut_size - 1))
                 lb = int(b * (lut_size - 1))
                 
-                # Index in flachem LUT-Array
-                idx = lr + lg * lut_size + lb * lut_size * lut_size
+                # Index in flachem LUT-Array (.cube Format: B-major)
+                idx = lb * lut_size * lut_size + lg * lut_size + lr
                 
                 if idx < len(self.lut):
                     result[i, j] = (self.lut[idx] * 255).astype(np.uint8)

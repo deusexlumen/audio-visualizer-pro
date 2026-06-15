@@ -349,25 +349,25 @@ class TestQuoteOverlayConfig:
 
 
 class TestQuoteDisplayDuration:
-    """Tests dass display_duration die end_time ueberschreibt."""
+    """Tests dass end_time respektiert wird und display_duration als Obergrenze dient."""
 
-    def test_display_duration_overrides_end_time(self):
-        """display_duration sollte die tatsaechliche Anzeigedauer steuern."""
+    def test_end_time_limits_display_duration(self):
+        """quote.end_time sollte die tatsaechliche Anzeigedauer begrenzen."""
         frame = create_test_frame()
-        # Zitat mit end_time=3.0 (nur 2 Sekunden)
+        # Zitat mit end_time=3.0 (nur 2 Sekunden sichtbar)
         quotes = [Quote(text="Kurzes Zitat", start_time=1.0, end_time=3.0, confidence=1.0)]
-        # Aber display_duration=8.0 -> sollte 8 Sekunden sichtbar sein
+        # display_duration=8.0 ist laenger als end_time, also sollte end_time greifen
         config = QuoteOverlayConfig(display_duration=8.0, fade_duration=0.1)
         renderer = QuoteOverlayRenderer(quotes, config)
         renderer.build_frame_index(frame_count=300, fps=30)
 
-        # Bei 2.0s (innerhalb original end_time) -> sichtbar
+        # Bei 2.0s (innerhalb end_time) -> sichtbar
         r1 = renderer.apply(frame.copy(), time_seconds=2.0, frame_idx=60)
         assert np.any(r1 != frame)
 
-        # Bei 5.0s (nach original end_time, aber vor display_duration) -> sichtbar
+        # Bei 5.0s (nach end_time, aber vor display_duration) -> NICHT mehr sichtbar
         r2 = renderer.apply(frame.copy(), time_seconds=5.0, frame_idx=150)
-        assert np.any(r2 != frame)
+        np.testing.assert_array_equal(r2, frame)
 
         # Bei 9.5s (nach display_duration) -> nicht mehr sichtbar
         r3 = renderer.apply(frame.copy(), time_seconds=9.5, frame_idx=285)

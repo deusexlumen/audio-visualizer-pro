@@ -201,25 +201,25 @@ class SmartMatcher:
                 visualizer = 'typographic'
                 reason = 'News-Format erkannt: Gleichmäßiger Sprecher, sachlicher Ton – klare Typografie passt bestens.'
                 confidence = 0.90
-                params = {'text_size': 56, 'animation_speed': 0.15, 'bar_width': 4, 'bar_spacing': 2}
+                params = {'animation_speed': 0.15, 'bar_width': 4, 'bar_spacing': 2}
             elif dynamic_range < 0.55:
                 # Interview: Zwei Sprecher, moderate Dynamik, Pausen
                 visualizer = 'voice_flow'
                 reason = 'Interview-Format erkannt: Gesprächiger Wechsel, moderate Dynamik – sanfte Stimm-Atmung unterstreicht den Dialog.'
                 confidence = 0.85
-                params = {'flow_intensity': 0.5, 'smoothness': 0.8}
+                params = {'flow_speed': 0.35, 'wave_depth': 0.5, 'breathe_intensity': 0.4, 'line_count': 5}
             elif dynamic_range > 0.85:
                 # Story: Viel Dynamik, Soundeffekte, Einspieler
                 visualizer = 'speech_focus'
                 reason = 'Storytelling erkannt: Hohe Dynamik, atmosphärische Passagen – diskrete Wellenform fängt die Stimmung ein.'
                 confidence = 0.88
-                params = {'wave_scale': 0.6, 'reactive_intensity': 0.4}
+                params = {'line_thickness': 2.5, 'vu_segments': 16, 'response_speed': 1.0, 'accent_color': 0.52}
             else:
                 # Mixed/Allround Podcast – sicherster Default
                 visualizer = 'voice_flow'
                 reason = 'Allround-Sprach-Content – sanfte Stimm-Atmung gibt visuelles Feedback ohne Ablenkung.'
                 confidence = 0.78
-                params = {'flow_intensity': 0.5, 'smoothness': 0.8}
+                params = {'flow_speed': 0.4, 'wave_depth': 0.5, 'breathe_intensity': 0.4, 'line_count': 5}
         
         elif mode == 'music':
             # Musik
@@ -228,27 +228,27 @@ class SmartMatcher:
                     visualizer = 'spectrum_bars'
                     reason = 'Energische, laute Musik mit vielen Beats – klassische Spektrum-Balken zeigen die Power.'
                     confidence = 0.90
-                    params = {'bar_count': 64, 'smoothing': 0.3}
+                    params = {'bar_count': 64, 'height_scale': 1.2, 'spacing': 0.25, 'color_shift': 0.0}
                 else:
                     visualizer = 'neon_oscilloscope'
                     reason = 'Schnelle, aber leise Musik – der Oszilloskop-Look betont die Rhythmus-Struktur.'
                     confidence = 0.85
-                    params = {'line_thickness': 3, 'trail_length': 20}
+                    params = {'line_thickness': 3, 'trail_length': 12, 'num_points': 200, 'glow_radius': 16}
             elif tempo > 100:
                 visualizer = 'particle_swarm'
                 reason = 'Moderate Musik mit Drive – Partikel-Explosionen passen zum Tempo.'
                 confidence = 0.82
-                params = {'particle_count': 150, 'explosion_threshold': 0.6}
+                params = {'particle_count': 150, 'explosion_threshold': 0.6, 'glow_size': 3, 'trail_length': 5}
             elif tempo < 80 and rms_mean < 0.3:
                 visualizer = 'sacred_mandala'
                 reason = 'Langsame, sanfte Musik – meditative Mandala-Match für entspannte Stimmung.'
                 confidence = 0.88
-                params = {'rotation_speed': 0.2, 'layer_count': 7}
+                params = {'rotation_speed': 0.005}
             else:
                 visualizer = 'chroma_field'
                 reason = 'Melodische Musik mit klaren Harmonien – Farbfelder basierend auf der Tonart.'
                 confidence = 0.80
-                params = {'field_resolution': 32, 'color_blend': 0.6}
+                params = {'field_resolution': 100, 'connection_dist': 100, 'particle_size': 8}
         
         else:  # hybrid
             if dynamic_range > 0.7:
@@ -260,7 +260,7 @@ class SmartMatcher:
                 visualizer = 'pulsing_core'
                 reason = 'Ausgewogener Mix – der pulsierende Kern ist vielseitig genug für hybriden Content.'
                 confidence = 0.72
-                params = {'pulse_intensity': 0.5, 'glow_radius': 60}
+                params = {'pulse_intensity': 0.5, 'ring_count': 3, 'glow_radius': 1.0, 'bg_brightness': 0.05}
         
         # Farbpalette zusammenbauen
         colors = {

@@ -10,7 +10,7 @@ scipy>=1.7.0
 Pillow>=9.0.0
 
 # Datenvalidierung
-pydantic>=1.10.0
+pydantic>=2.0.0
 
 # CLI
 click>=8.0.0

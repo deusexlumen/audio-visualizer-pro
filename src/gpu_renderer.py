@@ -117,6 +117,10 @@ class GPUBatchRenderer:
         audio_path = str(audio_path)
         output_path = str(output_path)
 
+        # Vorherigen Quote-Renderer zuruecksetzen, damit bei Wiederverwendung
+        # des Renderers keine alten Quotes aktiv bleiben.
+        self._quote_overlay_renderer = None
+
         # Audio analysieren falls noetig
         if features is None:
             analyzer = AudioAnalyzer()
@@ -196,12 +200,24 @@ class GPUBatchRenderer:
                 )
 
         # Feature-Dictionary fuer den Visualizer vorbereiten
+        # Vollstaendiges Dictionary mit allen Pro-Features
         features_dict = {
             "rms": features.rms[:frame_count],
             "onset": features.onset[:frame_count],
             "beat_intensity": beat_intensity,
-            "chroma": features.chroma,
+            "chroma": features.chroma[:, :frame_count] if features.chroma.ndim > 1 and features.chroma.shape[1] >= frame_count else features.chroma,
             "spectral_centroid": features.spectral_centroid[:frame_count],
+            "spectral_rolloff": features.spectral_rolloff[:frame_count],
+            "zero_crossing_rate": features.zero_crossing_rate[:frame_count],
+            "transient": features.transient[:frame_count] if len(features.transient) > 0 else np.zeros(frame_count, dtype=np.float32),
+            "voice_clarity": features.voice_clarity[:frame_count] if len(features.voice_clarity) > 0 else np.zeros(frame_count, dtype=np.float32),
+            "voice_band": features.voice_band[:frame_count] if len(features.voice_band) > 0 else np.zeros(frame_count, dtype=np.float32),
+            "mfcc": features.mfcc[:, :frame_count] if features.mfcc.ndim > 1 and features.mfcc.shape[1] >= frame_count else features.mfcc,
+            "tempogram": features.tempogram[:, :frame_count] if features.tempogram.ndim > 1 and features.tempogram.shape[1] >= frame_count else features.tempogram,
+            "beat_frames": features.beat_frames,
+            "tempo": float(features.tempo),
+            "mode": features.mode,
+            "duration": float(features.duration),
             "fps": self.fps,
             "frame_count": frame_count,
         }
@@ -238,8 +254,8 @@ class GPUBatchRenderer:
             # === PRODUCER-CONSUMER: Render und Encode parallel ===
             # Der Render-Thread rendert Frames in eine Queue.
             # Ein separater Thread schreibt sie zu FFmpeg stdin.
-            # Queue OHNE maxsize: put() blockiert nie, FFmpeg ist der einzige Engpass.
-            frame_queue = queue.Queue()
+            # Queue MIT maxsize: Producer wartet auf Encoder, RAM bleibt konstant.
+            frame_queue = queue.Queue(maxsize=3)
             encode_done = threading.Event()
             encode_error = [None]
             _DEBUG = False  # Auf True setzen fuer Debug-Screenshots
@@ -359,7 +375,18 @@ class GPUBatchRenderer:
                     if encode_error[0] is not None:
                         raise RuntimeError(f"Encode-Thread-Fehler: {encode_error[0]}")
                     
-                    frame_queue.put(pixels)
+                    # Bei voller Queue blockieren, aber Abbruch regelmaessig pruefen
+                    while True:
+                        try:
+                            frame_queue.put(pixels, timeout=0.1)
+                            break
+                        except queue.Full:
+                            if cancel_event is not None and cancel_event.is_set():
+                                print("[GPU] Render abgebrochen durch User (Queue voll).")
+                                break
+                            # Sonst kurz warten und erneut versuchen
+                    if cancel_event is not None and cancel_event.is_set():
+                        break
 
                     if i % 30 == 0 or i == frame_count - 1:
                         if progress_callback:
@@ -1106,9 +1133,11 @@ class GPUBatchRenderer:
         self.ctx.disable(moderngl.BLEND)
     
     def _init_quote_overlay(self, quotes, quote_config, frame_count, fps):
-        """Initialisiert den PIL-basierten Quote-Overlay-Renderer."""
-        if hasattr(self, '_quote_overlay_renderer') and self._quote_overlay_renderer is not None:
-            return
+        """Initialisiert den PIL-basierten Quote-Overlay-Renderer.
+
+        Wird bei jedem render()-Aufruf mit neuen Quotes neu aufgebaut,
+        um Stale-State bei Renderer-Wiederverwendung zu vermeiden.
+        """
         self._quote_overlay_renderer = QuoteOverlayRenderer(quotes=quotes, config=quote_config)
         self._quote_overlay_renderer.build_frame_index(frame_count, fps)
 

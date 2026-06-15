@@ -259,6 +259,8 @@ class AppState:
             "color_saturation": self.color_saturation,
             "resolution": list(self.resolution),
             "render_fps": self.render_fps,
+            "codec": self.codec,
+            "quality": self.quality,
             "gpu_encode": self.gpu_encode,
             "quotes_enabled": self.quotes_enabled,
             "quote_config": {
@@ -333,6 +335,11 @@ class AppState:
         state.color_saturation = data.get("color_saturation", 0.7)
         state.resolution = tuple(data.get("resolution", [1920, 1080]))
         state.render_fps = data.get("render_fps", 30)
+        state.codec = data.get("codec", "h264")
+        # Rueckwaertskompatibilitaet: alte Projekte hatten draft/standard
+        quality = data.get("quality", "high")
+        quality = {"draft": "low", "standard": "medium"}.get(quality, quality)
+        state.quality = quality
         state.gpu_encode = data.get("gpu_encode", False)
         state.quotes_enabled = data.get("quotes_enabled", False)
 
@@ -477,6 +484,9 @@ class AudioVisualizerGUI:
         self._preview_last_error_time = 0.0
         self._preview_error_params_hash = ""
         self._preview_error_cooldown = 3.0
+        self._preview_update_result = None
+        self._preview_thread_id = 0
+        self._preview_is_rendering = False
 
     def _init_preview_placeholder(self):
         """Erzeugt ein Placeholder-Bild für den Preview-Bereich vor dem Laden."""
@@ -2086,8 +2096,8 @@ class AudioVisualizerGUI:
     def _on_quality_changed(self, sender, app_data):
         val = dpg.get_value(sender)
         quality_map = {
-            "Draft (schnell)": "draft",
-            "Standard": "standard",
+            "Draft (schnell)": "low",
+            "Standard": "medium",
             "High": "high",
             "Lossless": "lossless",
         }
@@ -2575,7 +2585,6 @@ class AudioVisualizerGUI:
             return
         if now - self._last_preview_update < self._preview_min_interval:
             return
-        self._last_preview_update = now
 
         has_audio = self.state.audio_path and os.path.exists(self.state.audio_path)
         has_bg = self.state.background_path and os.path.exists(self.state.background_path)
@@ -2591,10 +2600,11 @@ class AudioVisualizerGUI:
         if now - self._preview_last_error_time < self._preview_error_cooldown:
             return
 
-        # Fallback: nur Hintergrundbild anzeigen wenn kein Audio da ist
+        # Fallback: nur Hintergrundbild anzeigen wenn kein Audio da ist (schnell, synchron)
         if not has_audio and has_bg:
             self._render_background_only()
             self.state._preview_params_hash = params_hash
+            self._last_preview_update = now
             return
 
         if not has_audio:
@@ -2604,49 +2614,90 @@ class AudioVisualizerGUI:
         if self.state.features is None:
             return
 
+        # Bereits ein Preview-Render-Thread aktiv?
+        if self._preview_is_rendering:
+            return
+
+        self._last_preview_update = now
+        self._preview_is_rendering = True
         dpg.configure_item("preview_loading_text", show=True)
-        try:
-            preview_quotes = self.state.quotes if self.state.quotes_enabled else None
-            preview_quote_cfg = self.state.quote_config if self.state.quotes_enabled else None
-            img = render_gpu_preview(
-                audio_path=self.state.audio_path,
-                visualizer_type=self.state.visualizer_type,
-                params=self.state.get_params(),
-                width=self.state.preview_width,
-                height=self.state.preview_height,
-                fps=self.state.preview_fps,
-                preview_time_percent=self.state.preview_time_percent,
-                background_image=self.state.background_path,
-                background_blur=self.state.bg_blur,
-                background_vignette=self.state.bg_vignette,
-                background_opacity=self.state.bg_opacity,
-                postprocess=self.state.get_postprocess(),
-                quotes=preview_quotes,
-                quote_config=preview_quote_cfg,
-                viz_offset_x=self.state.viz_offset_x,
-                viz_offset_y=self.state.viz_offset_y,
-                viz_scale=self.state.viz_scale,
-                features=self.state.features,
-            )
-            if img is not None:
-                self.state._preview_image = img
-                self.state._preview_params_hash = params_hash
-                self._upload_texture(img)
-            else:
-                # render_gpu_preview hat intern einen Fehler gefangen und None zurückgegeben
-                self._preview_last_error_time = time.time()
-                self._preview_error_params_hash = params_hash
-                dpg.configure_item("preview_loading_text", show=True, color=Theme.STATUS_ERR)
-                dpg.set_value("preview_loading_text", "❌ Preview-Fehler. Konsole prüfen.")
-        except Exception as e:
-            print(f"[Preview] Fehler: {e}")
+
+        self._preview_thread_id = getattr(self, '_preview_thread_id', 0) + 1
+        current_thread_id = self._preview_thread_id
+
+        # Kopie der benötigten Zustände für den Thread
+        state_snapshot = {
+            "audio_path": self.state.audio_path,
+            "visualizer_type": self.state.visualizer_type,
+            "params": self.state.get_params(),
+            "width": self.state.preview_width,
+            "height": self.state.preview_height,
+            "fps": self.state.preview_fps,
+            "preview_time_percent": self.state.preview_time_percent,
+            "background_image": self.state.background_path,
+            "background_blur": self.state.bg_blur,
+            "background_vignette": self.state.bg_vignette,
+            "background_opacity": self.state.bg_opacity,
+            "postprocess": self.state.get_postprocess(),
+            "quotes": self.state.quotes if self.state.quotes_enabled else None,
+            "quote_config": self.state.quote_config if self.state.quotes_enabled else None,
+            "viz_offset_x": self.state.viz_offset_x,
+            "viz_offset_y": self.state.viz_offset_y,
+            "viz_scale": self.state.viz_scale,
+            "features": self.state.features,
+            "params_hash": params_hash,
+        }
+
+        def _render_preview_thread():
+            try:
+                img = render_gpu_preview(
+                    audio_path=state_snapshot["audio_path"],
+                    visualizer_type=state_snapshot["visualizer_type"],
+                    params=state_snapshot["params"],
+                    width=state_snapshot["width"],
+                    height=state_snapshot["height"],
+                    fps=state_snapshot["fps"],
+                    preview_time_percent=state_snapshot["preview_time_percent"],
+                    background_image=state_snapshot["background_image"],
+                    background_blur=state_snapshot["background_blur"],
+                    background_vignette=state_snapshot["background_vignette"],
+                    background_opacity=state_snapshot["background_opacity"],
+                    postprocess=state_snapshot["postprocess"],
+                    quotes=state_snapshot["quotes"],
+                    quote_config=state_snapshot["quote_config"],
+                    viz_offset_x=state_snapshot["viz_offset_x"],
+                    viz_offset_y=state_snapshot["viz_offset_y"],
+                    viz_scale=state_snapshot["viz_scale"],
+                    features=state_snapshot["features"],
+                )
+                self._preview_update_result = ("ok", img, state_snapshot["params_hash"], current_thread_id)
+            except Exception as e:
+                print(f"[Preview] Fehler: {e}")
+                self._preview_update_result = ("error", str(e), state_snapshot["params_hash"], current_thread_id)
+
+        threading.Thread(target=_render_preview_thread, daemon=True).start()
+
+    def _process_preview_result(self):
+        """Wird im Main Thread aufgerufen, um Preview-Ergebnisse sicher zu verarbeiten."""
+        if self._preview_update_result is None:
+            return
+        status, data, params_hash, thread_id = self._preview_update_result
+        self._preview_update_result = None
+        self._preview_is_rendering = False
+
+        # Falls der Nutzer zwischenzeitlich andere Parameter gewählt hat
+        if getattr(self, '_preview_thread_id', 0) != thread_id:
+            return
+
+        if status == "ok" and data is not None:
+            self.state._preview_image = data
+            self.state._preview_params_hash = params_hash
+            self._upload_texture(data)
+        else:
             self._preview_last_error_time = time.time()
             self._preview_error_params_hash = params_hash
             dpg.configure_item("preview_loading_text", show=True, color=Theme.STATUS_ERR)
             dpg.set_value("preview_loading_text", "❌ Preview-Fehler. Konsole prüfen.")
-        finally:
-            # loading_text wird bei Erfolg in _upload_texture ausgeblendet
-            pass
 
     def _is_video_bg(self, path: str) -> bool:
         """Prüft ob eine Datei ein Video/GIF ist."""
@@ -2720,6 +2771,13 @@ class AudioVisualizerGUI:
             flat = arr.flatten()
         self._preview_raw_data[:] = flat[:]
         dpg.set_value(self._preview_texture_tag, self._preview_raw_data)
+        # Loading-Text ausblenden wenn erfolgreich hochgeladen
+        try:
+            dpg.configure_item("preview_loading_text", show=False)
+            dpg.set_value("preview_loading_text", "⏳ Preview wird berechnet...")
+            dpg.configure_item("preview_loading_text", color=Theme.TEXT_PRIMARY)
+        except Exception:
+            pass
 
     # -------------------------------------------------------------------------
     # Video Export
@@ -3002,8 +3060,8 @@ class AudioVisualizerGUI:
         }.get(self.state.codec, "h264 (kompatibel)")
         dpg.set_value("codec_combo", codec_display)
         quality_display = {
-            "draft": "Draft (schnell)",
-            "standard": "Standard",
+            "low": "Draft (schnell)",
+            "medium": "Standard",
             "high": "High",
             "lossless": "Lossless",
         }.get(self.state.quality, "High")
@@ -3013,7 +3071,7 @@ class AudioVisualizerGUI:
             (1920, 1080): "1920x1080 (Full HD)",
             (1280, 720): "1280x720 (HD)",
             (854, 480): "854x480 (SD)",
-        }.get((self.state.render_width, self.state.render_height), f"{self.state.render_width}x{self.state.render_height}")
+        }.get(self.state.resolution, f"{self.state.resolution[0]}x{self.state.resolution[1]}")
         dpg.set_value("res_combo", res_display)
         # Quotes
         dpg.set_value("chk_quotes_enabled", self.state.quotes_enabled)
@@ -3145,6 +3203,13 @@ class AudioVisualizerGUI:
                 specs.update(viz_class.EFFECTS)
             if hasattr(viz_class, 'PARAMS'):
                 specs.update(viz_class.PARAMS)
+            # Numerische COLOR_PARAMS ebenfalls fuer KI-Optimierung verfuegbar machen
+            if hasattr(viz_class, 'COLOR_PARAMS'):
+                color_defaults = viz_class.COLOR_PARAMS
+                if 'base_hue' in color_defaults:
+                    specs['base_hue'] = (color_defaults['base_hue'], 0.0, 1.0, 0.05)
+                if 'color_saturation' in color_defaults:
+                    specs['color_saturation'] = (color_defaults['color_saturation'], 0.0, 1.0, 0.05)
             return specs
         except Exception:
             return {}
@@ -3195,17 +3260,25 @@ class AudioVisualizerGUI:
             self._update_status_indicators()
 
     def _features_to_dict(self, features) -> dict:
+        def _mean(arr):
+            arr = np.asarray(arr)
+            return float(arr.mean()) if arr.size else 0.0
+
+        def _std(arr):
+            arr = np.asarray(arr)
+            return float(arr.std()) if arr.size else 0.0
+
         return {
             'duration': float(getattr(features, 'duration', 0)),
             'tempo': float(getattr(features, 'tempo', 120)),
             'mode': str(getattr(features, 'mode', 'music')),
-            'rms_mean': float(getattr(features, 'rms_mean', 0.5)),
-            'rms_std': float(getattr(features, 'rms_std', 0.1)),
-            'onset_mean': float(getattr(features, 'onset_mean', 0.3)),
-            'onset_std': float(getattr(features, 'onset_std', 0.1)),
-            'spectral_mean': float(getattr(features, 'spectral_mean', 0.5)),
-            'transient_mean': float(getattr(features, 'transient_mean', 0.0)),
-            'voice_clarity_mean': float(getattr(features, 'voice_clarity_mean', 0.0)),
+            'rms_mean': _mean(getattr(features, 'rms', [])),
+            'rms_std': _std(getattr(features, 'rms', [])),
+            'onset_mean': _mean(getattr(features, 'onset', [])),
+            'onset_std': _std(getattr(features, 'onset', [])),
+            'spectral_mean': _mean(getattr(features, 'spectral_centroid', [])),
+            'transient_mean': _mean(getattr(features, 'transient', [])),
+            'voice_clarity_mean': _mean(getattr(features, 'voice_clarity', [])),
         }
 
     def _poll_ki_result(self):
@@ -3329,6 +3402,7 @@ class AudioVisualizerGUI:
         try:
             while dpg.is_dearpygui_running():
                 self._process_analyze_result()
+                self._process_preview_result()
                 self._process_ki_queue()
                 self._process_quotes_queue()
                 self._update_analysis_spinner()

@@ -39,7 +39,7 @@ def dummy_audio_features() -> AudioFeatures:
         tempo=120.0,
         key="C",
         mode="music",
-        beat_frames=np.array([0, 15, 30]),
+        beat_frames=np.array([0, 15, 29]),
     )
 
 

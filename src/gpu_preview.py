@@ -8,6 +8,7 @@ NEU: Renderer und Visualizer werden gecacht, um Shader-Neukompilierung
 bei jedem Slider-Zug zu vermeiden.
 """
 
+import os
 import traceback
 
 import numpy as np
@@ -111,6 +112,7 @@ def render_gpu_preview(
         PIL.Image oder None bei Fehler
     """
     temp_bg_frame = None
+    bg_texture = None
     try:
         # Audio analysieren (gecached) nur wenn nicht schon vorhanden
         if features is None:
@@ -125,24 +127,23 @@ def render_gpu_preview(
             viz.set_params(params)
 
         # Hintergrundbild laden
-        bg_texture = None
         if background_image:
-            if renderer._is_video_file(background_image):
-                preview_time = features.duration * preview_time_percent
-                try:
+            try:
+                if renderer._is_video_file(background_image):
+                    preview_time = features.duration * preview_time_percent
                     temp_bg_frame = renderer._extract_video_frame_at_time(
                         background_image, preview_time, width, height
                     )
                     bg_texture = renderer._load_background_texture(
                         temp_bg_frame, background_blur
                     )
-                except Exception as e:
-                    print(f'[GPU Preview] Konnte Video-Frame nicht laden: {e}')
-                    bg_texture = None
-            else:
-                bg_texture = renderer._load_background_texture(
-                    background_image, background_blur
-                )
+                else:
+                    bg_texture = renderer._load_background_texture(
+                        background_image, background_blur
+                    )
+            except Exception as e:
+                print(f'[GPU Preview] Konnte Hintergrundbild nicht laden: {e}')
+                bg_texture = None
 
         # Beat-Intensity vektorisiert berechnen (fuer Visualizer die es brauchen)
         frame_count = features.frame_count
@@ -159,16 +160,31 @@ def render_gpu_preview(
                     vals = np.clip(vals, 0.0, 1.0)
                     beat_intensity[bf:end] = np.maximum(beat_intensity[bf:end], vals)
 
-        # Feature-Dict vorbereiten
+        # Feature-Dict vorbereiten (vollstaendig wie im Haupt-Renderer)
+        def _slice_or_zeros(arr, fc):
+            if arr is None or len(arr) == 0:
+                return np.zeros(fc, dtype=np.float32)
+            return arr[:fc]
+
         features_dict = {
-            "rms": features.rms,
-            "onset": features.onset,
-            "chroma": features.chroma,
-            "spectral_centroid": features.spectral_centroid,
-            "fps": fps,
-            "frame_count": frame_count,
+            "rms": _slice_or_zeros(features.rms, frame_count),
+            "onset": _slice_or_zeros(features.onset, frame_count),
+            "chroma": features.chroma[:, :frame_count] if features.chroma.ndim > 1 and features.chroma.shape[1] >= frame_count else features.chroma,
+            "spectral_centroid": _slice_or_zeros(features.spectral_centroid, frame_count),
+            "spectral_rolloff": _slice_or_zeros(features.spectral_rolloff, frame_count),
+            "zero_crossing_rate": _slice_or_zeros(features.zero_crossing_rate, frame_count),
+            "transient": _slice_or_zeros(features.transient, frame_count),
+            "voice_clarity": _slice_or_zeros(features.voice_clarity, frame_count),
+            "voice_band": _slice_or_zeros(features.voice_band, frame_count),
+            "mfcc": features.mfcc[:, :frame_count] if features.mfcc.ndim > 1 and features.mfcc.shape[1] >= frame_count else features.mfcc,
+            "tempogram": features.tempogram[:, :frame_count] if features.tempogram.ndim > 1 and features.tempogram.shape[1] >= frame_count else features.tempogram,
             "beat_frames": features.beat_frames,
             "beat_intensity": beat_intensity,
+            "tempo": float(features.tempo),
+            "mode": features.mode,
+            "duration": float(features.duration),
+            "fps": fps,
+            "frame_count": frame_count,
         }
 
         # Zeitpunkt fuer Preview
@@ -233,5 +249,10 @@ def render_gpu_preview(
         _release_preview_cache()
         return None
     finally:
+        if bg_texture is not None:
+            try:
+                bg_texture.release()
+            except Exception:
+                pass
         if temp_bg_frame and os.path.exists(temp_bg_frame):
             os.unlink(temp_bg_frame)

@@ -7,9 +7,14 @@ KI-Optimierter Workflow fuer Audio-Visualisierungen.
 
 import click
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
+
+from config.schemas import load_and_validate_config
+from src.types import Quote
+from src.quote_overlay import QuoteOverlayConfig
 
 
 def _check_ffmpeg():
@@ -82,8 +87,8 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
             f"Format: BREITExHOEHE (z.B. 1920x1080)"
         )
     
-    # Parameter parsen
-    params = {}
+    # Parameter parsen (CLI hat Vorrang vor Config)
+    cli_params = {}
     for p in param:
         if '=' not in p:
             raise click.BadParameter(f"Parameter muss key=value sein: {p}")
@@ -101,17 +106,81 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
                     value = float(value)
                 except ValueError:
                     pass
-        params[key] = value
-    
-    # Config-File laden (optional)
+        cli_params[key] = value
+
+    # Config-File laden und validieren (optional)
+    cfg_visual_type = visual
+    cfg_resolution = resolution
+    cfg_fps = fps
+    cfg_background_image = background_image
+    cfg_background_blur = background_blur
+    cfg_background_vignette = background_vignette
+    cfg_background_opacity = background_opacity
+    cfg_codec = codec
+    cfg_quality = quality
+    cfg_postprocess = None
+    cfg_quotes = None
+    cfg_quote_overlay = None
+    cfg_output = output
+
     if config:
-        with open(config) as f:
-            cfg_dict = json.load(f)
-        if 'visual' in cfg_dict and 'params' in cfg_dict['visual']:
-            params.update(cfg_dict['visual']['params'])
-        if 'visual' in cfg_dict and 'type' in cfg_dict['visual']:
-            visual = cfg_dict['visual']['type']
-    
+        try:
+            cfg = load_and_validate_config(config)
+            cfg_visual_type = cfg.visual.type
+            cfg_resolution = f"{cfg.visual.resolution[0]}x{cfg.visual.resolution[1]}"
+            cfg_fps = cfg.visual.fps
+            cfg_background_image = cfg.background_image or cfg_background_image
+            cfg_background_blur = cfg.background_blur
+            cfg_background_vignette = cfg.background_vignette
+            cfg_background_opacity = cfg.background_opacity
+            cfg_postprocess = cfg.postprocess.model_dump() if cfg.postprocess else None
+            cfg_output = cfg.output_file
+            if cfg.quotes:
+                cfg_quotes = [
+                    Quote(
+                        text=q.text,
+                        start_time=q.start_time,
+                        end_time=q.end_time,
+                        confidence=q.confidence,
+                    )
+                    for q in cfg.quotes
+                ]
+            cfg_quote_overlay = cfg.quote_overlay
+        except Exception as e:
+            raise click.BadParameter(f"Ungueltige Config-Datei '{config}': {e}")
+
+    # CLI-Optionen ueberschreiben Config-Werte
+    visual = cfg_visual_type
+    resolution = cfg_resolution
+    fps = cfg_fps
+    background_image = cfg_background_image
+    background_blur = cfg_background_blur
+    background_vignette = cfg_background_vignette
+    background_opacity = cfg_background_opacity
+    codec = cfg_codec
+    quality = cfg_quality
+    output = output if output != 'output.mp4' else cfg_output
+
+    try:
+        width, height = map(int, resolution.split('x'))
+    except ValueError:
+        raise click.BadParameter(
+            f"Ungueltige Aufloesung: '{resolution}'. "
+            f"Format: BREITExHOEHE (z.B. 1920x1080)"
+        )
+
+    # Config-Parameter als Basis, CLI-Parameter ueberschreiben
+    params = {}
+    if config:
+        cfg_params = cfg.visual.params.model_dump()
+        params.update(cfg_params)
+    params.update(cli_params)
+
+    # Quote-Overlay-Config aus Config bauen (falls vorhanden)
+    quote_config = None
+    if cfg_quote_overlay is not None:
+        quote_config = QuoteOverlayConfig(**cfg_quote_overlay.model_dump())
+
     from src.gpu_renderer import GPUBatchRenderer
     
     click.echo(f"[GPU] Starte Rendering: {visual} @ {width}x{height} {fps}fps")
@@ -132,6 +201,9 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
         background_opacity=background_opacity,
         codec=codec,
         quality=quality,
+        postprocess=cfg_postprocess,
+        quotes=cfg_quotes,
+        quote_config=quote_config,
     )
     
     click.echo(f"[GPU] Fertig! Output: {output}")
@@ -179,7 +251,7 @@ import moderngl
 from .base import BaseGPUVisualizer
 
 
-class {name.title()}Visualizer(BaseGPUVisualizer):
+class {''.join(part.capitalize() for part in name.split('_'))}Visualizer(BaseGPUVisualizer):
     """
     TODO: Beschreibung hier einfuegen
     """
@@ -242,12 +314,13 @@ class {name.title()}Visualizer(BaseGPUVisualizer):
 
 @cli.command()
 @click.argument('audio_file', type=click.Path(exists=True))
-def analyze(audio_file):
+@click.option('--fps', default=60, type=int, help='Frames pro Sekunde fuer die Analyse')
+def analyze(audio_file, fps):
     """Analysiert eine Audio-Datei und zeigt Features an."""
     from src.analyzer import AudioAnalyzer
     
     analyzer = AudioAnalyzer()
-    features = analyzer.analyze(audio_file, fps=60)
+    features = analyzer.analyze(audio_file, fps=fps)
     
     click.echo("\n=== Audio-Analyse Ergebnisse ===")
     click.echo(f"Dauer: {features.duration:.2f}s")
@@ -255,7 +328,7 @@ def analyze(audio_file):
     click.echo(f"Tempo: {features.tempo:.1f} BPM")
     click.echo(f"Key: {features.key or 'Unbekannt'}")
     click.echo(f"Mode: {features.mode}")
-    click.echo(f"Frames: {int(features.duration * features.fps)}")
+    click.echo(f"Frames: {features.frame_count}")
     
     click.echo("\n=== Feature-Statistiken ===")
     click.echo(f"RMS: min={features.rms.min():.3f}, max={features.rms.max():.3f}, mean={features.rms.mean():.3f}")
@@ -286,11 +359,24 @@ def create_config(output):
                 "speed": 1.0
             }
         },
-        "background": {
-            "image": None,
-            "blur": 0.0,
-            "vignette": 0.3,
-            "opacity": 0.3
+        "postprocess": {
+            "contrast": 1.0,
+            "saturation": 1.0,
+            "brightness": 0.0,
+            "warmth": 0.0,
+            "film_grain": 0.0
+        },
+        "background_image": None,
+        "background_blur": 0.0,
+        "background_vignette": 0.3,
+        "background_opacity": 0.3,
+        "quote_overlay": {
+            "enabled": False,
+            "font_size": 52,
+            "font_color": "#FFFFFF",
+            "box_color": "#1A1A2E",
+            "display_duration": 8.0,
+            "position": "bottom"
         }
     }
     
@@ -377,34 +463,89 @@ def batch(batch_file):
     # Einen Renderer wiederverwenden fuer alle Jobs (schneller, vermeidet Context-Probleme)
     renderer = None
     current_resolution = None
+    analyzer = AudioAnalyzer()
     
     for i, job in enumerate(jobs, 1):
         click.echo(f"\n[Batch] Job {i}/{len(jobs)}: {job.get('audio', 'unknown')}")
-        
-        audio = job['audio']
+
+        audio = job.get('audio')
+        if not audio:
+            click.echo(f"[Batch] Fehler: Job {i} hat keinen 'audio'-Key, ueberspringe.")
+            continue
+        if not os.path.exists(audio):
+            click.echo(f"[Batch] Fehler: Audio-Datei nicht gefunden: {audio}, ueberspringe.")
+            continue
+
         visual = job.get('visual', 'lumina_core')
         output = job.get('output', 'output.mp4')
         resolution = job.get('resolution', '1920x1080')
         fps = job.get('fps', 60)
         codec = job.get('codec', 'h264')
         quality = job.get('quality', 'high')
-        
-        width, height = map(int, resolution.split('x'))
-        
+        params = job.get('params', {})
+        postprocess = job.get('postprocess')
+        background_image = job.get('background_image')
+        background_blur = job.get('background_blur', 0.0)
+        background_vignette = job.get('background_vignette', 0.0)
+        background_opacity = job.get('background_opacity', 0.3)
+
+        # Quotes aus Job-JSON parsen
+        quotes = None
+        quote_config = None
+        raw_quotes = job.get('quotes')
+        raw_quote_overlay = job.get('quote_overlay')
+        if raw_quotes:
+            quotes = [
+                Quote(
+                    text=q.get('text', ''),
+                    start_time=float(q.get('start_time', 0.0)),
+                    end_time=float(q.get('end_time', 0.0)),
+                    confidence=float(q.get('confidence', 1.0)),
+                )
+                for q in raw_quotes
+                if q.get('text')
+            ]
+        if raw_quote_overlay:
+            quote_config = QuoteOverlayConfig(**raw_quote_overlay)
+
+        try:
+            width, height = map(int, resolution.split('x'))
+        except ValueError:
+            click.echo(f"[Batch] Ueberspringe ungueltige Aufloesung: {resolution}")
+            continue
+
+        # Audio einmal pro Job analysieren und weitergeben (Caching nutzen)
+        try:
+            features = analyzer.analyze(audio, fps=fps)
+        except Exception as e:
+            click.echo(f"[Batch] Analyse fehlgeschlagen fuer {audio}: {e}")
+            continue
+
         # Neuen Renderer erstellen wenn Aufloesung/FPS sich aendert
         if renderer is None or current_resolution != (width, height, fps):
             if renderer is not None:
                 try:
-                    renderer.__del__()
+                    renderer.release()
                 except Exception:
                     pass
             renderer = GPUBatchRenderer(width=width, height=height, fps=fps)
             current_resolution = (width, height, fps)
-        
+
         renderer.render(
             audio_path=audio,
             visualizer_type=visual,
             output_path=output,
+            features=features,
+            params=params if params else None,
+            preview_mode=job.get('preview', False),
+            preview_duration=job.get('preview_duration', 5.0),
+            background_image=background_image,
+            background_blur=background_blur,
+            background_vignette=background_vignette,
+            background_opacity=background_opacity,
+            quotes=quotes,
+            quote_config=quote_config,
+            postprocess=postprocess,
             codec=codec,
             quality=quality,
         )

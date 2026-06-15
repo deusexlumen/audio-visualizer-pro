@@ -27,17 +27,18 @@ def is_available() -> bool:
 class LocalTranscriber:
     """Lokaler Transkriber mit faster-whisper."""
 
-    def __init__(self, model_size: str = "base"):
+    def __init__(self, model_size: str = "base", language: Optional[str] = None):
         if not _HAS_WHISPER:
             raise RuntimeError(
                 "faster-whisper nicht installiert. "
                 "Installiere mit: pip install faster-whisper"
             )
         self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        self.language = language
 
     def transcribe(self, audio_path: str) -> str:
         """Transkribiert eine Audio-Datei."""
-        segments, _ = self.model.transcribe(audio_path, language="de")
+        segments, _ = self.model.transcribe(audio_path, language=self.language)
         return " ".join([s.text for s in segments])
 
     def extract_quotes(self, audio_path: str, audio_duration: float = None,
@@ -50,7 +51,7 @@ class LocalTranscriber:
         - Sätze mit Wiederholungen oder Pausenmarkern ausschließen
         - Gleichmäßig über die Audio-Dauer verteilt
         """
-        segments, _ = self.model.transcribe(audio_path, language="de")
+        segments, _ = self.model.transcribe(audio_path, language=self.language)
         segment_list = list(segments)
 
         # Sätze sammeln

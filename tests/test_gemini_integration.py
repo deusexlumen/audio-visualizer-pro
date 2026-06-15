@@ -5,6 +5,7 @@ Alle Tests nutzen Mocks – keine echten API-Calls!
 """
 
 import os
+import tempfile
 import pytest
 from unittest.mock import Mock, patch
 
@@ -28,7 +29,7 @@ class TestGeminiIntegration:
             
             gemini = GeminiIntegration(api_key="test-key-123")
             assert gemini.api_key == "test-key-123"
-            assert gemini.model == "gemini-3.1-flash-lite-preview"
+            assert gemini.model == "gemini-3.1-flash-lite"
 
     def test_transcribe_audio(self):
         """Sollte Audio transkribieren und Text zurückgeben."""
@@ -272,3 +273,12 @@ class TestGeminiIntegration:
             gemini = GeminiIntegration(api_key="test-key")
             # Sollte ohne Exception durchlaufen
             gemini.shutdown()
+
+    def test_model_name(self):
+        """Das Standard-Modell soll gemini-3.1-flash-lite sein."""
+        with patch('src.gemini_integration.genai') as mock_genai:
+            from src.gemini_integration import GeminiIntegration
+            mock_genai.Client.return_value = Mock()
+
+            gemini = GeminiIntegration(api_key="test-key")
+            assert gemini.model == "gemini-3.1-flash-lite"

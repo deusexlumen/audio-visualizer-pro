@@ -139,7 +139,7 @@ class GeminiIntegration:
             )
 
         self.client = genai.Client(api_key=self.api_key)
-        self.model = "gemini-3.1-flash-lite-preview"
+        self.model = "gemini-3.1-flash-lite"
         # ThreadPool fuer non-blocking API-Calls (verhindert Render-Loop-Stalls)
         self._executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="gemini_"

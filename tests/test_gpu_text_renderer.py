@@ -84,10 +84,11 @@ class TestSDFFontAtlasAccessors:
         glyph = GlyphInfo(char="B", x=10, y=20, w=30, h=40,
                           bearing_x=0, bearing_y=0, advance=30)
         u1, v1, u2, v2 = atlas.get_uv(glyph)
+        # V-Koordinaten werden wegen np.flipud beim Atlas-Upload invertiert.
         assert u1 == 0.1
-        assert v1 == 0.2
+        assert v1 == 0.4
         assert u2 == 0.4
-        assert v2 == 0.6
+        assert v2 == 0.8
 
 
 class TestSDFFontAtlasBuild:

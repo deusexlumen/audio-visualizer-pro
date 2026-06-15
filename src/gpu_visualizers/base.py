@@ -255,7 +255,7 @@ class BaseGPUVisualizer(abc.ABC):
         if "transient" in features and len(features["transient"]) > 0:
             result["transient"] = _safe_float(features["transient"], frame_idx, 0.0)
         else:
-            result["transient"] = result["onset"] * 1.5  # Fallback
+            result["transient"] = min(result["onset"] * 1.5, 1.0)  # Fallback, clamped
 
         if "voice_clarity" in features and len(features["voice_clarity"]) > 0:
             result["voice_clarity"] = _safe_float(features["voice_clarity"], frame_idx, 0.0)
