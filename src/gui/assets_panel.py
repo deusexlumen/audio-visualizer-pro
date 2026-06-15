@@ -1,7 +1,7 @@
 """Panel zum Laden von Audio, Hintergrund und Quotes."""
 
 from pathlib import Path
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QLabel, QFileDialog, QGroupBox,
     QSlider, QHBoxLayout,
