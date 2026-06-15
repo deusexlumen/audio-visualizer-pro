@@ -39,8 +39,8 @@ class PreviewWidget(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if self.label.pixmap():
-            pixmap = self.label.pixmap()
+        pixmap = self.label.pixmap()
+        if pixmap and not pixmap.isNull():
             scaled = pixmap.scaled(
                 self.label.size(),
                 Qt.AspectRatioMode.KeepAspectRatio,

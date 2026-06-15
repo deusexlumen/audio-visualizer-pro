@@ -1,12 +1,11 @@
 import numpy as np
 import pytest
 
-from gui import AudioVisualizerGUI
+from src.gui.helpers import _features_to_dict
 from src.types import AudioFeatures
 
 
 def test_features_to_dict_uses_real_statistics():
-    gui = AudioVisualizerGUI()
     features = AudioFeatures(
         duration=10.0,
         sample_rate=44100,
@@ -27,7 +26,7 @@ def test_features_to_dict_uses_real_statistics():
         mode="music",
         beat_frames=np.array([], dtype=np.int32),
     )
-    d = gui._features_to_dict(features)
+    d = _features_to_dict(features)
     assert d['rms_mean'] == pytest.approx(0.2)
     assert d['onset_mean'] == pytest.approx(0.5)
     assert d['tempo'] == 128.0
