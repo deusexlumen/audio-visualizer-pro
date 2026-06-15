@@ -2,6 +2,4 @@
 
 __version__ = "3.1.0"
 
-from .app import run_app
-
-__all__ = ["run_app"]
+__all__ = []
