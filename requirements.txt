@@ -29,6 +29,7 @@ moderngl>=5.0
 
 # GUI
 dearpygui>=2.0
+PyQt6>=6.4.0
 
 # Gemini KI-Integration
 google-genai>=1.0.0
