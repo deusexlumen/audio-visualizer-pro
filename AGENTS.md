@@ -11,7 +11,7 @@ Dieses Dokument enthält alle relevanten Informationen für KI-Code-Agents, die 
 - **GPU-basiertes Rendering**: ModernGL/OpenGL Offscreen-Rendering mit FFmpeg-Encoding
 - **Intelligente Audio-Analyse**: Beat-Erkennung, Key-Erkennung, Chroma-Features, Mode-Detection (speech/music/hybrid), Transienten, Voice-Clarity
 - **KI-gestützter Auto-Modus**: Smart Matcher analysiert Audio und empfehlt automatisch Visualizer + Farbpalette + Parameter
-- **DearPyGui-Oberfläche**: Desktop-GUI mit Drag & Drop, Live-Analyse und One-Click-Render
+- **PyQt6-Oberfläche**: Desktop-GUI mit Drag & Drop, Live-Analyse und One-Click-Render
 - **Aggressives Caching**: Analysiere einmal, rendere millionenmal
 - **Professionelle Codecs**: FFmpeg-basiert mit libx264/libx265/prores und AAC
 - **Post-Processing**: Kontrast, Sättigung, Helligkeit, Wärme, Film Grain, Vignette, Chromatic Aberration
@@ -27,7 +27,9 @@ Dieses Dokument enthält alle relevanten Informationen für KI-Code-Agents, die 
 | Numerik | numpy>=1.21.0 | Array-Operationen |
 | Testing | pytest>=7.0.0 | Test-Framework |
 | GPU-Rendering | moderngl>=5.0 | OpenGL Offscreen-Rendering |
-| GUI | dearpygui>=2.0 | Desktop-GUI |
+| GUI | PyQt6>=6.0 | Desktop-GUI |
+
+> **Hinweis**: Die GUI basiert seit Task 11 auf PyQt6. Die ursprüngliche DearPyGui-Implementierung ist als `gui_legacy.py` erhalten.
 | Video-Encoding | FFmpeg (system) | H.264/H.265/ProRes Encoding |
 
 **System-Voraussetzung**: FFmpeg muss system-seitig installiert sein.
@@ -40,7 +42,8 @@ Dieses Dokument enthält alle relevanten Informationen für KI-Code-Agents, die 
 ```
 audio_visualizer_pro/
 ├── main.py                 # CLI Entry Point (Click-basiert)
-├── gui.py                  # DearPyGui Desktop-GUI
+├── gui.py                  # PyQt6 Desktop-GUI (Thin-Wrapper)
+├── gui_legacy.py           # Backup der ursprünglichen DearPyGui-GUI
 ├── requirements.txt        # Python-Abhängigkeiten
 ├── config/                 # Konfigurations-Presets und Validierung
 │   ├── __init__.py
