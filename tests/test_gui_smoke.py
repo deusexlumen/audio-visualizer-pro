@@ -1,12 +1,10 @@
-# tests/test_gui_smoke.py
-import sys
-from PyQt6.QtWidgets import QApplication
+import pytest
+from src.gui.main_window import MainWindow
 
 
-def test_app_starts_and_exits():
-    app = QApplication.instance() or QApplication(sys.argv)
-    from src.gui.main_window import MainWindow
+def test_main_window_opens(qtbot):
     window = MainWindow()
-    window.show()
-    window.close()
-    assert window is not None
+    qtbot.addWidget(window)
+    assert window.preview_widget is not None
+    assert window.right_tabs is not None
+    assert window.right_tabs.count() == 3

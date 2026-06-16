@@ -2,8 +2,8 @@
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QComboBox, QSlider, QGroupBox,
-    QGridLayout,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSlider, QGroupBox,
+    QGridLayout, QCheckBox,
 )
 
 from src.gui.state import AppState
@@ -64,6 +64,59 @@ class ParamsPanel(QWidget):
         pp_layout.addWidget(self.slider_grain, 4, 1)
         layout.addWidget(pp_box)
 
+        # Export-Einstellungen
+        export_box = QGroupBox("Export")
+        export_layout = QGridLayout(export_box)
+
+        export_layout.addWidget(QLabel("Resolution"), 0, 0)
+        self.combo_resolution = QComboBox()
+        self.combo_resolution.addItems(["1920x1080", "1280x720", "854x480", "3840x2160"])
+        self.combo_resolution.setCurrentText(f"{self.state.resolution[0]}x{self.state.resolution[1]}")
+        self.combo_resolution.setToolTip("Zielauflösung des gerenderten Videos.")
+        self.combo_resolution.currentTextChanged.connect(self._on_resolution_changed)
+        export_layout.addWidget(self.combo_resolution, 0, 1)
+
+        export_layout.addWidget(QLabel("Render FPS"), 1, 0)
+        fps_layout = QHBoxLayout()
+        self.slider_render_fps = self._make_slider(24, 60, self.state.render_fps)
+        self.slider_render_fps.setToolTip("Framerate des finalen Videos.")
+        self.lbl_render_fps = QLabel(str(self.state.render_fps))
+        self.lbl_render_fps.setMinimumWidth(24)
+        self.slider_render_fps.valueChanged.connect(self._on_render_fps_changed)
+        fps_layout.addWidget(self.slider_render_fps)
+        fps_layout.addWidget(self.lbl_render_fps)
+        export_layout.addLayout(fps_layout, 1, 1)
+
+        export_layout.addWidget(QLabel("Codec"), 2, 0)
+        self.combo_codec = QComboBox()
+        self.combo_codec.addItems(["h264 (kompatibel)", "h265 / HEVC", "ProRes"])
+        self.combo_codec.setCurrentText(self._codec_display(self.state.codec))
+        self.combo_codec.setToolTip(
+            "Video-Codec: h264 = kompatibel, h265 = kleinere Dateien, ProRes = hochwertig aber groß."
+        )
+        self.combo_codec.currentTextChanged.connect(self._on_codec_changed)
+        export_layout.addWidget(self.combo_codec, 2, 1)
+
+        export_layout.addWidget(QLabel("Quality"), 3, 0)
+        self.combo_quality = QComboBox()
+        self.combo_quality.addItems(["Low", "Medium", "High", "Lossless"])
+        self.combo_quality.setCurrentText(self._quality_display(self.state.quality))
+        self.combo_quality.setToolTip(
+            "Qualität: Low = schnell/klein, High = scharf, Lossless = verlustfrei aber sehr groß."
+        )
+        self.combo_quality.currentTextChanged.connect(self._on_quality_changed)
+        export_layout.addWidget(self.combo_quality, 3, 1)
+
+        export_layout.addWidget(QLabel("GPU Encode"), 4, 0)
+        self.chk_gpu_encode = QCheckBox()
+        self.chk_gpu_encode.setChecked(self.state.gpu_encode)
+        self.chk_gpu_encode.setToolTip(
+            "Hardware-Encoding nutzen (NVENC/AMD/Intel) – deutlich schneller, falls verfügbar."
+        )
+        self.chk_gpu_encode.stateChanged.connect(self._on_gpu_encode_changed)
+        export_layout.addWidget(self.chk_gpu_encode, 4, 1)
+
+        layout.addWidget(export_box)
         layout.addStretch()
 
         # Signals verbinden
@@ -86,6 +139,55 @@ class ParamsPanel(QWidget):
         self.state.visualizer_type = text
         self.state.viz_params = {}
         self.state.set("visualizer_type", text)
+
+    def _on_resolution_changed(self, text: str):
+        try:
+            w, h = text.split("x")
+            self.state.resolution = (int(w), int(h))
+        except Exception:
+            self.state.resolution = (1920, 1080)
+
+    def _on_render_fps_changed(self, value: int):
+        self.state.render_fps = value
+        if hasattr(self, "lbl_render_fps"):
+            self.lbl_render_fps.setText(str(value))
+
+    def _on_codec_changed(self, text: str):
+        codec_map = {
+            "h264 (kompatibel)": "h264",
+            "h265 / HEVC": "hevc",
+            "ProRes": "prores",
+        }
+        self.state.codec = codec_map.get(text, "h264")
+
+    def _on_quality_changed(self, text: str):
+        quality_map = {
+            "Low": "low",
+            "Medium": "medium",
+            "High": "high",
+            "Lossless": "lossless",
+        }
+        self.state.quality = quality_map.get(text, "high")
+
+    def _on_gpu_encode_changed(self, state):
+        self.state.gpu_encode = bool(state)
+
+    @staticmethod
+    def _codec_display(codec: str) -> str:
+        return {
+            "h264": "h264 (kompatibel)",
+            "hevc": "h265 / HEVC",
+            "prores": "ProRes",
+        }.get(codec, "h264 (kompatibel)")
+
+    @staticmethod
+    def _quality_display(quality: str) -> str:
+        return {
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High",
+            "lossless": "Lossless",
+        }.get(quality, "High")
 
     def _set(self, key: str, value):
         setattr(self.state, key, value)

@@ -2,6 +2,7 @@
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from src.quote_overlay import QuoteOverlayConfig
+from src.types import Quote
 
 
 class AppState(QObject):
@@ -17,6 +18,8 @@ class AppState(QObject):
         "resolution", "render_fps", "codec", "quality", "gpu_encode", "output_dir",
         "quotes", "quotes_enabled", "quote_config",
         "status_message", "status_kind",
+        "ki_prompt", "ki_suggested_colors", "ki_status", "ki_error",
+        "ki_optimizing", "quotes_extracting",
     })
 
     def __init__(self, parent=None):
@@ -66,6 +69,13 @@ class AppState(QObject):
 
         self.status_message: str = "Bereit."
         self.status_kind: str = "info"  # info | ok | warn | error
+
+        self.ki_prompt: str = ""
+        self.ki_suggested_colors: dict = {}
+        self.ki_status: str = ""
+        self.ki_error: bool = False
+        self.ki_optimizing: bool = False
+        self.quotes_extracting: bool = False
 
         object.__setattr__(self, "_initialized", True)
 
@@ -132,6 +142,12 @@ class AppState(QObject):
             "quality": self.quality,
             "gpu_encode": self.gpu_encode,
             "output_dir": self.output_dir,
+            "ki_prompt": self.ki_prompt,
+            "ki_suggested_colors": self.ki_suggested_colors,
+            "quotes": [
+                {"text": q.text, "start_time": q.start_time, "end_time": q.end_time, "confidence": q.confidence}
+                for q in self.quotes
+            ],
             "quotes_enabled": self.quotes_enabled,
             "quote_config": {
                 "enabled": qc.enabled,
@@ -150,11 +166,23 @@ class AppState(QObject):
     @classmethod
     def from_dict(cls, data: dict):
         s = cls()
+        object.__setattr__(s, "_initialized", False)
         for key, value in data.items():
             if key == "quote_config" and isinstance(value, dict):
                 s.quote_config = QuoteOverlayConfig(**value)
             elif key == "resolution" and isinstance(value, list):
                 s.resolution = tuple(value)
-            elif hasattr(s, key):
+            elif key == "quotes" and isinstance(value, list):
+                s.quotes = [
+                    Quote(
+                        text=q.get("text", ""),
+                        start_time=float(q.get("start_time", 0.0)),
+                        end_time=float(q.get("end_time", 0.0)),
+                        confidence=float(q.get("confidence", 1.0)),
+                    )
+                    for q in value
+                ]
+            elif key in s._STATE_KEYS:
                 setattr(s, key, value)
+        object.__setattr__(s, "_initialized", True)
         return s

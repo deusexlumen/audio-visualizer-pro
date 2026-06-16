@@ -9,6 +9,7 @@ Neu in v2.0:
 - BPM-Stabilisierung ueber Zeit
 """
 
+import gc
 import librosa
 import numpy as np
 import scipy.signal.windows
@@ -72,7 +73,7 @@ class AudioAnalyzer:
                     hasher.update(f.read())  # Letzte 1MB
         except Exception:
             pass
-        hasher.update(f"_{fps}_v6".encode())
+        hasher.update(f"_{fps}_v7".encode())
         return self.cache_dir / f"{hasher.hexdigest()}.npz"
     
     def _progress(self, msg: str, step: int, total: int, callback: Optional[Callable] = None):
@@ -165,13 +166,16 @@ class AudioAnalyzer:
             if temp_wav and os.path.exists(temp_wav.name):
                 os.unlink(temp_wav.name)
         
-        hop_length = 256
+        # RAM-Optimierung: Fuer lange Dateien groesseres hop_length verwenden.
+        # Das Ergebnis wird sowieso auf die Video-FPS interpoliert, daher ist
+        # die hoehere Zeitaufloesung bei langen Podcasts/Songs nicht noetig.
+        hop_length = 512 if duration > 600 else 256
         n_fft = 2048
         expected_frames = int(np.ceil(duration * fps))
         
         # === Pre-Emphasis Filter (0.97) ===
         # Hebt hochfrequente Anteile (Konsonanten, S-Laute) fuer Sprach-Analyse an
-        y = np.copy(y)
+        # In-Place (spart eine Kopie des Audio-Buffers, ca. 200 MB bei 20min)
         y[1:] -= 0.97 * y[:-1]
         
         # === Windowing: Blackman-Harris zur Minimierung von Spectral Leakage ===
@@ -181,6 +185,10 @@ class AudioAnalyzer:
         self._progress("STFT Berechnung...", step := step + 1, total_steps, progress_callback)
         stft_complex = librosa.stft(y, hop_length=hop_length, n_fft=n_fft, window=window)
         stft = np.abs(stft_complex)
+        # RAM-Optimierung: complex64-STFT wird nicht mehr gebraucht, aber belegt
+        # fuer lange Dateien mehrere GB. Sofort freigeben.
+        del stft_complex
+        gc.collect()
         
         # RMS (Zeitbereich, profitiert trotzdem vom Pre-Emphasis)
         self._progress("Berechne Lautstaerke...", step := step + 1, total_steps, progress_callback)

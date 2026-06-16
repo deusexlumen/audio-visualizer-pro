@@ -1,18 +1,26 @@
 """Hauptfenster der neuen Audio Visualizer Pro GUI."""
 
+from datetime import datetime
+from pathlib import Path
+
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QPushButton, QStatusBar, QLabel, QMessageBox,
+    QPushButton, QStatusBar, QLabel, QMessageBox, QTabWidget,
 )
 
 from src.gui.assets_panel import AssetsPanel
+from src.gui.ki_panel import KIPanel
 from src.gui.params_panel import ParamsPanel
 from src.gui.preview_widget import PreviewWidget
+from src.gui.quotes_panel import QuotesPanel
 from src.gui.state import AppState
 from src.gui.styles import build_app_stylesheet, Theme
 from src.gui.timeline_widget import TimelineWidget
-from src.gui.workers import AnalyzeWorker, PreviewWorker
+from src.gui.workers import (
+    AnalyzeWorker, PreviewWorker, RenderWorker, AIOptimizeWorker, QuoteExtractWorker
+)
+from src.gemini_integration import GeminiIntegration
 
 
 class MainWindow(QMainWindow):
@@ -22,8 +30,17 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1200, 750)
 
         self.state = AppState()
+        self.gemini = None
+        try:
+            self.gemini = GeminiIntegration()
+        except Exception as e:
+            print(f"[GUI] Gemini nicht verfügbar: {e}")
+
         self._preview_worker: PreviewWorker | None = None
         self._analyze_worker: AnalyzeWorker | None = None
+        self._ai_optimize_worker: AIOptimizeWorker | None = None
+        self._quote_extract_worker: QuoteExtractWorker | None = None
+        self._render_worker: RenderWorker | None = None
 
         self._setup_ui()
         self._setup_signals()
@@ -54,8 +71,15 @@ class MainWindow(QMainWindow):
 
         splitter.addWidget(center)
 
+        self.right_tabs = QTabWidget()
         self.params_panel = ParamsPanel(self.state)
-        splitter.addWidget(self.params_panel)
+        self.ki_panel = KIPanel(self.state, gemini=self.gemini)
+        self.quotes_panel = QuotesPanel(self.state, gemini=self.gemini)
+
+        self.right_tabs.addTab(self.params_panel, "Params")
+        self.right_tabs.addTab(self.ki_panel, "KI")
+        self.right_tabs.addTab(self.quotes_panel, "Quotes")
+        splitter.addWidget(self.right_tabs)
 
         splitter.setSizes([260, 620, 320])
         layout.addWidget(splitter)
@@ -84,6 +108,9 @@ class MainWindow(QMainWindow):
         self.assets_panel.analyze_requested.connect(self._start_analysis)
         self.timeline.time_changed.connect(self._on_time_changed)
         self.state.changed.connect(self._on_state_changed)
+        self.ki_panel.btn_optimize.clicked.connect(self._start_ai_optimize)
+        self.quotes_panel.btn_extract.clicked.connect(self._start_quote_extract)
+        self.btn_render.clicked.connect(self._on_render_clicked)
 
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
@@ -95,6 +122,7 @@ class MainWindow(QMainWindow):
             "bg_blur", "bg_vignette", "bg_opacity",
             "pp_contrast", "pp_saturation", "pp_brightness", "pp_warmth", "pp_grain",
             "background_path", "preview_time_percent",
+            "quotes", "quotes_enabled", "quote_config", "ki_suggested_colors",
         }:
             self._preview_timer.start(50)
 
@@ -103,6 +131,8 @@ class MainWindow(QMainWindow):
         self._preview_timer.start(50)
 
     def _start_analysis(self):
+        if self._analyze_worker and self._analyze_worker.isRunning():
+            return
         path = self.state.audio_path
         if not path:
             return
@@ -110,9 +140,12 @@ class MainWindow(QMainWindow):
         self._analyze_worker = AnalyzeWorker(path, fps=self.state.preview_fps)
         self._analyze_worker.analysis_ready.connect(self._on_analysis_ready)
         self._analyze_worker.analysis_error.connect(self._on_analysis_error)
+        self._analyze_worker.finished.connect(lambda: self._cleanup_worker("_analyze_worker"))
         self._analyze_worker.start()
 
     def _on_analysis_ready(self, features):
+        if self.sender() is not self._analyze_worker:
+            return
         self.state.features = features
         self.state.audio_duration = features.duration
         self.timeline.set_duration(features.duration)
@@ -123,17 +156,16 @@ class MainWindow(QMainWindow):
         self._start_preview()
 
     def _on_analysis_error(self, msg: str):
+        if self.sender() is not self._analyze_worker:
+            return
         self._set_status(f"Analyse-Fehler: {msg}", "error")
         QMessageBox.critical(self, "Analyse-Fehler", msg)
 
     def _start_preview(self):
         if not self.state.audio_path or self.state.features is None:
             return
-
         if self._preview_worker and self._preview_worker.isRunning():
             self._preview_worker.requestInterruption()
-            self._preview_worker.wait(100)
-
         self._preview_worker = PreviewWorker(
             audio_path=self.state.audio_path,
             visualizer_type=self.state.visualizer_type,
@@ -156,14 +188,130 @@ class MainWindow(QMainWindow):
         )
         self._preview_worker.preview_ready.connect(self._on_preview_ready)
         self._preview_worker.preview_error.connect(self._on_preview_error)
+        self._preview_worker.finished.connect(lambda: self._cleanup_worker("_preview_worker"))
         self._preview_worker.start()
 
+    def _start_ai_optimize(self):
+        if self._ai_optimize_worker and self._ai_optimize_worker.isRunning():
+            return
+        req = self.ki_panel.get_optimize_request()
+        if not req:
+            return
+        self._ai_optimize_worker = AIOptimizeWorker(
+            gemini=req["gemini"],
+            visualizer_type=req["visualizer_type"],
+            current_params=req["current_params"],
+            audio_features=req["audio_features"],
+            colors=req["colors"],
+            param_specs=req["param_specs"],
+            user_prompt=req["user_prompt"],
+            parent=self,
+        )
+        self._ai_optimize_worker.optimize_ready.connect(self.ki_panel.on_optimize_finished)
+        self._ai_optimize_worker.optimize_error.connect(self.ki_panel.on_optimize_error)
+        self._ai_optimize_worker.finished.connect(lambda: self._cleanup_worker("_ai_optimize_worker"))
+        self._ai_optimize_worker.start()
+
+    def _start_quote_extract(self):
+        if self._quote_extract_worker and self._quote_extract_worker.isRunning():
+            return
+        req = self.quotes_panel.get_extract_request()
+        if not req or not req.get("audio_path"):
+            return
+        self._quote_extract_worker = QuoteExtractWorker(
+            gemini=req["gemini"],
+            audio_path=req["audio_path"],
+            audio_duration=req["audio_duration"],
+            max_quotes=req.get("max_quotes"),
+            parent=self,
+        )
+        self._quote_extract_worker.quotes_ready.connect(self.quotes_panel.on_extract_finished)
+        self._quote_extract_worker.quotes_error.connect(self.quotes_panel.on_extract_error)
+        self._quote_extract_worker.finished.connect(lambda: self._cleanup_worker("_quote_extract_worker"))
+        self._quote_extract_worker.start()
+
     def _on_preview_ready(self, img):
+        if self.sender() is not self._preview_worker:
+            return
         self.preview_widget.set_image(img)
         self._set_status("Preview aktualisiert.", "ok")
 
     def _on_preview_error(self, msg: str):
+        if self.sender() is not self._preview_worker:
+            return
         self._set_status(f"Preview-Fehler: {msg}", "error")
+
+    def _on_render_clicked(self):
+        if self._render_worker and self._render_worker.isRunning():
+            self._render_worker.cancel()
+            return
+
+        if not self.state.audio_path or not Path(self.state.audio_path).exists():
+            QMessageBox.critical(self, "Fehler", "Keine Audio-Datei geladen.")
+            return
+        if self.state.features is None:
+            QMessageBox.critical(self, "Fehler", "Audio wurde noch nicht analysiert.")
+            return
+
+        out_dir = Path(self.state.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = str(out_dir / f"visualization_{ts}.mp4")
+
+        w, h = self.state.resolution
+        config = {
+            "audio_path": self.state.audio_path,
+            "visualizer_type": self.state.visualizer_type,
+            "output_path": output_path,
+            "features": self.state.features,
+            "params": self.state.get_params(),
+            "background_image": self.state.background_path,
+            "background_blur": self.state.bg_blur,
+            "background_vignette": self.state.bg_vignette,
+            "background_opacity": self.state.bg_opacity,
+            "postprocess": self.state.get_postprocess(),
+            "quotes": self.state.quotes if self.state.quotes_enabled else None,
+            "quote_config": self.state.quote_config if self.state.quotes_enabled else None,
+            "width": w,
+            "height": h,
+            "fps": self.state.render_fps,
+            "codec": self.state.codec,
+            "quality": self.state.quality,
+            "gpu_encode": self.state.gpu_encode,
+            "viz_offset_x": self.state.viz_offset_x,
+            "viz_offset_y": self.state.viz_offset_y,
+            "viz_scale": self.state.viz_scale,
+        }
+
+        self.btn_render.setText("⏳ Render...")
+        self._set_status("Starte Rendering...", "warn")
+
+        self._render_worker = RenderWorker(config, parent=self)
+        self._render_worker.render_progress.connect(self._on_render_progress)
+        self._render_worker.render_finished.connect(self._on_render_finished)
+        self._render_worker.render_error.connect(self._on_render_error)
+        self._render_worker.finished.connect(lambda: self._cleanup_worker("_render_worker"))
+        self._render_worker.start()
+
+    def _on_render_progress(self, progress: float):
+        if self.sender() is not self._render_worker:
+            return
+        pct = int(progress * 100)
+        self._set_status(f"Rendering... {pct}%", "warn")
+
+    def _on_render_finished(self, output_path: str):
+        if self.sender() is not self._render_worker:
+            return
+        self.btn_render.setText("▶ Render")
+        self._set_status(f"Fertig: {output_path}", "ok")
+        QMessageBox.information(self, "Render fertig", f"Video gespeichert:\n{output_path}")
+
+    def _on_render_error(self, msg: str):
+        if self.sender() is not self._render_worker:
+            return
+        self.btn_render.setText("▶ Render")
+        self._set_status(f"Render-Fehler: {msg}", "error")
+        QMessageBox.critical(self, "Render-Fehler", msg)
 
     def _set_status(self, msg: str, kind: str = "info"):
         self.status_label.setText(msg)
@@ -176,10 +324,30 @@ class MainWindow(QMainWindow):
         rgb = color_map.get(kind, Theme.TEXT_SECONDARY)
         self.status_label.setStyleSheet(f"color: rgb{rgb};")
 
+    def _cleanup_worker(self, worker_attr: str):
+        worker = getattr(self, worker_attr, None)
+        if worker is None or self.sender() is not worker:
+            return
+        try:
+            worker.deleteLater()
+        except Exception:
+            pass
+        setattr(self, worker_attr, None)
+
     def closeEvent(self, event):
-        if self._preview_worker and self._preview_worker.isRunning():
-            self._preview_worker.requestInterruption()
-            self._preview_worker.wait(500)
-        if self._analyze_worker and self._analyze_worker.isRunning():
-            self._analyze_worker.wait(500)
+        workers = [
+            self._preview_worker,
+            self._analyze_worker,
+            self._ai_optimize_worker,
+            self._quote_extract_worker,
+            self._render_worker,
+        ]
+        for worker in workers:
+            if worker and worker.isRunning():
+                worker.requestInterruption()
+        if self._render_worker and self._render_worker.isRunning():
+            self._render_worker.cancel()
+        for worker in workers:
+            if worker and worker.isRunning():
+                worker.wait(2000)
         event.accept()
