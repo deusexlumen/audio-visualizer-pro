@@ -5,6 +5,10 @@ Audio Visualizer Pro - CLI Entry Point
 KI-Optimierter Workflow fuer Audio-Visualisierungen.
 """
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import click
 import json
 import os
