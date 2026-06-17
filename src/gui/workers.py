@@ -6,7 +6,6 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from PIL import Image
 
 from src.analyzer import AudioAnalyzer
-from src.gpu_preview import render_gpu_preview
 
 
 class AnalyzeWorker(QThread):
@@ -75,6 +74,8 @@ class PreviewWorker(QThread):
 
     def run(self):
         try:
+            from src.gpu_preview import render_gpu_preview
+
             img = render_gpu_preview(
                 audio_path=self.audio_path,
                 visualizer_type=self.visualizer_type,

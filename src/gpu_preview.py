@@ -2,10 +2,7 @@
 GPU-Live-Preview fuer schnelles Einzel-Frame-Rendering.
 
 Rendert ein einzelnes Frame mit dem GPU-Renderer und gibt es als
-PIL-Image zurueck fuer die Streamlit-Vorschau.
-
-NEU: Renderer und Visualizer werden gecacht, um Shader-Neukompilierung
-bei jedem Slider-Zug zu vermeiden.
+PIL-Image zurueck fuer die GUI-Vorschau.
 """
 
 import os
@@ -19,54 +16,6 @@ from .gpu_renderer import GPUPreviewRenderer
 from .gpu_visualizers import get_visualizer
 from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
 from .types import AudioFeatures
-
-
-# === Modul-Level Cache fuer Preview-Renderer ===
-# Das verhindert, dass bei jedem Auto-Preview-Slider-Zug der komplette
-# GPU-Context + Shader neu aufgebaut werden.
-_PREVIEW_CACHE = {
-    "key": None,           # (visualizer_type, width, height, fps)
-    "renderer": None,      # GPUPreviewRenderer Instanz
-    "viz": None,           # Visualizer Instanz
-}
-
-
-def _get_cached_renderer(visualizer_type: str, width: int, height: int, fps: int):
-    """Holt oder erstellt einen gecachten Renderer + Visualizer."""
-    global _PREVIEW_CACHE
-
-    cache_key = (visualizer_type, width, height, fps)
-
-    # Cache invalidieren wenn sich Visualizer oder Aufloesung aendert
-    if _PREVIEW_CACHE["key"] != cache_key:
-        _release_preview_cache()
-        _PREVIEW_CACHE["key"] = cache_key
-
-    # Renderer erstellen falls noetig
-    if _PREVIEW_CACHE["renderer"] is None:
-        _PREVIEW_CACHE["renderer"] = GPUPreviewRenderer(width=width, height=height, fps=fps)
-
-    # Visualizer erstellen falls noetig
-    if _PREVIEW_CACHE["viz"] is None or _PREVIEW_CACHE["viz_type"] != visualizer_type:
-        viz_cls = get_visualizer(visualizer_type)
-        _PREVIEW_CACHE["viz"] = viz_cls(_PREVIEW_CACHE["renderer"].ctx, width, height)
-        _PREVIEW_CACHE["viz_type"] = visualizer_type
-
-    return _PREVIEW_CACHE["renderer"], _PREVIEW_CACHE["viz"]
-
-
-def _release_preview_cache():
-    """Gibt den gecachten Renderer ordentlich frei."""
-    global _PREVIEW_CACHE
-    if _PREVIEW_CACHE["renderer"] is not None:
-        try:
-            _PREVIEW_CACHE["renderer"].release()
-        except Exception:
-            pass
-        _PREVIEW_CACHE["renderer"] = None
-    _PREVIEW_CACHE["viz"] = None
-    _PREVIEW_CACHE["viz_type"] = None
-    _PREVIEW_CACHE["key"] = None
 
 
 def render_gpu_preview(
@@ -113,16 +62,21 @@ def render_gpu_preview(
     """
     temp_bg_frame = None
     bg_texture = None
+    renderer = None
     try:
         # Audio analysieren (gecached) nur wenn nicht schon vorhanden
         if features is None:
             analyzer = AudioAnalyzer()
             features = analyzer.analyze(audio_path, fps=fps)
 
-        # Renderer und Visualizer aus Cache holen (NICHT jedes Mal neu erstellen)
-        renderer, viz = _get_cached_renderer(visualizer_type, width, height, fps)
+        # Fuer jeden Preview-Frame einen frischen Renderer erstellen.
+        # Das verhindert Cross-Thread-Probleme mit dem ModernGL-Context,
+        # wenn der Preview-Worker in einem QThread laeuft.
+        renderer = GPUPreviewRenderer(width=width, height=height, fps=fps)
+        viz_cls = get_visualizer(visualizer_type)
+        viz = viz_cls(renderer.ctx, width, height)
 
-        # Parameter aktualisieren (billig, kein Neuerstellen noetig)
+        # Parameter aktualisieren
         if params:
             viz.set_params(params)
 
@@ -245,8 +199,6 @@ def render_gpu_preview(
     except Exception as e:
         print(f"[GPU Preview] Fehler: {e}")
         traceback.print_exc()
-        # Cache invalidieren damit beim naechsten Versuch ein frischer Visualizer erstellt wird
-        _release_preview_cache()
         return None
     finally:
         if bg_texture is not None:
@@ -256,3 +208,8 @@ def render_gpu_preview(
                 pass
         if temp_bg_frame and os.path.exists(temp_bg_frame):
             os.unlink(temp_bg_frame)
+        if renderer is not None:
+            try:
+                renderer.release()
+            except Exception:
+                pass

@@ -14,7 +14,7 @@ def test_preview_worker_emits_ready(qtbot):
         preview_time_percent=0.3,
     )
 
-    with patch("src.gui.workers.render_gpu_preview") as mock_render:
+    with patch("src.gpu_preview.render_gpu_preview") as mock_render:
         from PIL import Image
         mock_render.return_value = Image.new("RGB", (320, 180), (0, 0, 0))
 

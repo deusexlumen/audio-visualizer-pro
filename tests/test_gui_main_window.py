@@ -56,7 +56,7 @@ def test_render_button_starts_render_worker(qtbot, tmp_path, dummy_audio_feature
     mock_worker = MagicMock()
     mock_worker.isRunning.return_value = False
 
-    with patch("src.gui.main_window.RenderWorker", return_value=mock_worker) as mock_cls, \
+    with patch("src.gui.workers.RenderWorker", return_value=mock_worker) as mock_cls, \
          patch.object(QMessageBox, "information", return_value=None):
         qtbot.mouseClick(window.btn_render, Qt.MouseButton.LeftButton)
 

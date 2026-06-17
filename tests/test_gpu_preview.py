@@ -38,75 +38,25 @@ def dummy_features():
     )
 
 
-class TestPreviewCache:
-    """Tests fuer den Preview-Cache."""
+def _make_mock_renderer():
+    """Erzeugt einen mockten Renderer, der valide RGB-Pixel liefert."""
+    mock_renderer = MagicMock()
+    mock_renderer.ctx = MagicMock()
+    mock_renderer.fbo = MagicMock()
+    mock_renderer.viz_fbo = MagicMock()
+    mock_renderer.post_fbo = MagicMock()
+    mock_renderer.fbo.read.return_value = b'\x00' * (480 * 270 * 3)
+    mock_renderer.post_fbo.read.return_value = b'\x00' * (480 * 270 * 3)
+    return mock_renderer
 
-    def teardown_method(self):
-        """Cache nach jedem Test leeren."""
-        gpu_preview._release_preview_cache()
 
-    @patch('src.gpu_preview.GPUPreviewRenderer')
-    def test_get_cached_renderer_creates_new(self, mock_renderer_cls):
-        """Bei leerem Cache sollte ein neuer Renderer erstellt werden."""
-        mock_renderer = MagicMock()
-        mock_renderer.ctx = MagicMock()
-        mock_renderer_cls.return_value = mock_renderer
-
-        renderer, viz = gpu_preview._get_cached_renderer("lumina_core", 480, 270, 30)
-
-        assert renderer is mock_renderer
-        mock_renderer_cls.assert_called_once_with(width=480, height=270, fps=30)
-
-    @patch('src.gpu_preview.GPUPreviewRenderer')
-    def test_get_cached_renderer_reuses(self, mock_renderer_cls):
-        """Bei gleichem Cache-Key sollte der Renderer wiederverwendet werden."""
-        mock_renderer = MagicMock()
-        mock_renderer.ctx = MagicMock()
-        mock_renderer_cls.return_value = mock_renderer
-
-        renderer1, viz1 = gpu_preview._get_cached_renderer("lumina_core", 480, 270, 30)
-        renderer2, viz2 = gpu_preview._get_cached_renderer("lumina_core", 480, 270, 30)
-
-        assert renderer1 is renderer2
-        # Renderer sollte nur EINMAL erstellt worden sein
-        mock_renderer_cls.assert_called_once()
-
-    @patch('src.gpu_preview.GPUPreviewRenderer')
-    def test_get_cached_renderer_invalidates(self, mock_renderer_cls):
-        """Bei geaendertem Key sollte der alte Cache freigegeben werden."""
-        # Side-Effect um verschiedene Mock-Instanzen zu erhalten
-        mock_renderer_cls.side_effect = lambda **kwargs: MagicMock(ctx=MagicMock())
-
-        # Sicherstellen dass Cache initialisiert ist
-        gpu_preview._release_preview_cache()
-
-        renderer1, viz1 = gpu_preview._get_cached_renderer("lumina_core", 480, 270, 30)
-        renderer2, viz2 = gpu_preview._get_cached_renderer("spectrum_bars", 480, 270, 30)
-
-        # Renderer sollte ZWEIMAL erstellt worden sein (Cache-Invalidierung)
-        assert mock_renderer_cls.call_count == 2
-        # Und es sollten unterschiedliche Instanzen sein
-        assert renderer1 is not renderer2
-
-    def test_release_preview_cache(self):
-        """_release_preview_cache sollte den Cache leeren."""
-        gpu_preview._PREVIEW_CACHE["key"] = ("test", 1, 2, 3)
-        gpu_preview._PREVIEW_CACHE["renderer"] = MagicMock()
-        gpu_preview._PREVIEW_CACHE["viz"] = MagicMock()
-
-        gpu_preview._release_preview_cache()
-
-        assert gpu_preview._PREVIEW_CACHE["key"] is None
-        assert gpu_preview._PREVIEW_CACHE["renderer"] is None
-        assert gpu_preview._PREVIEW_CACHE["viz"] is None
+def _make_mock_viz():
+    """Erzeugt einen mockten Visualizer."""
+    return MagicMock()
 
 
 class TestRenderGpuPreview:
     """Tests fuer render_gpu_preview."""
-
-    def teardown_method(self):
-        """Cache nach jedem Test leeren."""
-        gpu_preview._release_preview_cache()
 
     @patch('src.gpu_preview.AudioAnalyzer')
     @patch('src.gpu_preview.GPUPreviewRenderer')
@@ -116,12 +66,7 @@ class TestRenderGpuPreview:
         mock_analyzer.analyze.return_value = dummy_features
         mock_analyzer_cls.return_value = mock_analyzer
 
-        mock_renderer = MagicMock()
-        mock_renderer.ctx = MagicMock()
-        mock_renderer.fbo = MagicMock()
-        mock_renderer.viz_fbo = MagicMock()
-        mock_renderer.post_fbo = MagicMock()
-        mock_renderer.fbo.read.return_value = b'\x00' * (480 * 270 * 3)
+        mock_renderer = _make_mock_renderer()
         mock_renderer_cls.return_value = mock_renderer
 
         img = gpu_preview.render_gpu_preview(
@@ -135,6 +80,8 @@ class TestRenderGpuPreview:
         assert img is not None
         assert img.size == (480, 270)
         mock_analyzer.analyze.assert_called_once()
+        mock_renderer_cls.assert_called_once_with(width=480, height=270, fps=30)
+        mock_renderer.release.assert_called_once()
 
     @patch('src.gpu_preview.AudioAnalyzer')
     @patch('src.gpu_preview.GPUPreviewRenderer')
@@ -144,12 +91,7 @@ class TestRenderGpuPreview:
         mock_analyzer.analyze.return_value = dummy_features
         mock_analyzer_cls.return_value = mock_analyzer
 
-        mock_renderer = MagicMock()
-        mock_renderer.ctx = MagicMock()
-        mock_renderer.fbo = MagicMock()
-        mock_renderer.viz_fbo = MagicMock()
-        mock_renderer.post_fbo = MagicMock()
-        mock_renderer.post_fbo.read.return_value = b'\x00' * (480 * 270 * 3)
+        mock_renderer = _make_mock_renderer()
         mock_renderer_cls.return_value = mock_renderer
 
         img = gpu_preview.render_gpu_preview(
@@ -174,10 +116,7 @@ class TestRenderGpuPreview:
         mock_analyzer.analyze.return_value = dummy_features
         mock_analyzer_cls.return_value = mock_analyzer
 
-        mock_renderer = MagicMock()
-        mock_renderer.ctx = MagicMock()
-        mock_renderer.fbo = MagicMock()
-        mock_renderer.viz_fbo = MagicMock()
+        mock_renderer = _make_mock_renderer()
         mock_renderer.fbo.read.return_value = b'\x00' * (480 * 270 * 3)
         mock_renderer_cls.return_value = mock_renderer
 
@@ -204,28 +143,20 @@ class TestRenderGpuPreview:
         mock_quote_renderer_cls.assert_called_once()
         mock_quote_renderer.apply.assert_called_once()
 
+    @patch('src.gpu_preview.get_visualizer')
     @patch('src.gpu_preview.AudioAnalyzer')
     @patch('src.gpu_preview.GPUPreviewRenderer')
-    def test_render_gpu_preview_with_params(self, mock_renderer_cls, mock_analyzer_cls, dummy_features):
+    def test_render_gpu_preview_with_params(self, mock_renderer_cls, mock_analyzer_cls, mock_get_visualizer, dummy_features):
         """Preview mit params sollte viz.set_params aufrufen."""
         mock_analyzer = MagicMock()
         mock_analyzer.analyze.return_value = dummy_features
         mock_analyzer_cls.return_value = mock_analyzer
 
-        mock_viz = MagicMock()
-        mock_renderer = MagicMock()
-        mock_renderer.ctx = MagicMock()
-        mock_renderer.fbo = MagicMock()
-        mock_renderer.viz_fbo = MagicMock()
-        mock_renderer.fbo.read.return_value = b'\x00' * (480 * 270 * 3)
-        mock_renderer_cls.return_value = mock_renderer
+        mock_viz = _make_mock_viz()
+        mock_get_visualizer.return_value = lambda ctx, w, h: mock_viz
 
-        # Cache initialisieren und viz manuell setzen
-        gpu_preview._release_preview_cache()
-        gpu_preview._PREVIEW_CACHE["key"] = ("lumina_core", 480, 270, 30)
-        gpu_preview._PREVIEW_CACHE["renderer"] = mock_renderer
-        gpu_preview._PREVIEW_CACHE["viz"] = mock_viz
-        gpu_preview._PREVIEW_CACHE["viz_type"] = "lumina_core"
+        mock_renderer = _make_mock_renderer()
+        mock_renderer_cls.return_value = mock_renderer
 
         img = gpu_preview.render_gpu_preview(
             audio_path="dummy.mp3",
@@ -236,6 +167,7 @@ class TestRenderGpuPreview:
             params={"intensity": 1.5},
         )
 
+        assert img is not None
         mock_viz.set_params.assert_called_once_with({"intensity": 1.5})
 
     @patch('src.gpu_preview.AudioAnalyzer')

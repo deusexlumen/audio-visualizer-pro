@@ -1,5 +1,7 @@
 """Hauptfenster der neuen Audio Visualizer Pro GUI."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from pathlib import Path
 
@@ -17,10 +19,6 @@ from src.gui.quotes_panel import QuotesPanel
 from src.gui.state import AppState
 from src.gui.styles import build_app_stylesheet, Theme
 from src.gui.timeline_widget import TimelineWidget
-from src.gui.workers import (
-    AnalyzeWorker, PreviewWorker, RenderWorker, IntroWorker, AIOptimizeWorker, QuoteExtractWorker
-)
-from src.gemini_integration import GeminiIntegration
 
 
 class MainWindow(QMainWindow):
@@ -32,6 +30,7 @@ class MainWindow(QMainWindow):
         self.state = AppState()
         self.gemini = None
         try:
+            from src.gemini_integration import GeminiIntegration
             self.gemini = GeminiIntegration()
         except Exception as e:
             print(f"[GUI] Gemini nicht verfügbar: {e}")
@@ -132,6 +131,8 @@ class MainWindow(QMainWindow):
         self._preview_timer.start(50)
 
     def _start_analysis(self):
+        from src.gui.workers import AnalyzeWorker
+
         if self._analyze_worker and self._analyze_worker.isRunning():
             return
         path = self.state.audio_path
@@ -163,6 +164,8 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Analyse-Fehler", msg)
 
     def _start_preview(self):
+        from src.gui.workers import PreviewWorker
+
         if not self.state.audio_path or self.state.features is None:
             return
         if self._preview_worker and self._preview_worker.isRunning():
@@ -193,6 +196,8 @@ class MainWindow(QMainWindow):
         self._preview_worker.start()
 
     def _start_ai_optimize(self):
+        from src.gui.workers import AIOptimizeWorker
+
         if self._ai_optimize_worker and self._ai_optimize_worker.isRunning():
             return
         req = self.ki_panel.get_optimize_request()
@@ -214,6 +219,8 @@ class MainWindow(QMainWindow):
         self._ai_optimize_worker.start()
 
     def _start_quote_extract(self):
+        from src.gui.workers import QuoteExtractWorker
+
         if self._quote_extract_worker and self._quote_extract_worker.isRunning():
             return
         req = self.quotes_panel.get_extract_request()
@@ -243,6 +250,8 @@ class MainWindow(QMainWindow):
         self._set_status(f"Preview-Fehler: {msg}", "error")
 
     def _on_render_clicked(self):
+        from src.gui.workers import RenderWorker
+
         if self._render_worker and self._render_worker.isRunning():
             self._render_worker.cancel()
             return
