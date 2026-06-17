@@ -68,10 +68,10 @@ class ParamsPanel(QWidget):
         intro_box = QGroupBox("Intro")
         intro_layout = QGridLayout(intro_box)
 
-        self.chk_intro_enabled = QCheckBox("Intro an Hauptvideo anhängen")
+        self.chk_intro_enabled = QCheckBox("Intro vor Hauptvideo setzen")
         self.chk_intro_enabled.setChecked(self.state.intro_enabled)
         self.chk_intro_enabled.setToolTip(
-            "Ein kurzes Intro-Video vor das gerenderte Visualizer-Video setzen."
+            "Ein kurzes Intro-Video wird vor das gerenderte Visualizer-Video gesetzt."
         )
         self.chk_intro_enabled.stateChanged.connect(self._on_intro_enabled_changed)
         intro_layout.addWidget(self.chk_intro_enabled, 0, 0, 1, 2)
@@ -93,7 +93,7 @@ class ParamsPanel(QWidget):
         self.spin_intro_fade.setSingleStep(0.1)
         self.spin_intro_fade.setDecimals(1)
         self.spin_intro_fade.setValue(self.state.intro_fade_duration)
-        self.spin_intro_fade.setToolTip("Dauer des Crossfades zwischen Intro und Hauptvideo in Sekunden.")
+        self.spin_intro_fade.setToolTip("Dauer des Crossfades von Intro zu Hauptvideo in Sekunden.")
         self.spin_intro_fade.valueChanged.connect(self._on_intro_fade_changed)
         intro_layout.addWidget(self.spin_intro_fade, 2, 1)
 

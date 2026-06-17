@@ -224,7 +224,7 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
     if intro:
         from src.intro_renderer import render_with_intro
         intro_output = str(Path(output).parent / f"{Path(output).stem}_mit_intro{Path(output).suffix}")
-        click.echo(f"[Intro] Fuege Intro hinzu: {intro_output}")
+        click.echo(f"[Intro] Setze Intro vor: {intro_output}")
         render_with_intro(
             intro_path=intro,
             main_video_path=output,
