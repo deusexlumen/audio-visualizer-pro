@@ -16,6 +16,7 @@ class AppState(QObject):
         "pp_contrast", "pp_saturation", "pp_brightness", "pp_warmth", "pp_grain",
         "preview_time_percent", "preview_fps", "preview_width", "preview_height",
         "resolution", "render_fps", "codec", "quality", "gpu_encode", "output_dir",
+        "intro_enabled", "intro_path", "intro_fade_duration",
         "quotes", "quotes_enabled", "quote_config",
         "status_message", "status_kind",
         "ki_prompt", "ki_suggested_colors", "ki_status", "ki_error",
@@ -62,6 +63,10 @@ class AppState(QObject):
         self.quality: str = "high"
         self.gpu_encode: bool = False
         self.output_dir: str = "output"
+
+        self.intro_enabled: bool = False
+        self.intro_path: str | None = None
+        self.intro_fade_duration: float = 1.0
 
         self.quotes: list = []
         self.quotes_enabled: bool = False
@@ -142,6 +147,9 @@ class AppState(QObject):
             "quality": self.quality,
             "gpu_encode": self.gpu_encode,
             "output_dir": self.output_dir,
+            "intro_enabled": self.intro_enabled,
+            "intro_path": self.intro_path,
+            "intro_fade_duration": self.intro_fade_duration,
             "ki_prompt": self.ki_prompt,
             "ki_suggested_colors": self.ki_suggested_colors,
             "quotes": [

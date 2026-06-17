@@ -187,6 +187,9 @@ class ProjectConfigSchema(BaseModel):
     background_vignette: float = Field(default=0.0, ge=0.0, le=1.0)
     background_opacity: float = Field(default=0.3, ge=0.0, le=1.0)
 
+    intro_video: Optional[str] = None
+    intro_fade_duration: float = Field(default=1.0, ge=0.1, le=2.0)
+
     @model_validator(mode="after")
     def flatten_background(self):
         """Verschachtelte Background-Config in flache Felder uebernehmen."""

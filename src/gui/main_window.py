@@ -18,7 +18,7 @@ from src.gui.state import AppState
 from src.gui.styles import build_app_stylesheet, Theme
 from src.gui.timeline_widget import TimelineWidget
 from src.gui.workers import (
-    AnalyzeWorker, PreviewWorker, RenderWorker, AIOptimizeWorker, QuoteExtractWorker
+    AnalyzeWorker, PreviewWorker, RenderWorker, IntroWorker, AIOptimizeWorker, QuoteExtractWorker
 )
 from src.gemini_integration import GeminiIntegration
 
@@ -41,6 +41,7 @@ class MainWindow(QMainWindow):
         self._ai_optimize_worker: AIOptimizeWorker | None = None
         self._quote_extract_worker: QuoteExtractWorker | None = None
         self._render_worker: RenderWorker | None = None
+        self._intro_worker: IntroWorker | None = None
 
         self._setup_ui()
         self._setup_signals()
@@ -245,6 +246,11 @@ class MainWindow(QMainWindow):
         if self._render_worker and self._render_worker.isRunning():
             self._render_worker.cancel()
             return
+        if self._intro_worker and self._intro_worker.isRunning():
+            self._intro_worker.cancel()
+            self.btn_render.setText("▶ Render")
+            self._set_status("Intro abgebrochen.", "warn")
+            return
 
         if not self.state.audio_path or not Path(self.state.audio_path).exists():
             QMessageBox.critical(self, "Fehler", "Keine Audio-Datei geladen.")
@@ -341,6 +347,7 @@ class MainWindow(QMainWindow):
             self._ai_optimize_worker,
             self._quote_extract_worker,
             self._render_worker,
+            self._intro_worker,
         ]
         for worker in workers:
             if worker and worker.isRunning():

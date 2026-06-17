@@ -79,6 +79,9 @@ class ProjectConfig(BaseModel):
     background_blur: float = 0.0
     background_vignette: float = 0.0
     background_opacity: float = 0.3
+
+    intro_video: Optional[str] = None
+    intro_fade_duration: float = 1.0
     
     turbo_mode: bool = False
     frame_skip: int = 1

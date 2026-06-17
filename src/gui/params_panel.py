@@ -3,7 +3,7 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSlider, QGroupBox,
-    QGridLayout, QCheckBox,
+    QGridLayout, QCheckBox, QLineEdit, QPushButton, QFileDialog, QDoubleSpinBox,
 )
 
 from src.gui.state import AppState
@@ -63,6 +63,41 @@ class ParamsPanel(QWidget):
         pp_layout.addWidget(QLabel("Grain"), 4, 0)
         pp_layout.addWidget(self.slider_grain, 4, 1)
         layout.addWidget(pp_box)
+
+        # Intro-Einstellungen
+        intro_box = QGroupBox("Intro")
+        intro_layout = QGridLayout(intro_box)
+
+        self.chk_intro_enabled = QCheckBox("Intro an Hauptvideo anhängen")
+        self.chk_intro_enabled.setChecked(self.state.intro_enabled)
+        self.chk_intro_enabled.setToolTip(
+            "Ein kurzes Intro-Video vor das gerenderte Visualizer-Video setzen."
+        )
+        self.chk_intro_enabled.stateChanged.connect(self._on_intro_enabled_changed)
+        intro_layout.addWidget(self.chk_intro_enabled, 0, 0, 1, 2)
+
+        intro_layout.addWidget(QLabel("Intro-Datei"), 1, 0)
+        intro_path_layout = QHBoxLayout()
+        self.edit_intro_path = QLineEdit(self.state.intro_path or "")
+        self.edit_intro_path.setPlaceholderText("Pfad zum Intro-Video (.mp4, .mov, ...)")
+        self.edit_intro_path.textChanged.connect(self._on_intro_path_changed)
+        self.btn_intro_browse = QPushButton("Durchsuchen...")
+        self.btn_intro_browse.clicked.connect(self._browse_intro)
+        intro_path_layout.addWidget(self.edit_intro_path)
+        intro_path_layout.addWidget(self.btn_intro_browse)
+        intro_layout.addLayout(intro_path_layout, 1, 1)
+
+        intro_layout.addWidget(QLabel("Fade-Dauer"), 2, 0)
+        self.spin_intro_fade = QDoubleSpinBox()
+        self.spin_intro_fade.setRange(0.1, 2.0)
+        self.spin_intro_fade.setSingleStep(0.1)
+        self.spin_intro_fade.setDecimals(1)
+        self.spin_intro_fade.setValue(self.state.intro_fade_duration)
+        self.spin_intro_fade.setToolTip("Dauer des Crossfades zwischen Intro und Hauptvideo in Sekunden.")
+        self.spin_intro_fade.valueChanged.connect(self._on_intro_fade_changed)
+        intro_layout.addWidget(self.spin_intro_fade, 2, 1)
+
+        layout.addWidget(intro_box)
 
         # Export-Einstellungen
         export_box = QGroupBox("Export")
@@ -192,3 +227,22 @@ class ParamsPanel(QWidget):
     def _set(self, key: str, value):
         setattr(self.state, key, value)
         self.state.set(key, value)
+
+    def _on_intro_enabled_changed(self, state):
+        self.state.intro_enabled = bool(state)
+
+    def _on_intro_path_changed(self, text: str):
+        self.state.intro_path = text.strip() or None
+
+    def _on_intro_fade_changed(self, value: float):
+        self.state.intro_fade_duration = value
+
+    def _browse_intro(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Intro-Video auswählen",
+            "",
+            "Video-Dateien (*.mp4 *.mov *.avi *.mkv)",
+        )
+        if path:
+            self.edit_intro_path.setText(path)

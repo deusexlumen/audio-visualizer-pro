@@ -170,6 +170,55 @@ class RenderWorker(QThread):
                     pass
 
 
+class IntroWorker(QThread):
+    intro_progress = pyqtSignal(float)
+    intro_finished = pyqtSignal(str)
+    intro_error = pyqtSignal(str)
+
+    def __init__(
+        self,
+        intro_path: str,
+        main_video_path: str,
+        output_path: str,
+        fade_duration: float = 1.0,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.intro_path = intro_path
+        self.main_video_path = main_video_path
+        self.output_path = output_path
+        self.fade_duration = fade_duration
+        self._cancel_event = threading.Event()
+
+    def cancel(self):
+        """Bricht das Intro-Rendering asynchron ab."""
+        self._cancel_event.set()
+
+    def run(self):
+        """Fuegt das Intro vor das Haupt-Video."""
+        try:
+            from src.intro_renderer import render_with_intro
+
+            def _progress(p: float):
+                self.intro_progress.emit(p)
+
+            render_with_intro(
+                intro_path=self.intro_path,
+                main_video_path=self.main_video_path,
+                output_path=self.output_path,
+                fade_duration=self.fade_duration,
+                progress_callback=_progress,
+                cancel_event=self._cancel_event,
+            )
+
+            if self._cancel_event.is_set():
+                self.intro_error.emit("Intro-Rendering abgebrochen.")
+            else:
+                self.intro_finished.emit(self.output_path)
+        except Exception as e:
+            self.intro_error.emit(str(e))
+
+
 class AIOptimizeWorker(QThread):
     optimize_ready = pyqtSignal(dict)
     optimize_error = pyqtSignal(str)

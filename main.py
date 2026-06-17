@@ -76,9 +76,11 @@ def cli():
 @click.option('--codec', default='h264', type=click.Choice(['h264', 'hevc', 'prores']), help='Video-Codec')
 @click.option('--quality', default='high', type=click.Choice(['low', 'medium', 'high', 'lossless']), help='Qualitaet')
 @click.option('--param', '-p', multiple=True, help='Visualizer Parameter (key=value)')
+@click.option('--intro', type=click.Path(exists=True), help='Intro-Video, das vor dem gerenderten Video eingefuegt wird')
+@click.option('--intro-fade', default=1.0, type=float, help='Crossfade-Dauer zwischen Intro und Hauptvideo in Sekunden')
 def render(audio_file, visual, output, config, resolution, fps, preview, preview_duration,
            background_image, background_blur, background_vignette, background_opacity,
-           codec, quality, param):
+           codec, quality, param, intro, intro_fade):
     """Rendert Audio-Visualisierung auf der GPU."""
     
     _check_ffmpeg()
@@ -126,6 +128,8 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
     cfg_quotes = None
     cfg_quote_overlay = None
     cfg_output = output
+    cfg_intro_video = intro
+    cfg_intro_fade = intro_fade
 
     if config:
         try:
@@ -139,6 +143,9 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
             cfg_background_opacity = cfg.background_opacity
             cfg_postprocess = cfg.postprocess.model_dump() if cfg.postprocess else None
             cfg_output = cfg.output_file
+            if intro is None and cfg.intro_video is not None:
+                cfg_intro_video = cfg.intro_video
+            cfg_intro_fade = cfg.intro_fade if cfg_intro_fade == intro_fade else cfg.intro_fade_duration
             if cfg.quotes:
                 cfg_quotes = [
                     Quote(
@@ -164,6 +171,8 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
     codec = cfg_codec
     quality = cfg_quality
     output = output if output != 'output.mp4' else cfg_output
+    intro = cfg_intro_video
+    intro_fade = cfg_intro_fade
 
     try:
         width, height = map(int, resolution.split('x'))
@@ -211,6 +220,18 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
     )
     
     click.echo(f"[GPU] Fertig! Output: {output}")
+
+    if intro:
+        from src.intro_renderer import render_with_intro
+        intro_output = str(Path(output).parent / f"{Path(output).stem}_mit_intro{Path(output).suffix}")
+        click.echo(f"[Intro] Fuege Intro hinzu: {intro_output}")
+        render_with_intro(
+            intro_path=intro,
+            main_video_path=output,
+            output_path=intro_output,
+            fade_duration=intro_fade,
+        )
+        click.echo(f"[Intro] Fertig! Output: {intro_output}")
 
 
 @cli.command()
@@ -374,6 +395,8 @@ def create_config(output):
         "background_blur": 0.0,
         "background_vignette": 0.3,
         "background_opacity": 0.3,
+        "intro_video": None,
+        "intro_fade_duration": 1.0,
         "quote_overlay": {
             "enabled": False,
             "font_size": 52,
