@@ -11,7 +11,8 @@ class AppState(QObject):
     _STATE_KEYS = frozenset({
         "audio_path", "features", "audio_duration",
         "visualizer_type", "viz_params", "viz_offset_x", "viz_offset_y", "viz_scale",
-        "color_mode", "base_hue", "color_saturation",
+        "color_mode", "base_hue", "color_saturation", "viz_brightness",
+        "primary_color", "secondary_color", "background_color",
         "background_path", "bg_blur", "bg_vignette", "bg_opacity",
         "pp_contrast", "pp_saturation", "pp_brightness", "pp_warmth", "pp_grain",
         "preview_time_percent", "preview_fps", "preview_width", "preview_height",
@@ -40,6 +41,11 @@ class AppState(QObject):
         self.color_mode: str = "chroma"
         self.base_hue: float = 0.55
         self.color_saturation: float = 0.7
+        self.viz_brightness: float = 1.0
+
+        self.primary_color: str = "#FF0055"
+        self.secondary_color: str = "#00CCFF"
+        self.background_color: str = "#0A0A0A"
 
         self.background_path: str | None = None
         self.bg_blur: float = 0.0
@@ -113,6 +119,10 @@ class AppState(QObject):
             "color_mode": self.color_mode,
             "base_hue": self.base_hue,
             "color_saturation": self.color_saturation,
+            "brightness": self.viz_brightness,
+            "primary_color": self.primary_color,
+            "secondary_color": self.secondary_color,
+            "background_color": self.background_color,
         }
         base.update(self.viz_params)
         return base
@@ -131,6 +141,10 @@ class AppState(QObject):
             "color_mode": self.color_mode,
             "base_hue": self.base_hue,
             "color_saturation": self.color_saturation,
+            "viz_brightness": self.viz_brightness,
+            "primary_color": self.primary_color,
+            "secondary_color": self.secondary_color,
+            "background_color": self.background_color,
             "bg_blur": self.bg_blur,
             "bg_vignette": self.bg_vignette,
             "bg_opacity": self.bg_opacity,

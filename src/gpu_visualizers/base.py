@@ -327,10 +327,15 @@ class BaseGPUVisualizer(abc.ABC):
         """
         mode = self.params.get('color_mode', 'chroma')
         saturation = self.params.get('color_saturation', 0.7)
-        
+
         if mode == 'monochrome':
             return (0.85, 0.85, 0.85)
         elif mode == 'fixed':
+            primary_color = self.params.get('primary_color')
+            if primary_color and isinstance(primary_color, str) and primary_color.startswith('#'):
+                rgb = self._hex_to_rgb(primary_color)
+                h, s, v = self._rgb_to_hsv(*rgb)
+                return self._hsv_to_rgb(h, saturation, v)
             hue = self.params.get('base_hue', 0.55)
             return self._hsv_to_rgb(hue, saturation, 0.85)
         elif mode == 'warm':
@@ -386,3 +391,31 @@ class BaseGPUVisualizer(abc.ABC):
         if i == 4:
             return (t, p, v)
         return (v, p, q)
+
+    @staticmethod
+    def _hex_to_rgb(hex_color: str) -> tuple:
+        """Konvertiert 6-stelligen Hex-String nach RGB-Tupel (0.0-1.0)."""
+        hex_color = hex_color.lstrip('#')
+        r = int(hex_color[0:2], 16) / 255.0
+        g = int(hex_color[2:4], 16) / 255.0
+        b = int(hex_color[4:6], 16) / 255.0
+        return (r, g, b)
+
+    @staticmethod
+    def _rgb_to_hsv(r: float, g: float, b: float) -> tuple:
+        """Konvertiert RGB nach HSV."""
+        mx = max(r, g, b)
+        mn = min(r, g, b)
+        diff = mx - mn
+        if diff == 0:
+            h = 0.0
+        elif mx == r:
+            h = (60 * ((g - b) / diff) + 360) % 360
+        elif mx == g:
+            h = (60 * ((b - r) / diff) + 120) % 360
+        else:
+            h = (60 * ((r - g) / diff) + 240) % 360
+        h = h / 360.0
+        s = 0.0 if mx == 0 else diff / mx
+        v = mx
+        return (h, s, v)

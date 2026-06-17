@@ -43,6 +43,7 @@ class PreviewWorker(QThread):
         background_blur: float = 0.0,
         background_vignette: float = 0.0,
         background_opacity: float = 0.3,
+        background_color: str = "#0A0A0A",
         postprocess: dict | None = None,
         viz_offset_x: float = 0.0,
         viz_offset_y: float = 0.0,
@@ -64,6 +65,7 @@ class PreviewWorker(QThread):
         self.background_blur = background_blur
         self.background_vignette = background_vignette
         self.background_opacity = background_opacity
+        self.background_color = background_color
         self.postprocess = postprocess
         self.viz_offset_x = viz_offset_x
         self.viz_offset_y = viz_offset_y
@@ -88,6 +90,7 @@ class PreviewWorker(QThread):
                 background_blur=self.background_blur,
                 background_vignette=self.background_vignette,
                 background_opacity=self.background_opacity,
+                background_color=self.background_color,
                 postprocess=self.postprocess,
                 viz_offset_x=self.viz_offset_x,
                 viz_offset_y=self.viz_offset_y,
@@ -144,6 +147,7 @@ class RenderWorker(QThread):
                 background_blur=self.config.get("background_blur", 0.0),
                 background_vignette=self.config.get("background_vignette", 0.0),
                 background_opacity=self.config.get("background_opacity", 0.3),
+                background_color=self.config.get("background_color", "#0A0A0A"),
                 postprocess=self.config.get("postprocess", {}),
                 quotes=self.config.get("quotes"),
                 quote_config=self.config.get("quote_config"),

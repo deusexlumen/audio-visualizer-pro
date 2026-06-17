@@ -186,6 +186,7 @@ class ProjectConfigSchema(BaseModel):
     background_blur: float = Field(default=0.0, ge=0.0, le=20.0)
     background_vignette: float = Field(default=0.0, ge=0.0, le=1.0)
     background_opacity: float = Field(default=0.3, ge=0.0, le=1.0)
+    background_color: str = Field(default="#0A0A0A", pattern=r"^#[0-9A-Fa-f]{6}$")
 
     intro_video: Optional[str] = None
     intro_fade_duration: float = Field(default=1.0, ge=0.1, le=2.0)

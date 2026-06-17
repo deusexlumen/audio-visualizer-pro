@@ -1,10 +1,13 @@
 {
-  "description": "Sachlicher News-Podcast – minimalistisch und professionell",
+  "description": "Sachlicher News-Podcast \u2013 minimalistisch und professionell",
   "audio_file": "input.mp3",
   "output_file": "podcast_news.mp4",
   "visual": {
     "type": "typographic",
-    "resolution": [1920, 1080],
+    "resolution": [
+      1920,
+      1080
+    ],
     "fps": 30,
     "colors": {
       "primary": "#3498DB",
@@ -24,5 +27,6 @@
     "grain": 0.0,
     "vignette": 0.1,
     "chromatic_aberration": 0.0
-  }
+  },
+  "background_color": "#0A0A0A"
 }

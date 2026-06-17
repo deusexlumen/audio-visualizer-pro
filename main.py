@@ -73,6 +73,7 @@ def cli():
 @click.option('--background-blur', default=0.0, type=float, help='Hintergrund-Blur Radius')
 @click.option('--background-vignette', default=0.0, type=float, help='Vignette Staerke (0.0-1.0)')
 @click.option('--background-opacity', default=0.3, type=float, help='Hintergrund-Opazitaet (0.0-1.0)')
+@click.option('--background-color', default='#0A0A0A', help='Hintergrund-Farbe als Hex (z.B. #0A0A0A)')
 @click.option('--codec', default='h264', type=click.Choice(['h264', 'hevc', 'prores']), help='Video-Codec')
 @click.option('--quality', default='high', type=click.Choice(['low', 'medium', 'high', 'lossless']), help='Qualitaet')
 @click.option('--param', '-p', multiple=True, help='Visualizer Parameter (key=value)')
@@ -80,7 +81,7 @@ def cli():
 @click.option('--intro-fade', default=1.0, type=float, help='Crossfade-Dauer zwischen Intro und Hauptvideo in Sekunden')
 def render(audio_file, visual, output, config, resolution, fps, preview, preview_duration,
            background_image, background_blur, background_vignette, background_opacity,
-           codec, quality, param, intro, intro_fade):
+           background_color, codec, quality, param, intro, intro_fade):
     """Rendert Audio-Visualisierung auf der GPU."""
     
     _check_ffmpeg()
@@ -122,6 +123,7 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
     cfg_background_blur = background_blur
     cfg_background_vignette = background_vignette
     cfg_background_opacity = background_opacity
+    cfg_background_color = background_color
     cfg_codec = codec
     cfg_quality = quality
     cfg_postprocess = None
@@ -141,6 +143,7 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
             cfg_background_blur = cfg.background_blur
             cfg_background_vignette = cfg.background_vignette
             cfg_background_opacity = cfg.background_opacity
+            cfg_background_color = getattr(cfg, 'background_color', None) or cfg_background_color
             cfg_postprocess = cfg.postprocess.model_dump() if cfg.postprocess else None
             cfg_output = cfg.output_file
             if intro is None and cfg.intro_video is not None:
@@ -168,6 +171,7 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
     background_blur = cfg_background_blur
     background_vignette = cfg_background_vignette
     background_opacity = cfg_background_opacity
+    background_color = cfg_background_color
     codec = cfg_codec
     quality = cfg_quality
     output = output if output != 'output.mp4' else cfg_output
@@ -212,6 +216,7 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
         background_blur=background_blur,
         background_vignette=background_vignette,
         background_opacity=background_opacity,
+        background_color=background_color,
         codec=codec,
         quality=quality,
         postprocess=cfg_postprocess,
@@ -395,6 +400,7 @@ def create_config(output):
         "background_blur": 0.0,
         "background_vignette": 0.3,
         "background_opacity": 0.3,
+        "background_color": "#0A0A0A",
         "intro_video": None,
         "intro_fade_duration": 1.0,
         "quote_overlay": {

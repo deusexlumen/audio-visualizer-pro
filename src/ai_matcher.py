@@ -104,6 +104,12 @@ class SmartMatcher:
         # Spectral features
         brightness = float(np.mean(features.spectral_centroid))
         noisiness = float(np.mean(features.zero_crossing_rate))
+
+        # Voice features (fuer bessere Podcast-Erkennung)
+        voice_clarity = np.asarray(features.voice_clarity)
+        voice_band = np.asarray(features.voice_band)
+        voice_clarity_mean = float(voice_clarity.mean()) if voice_clarity.size else 0.0
+        voice_band_mean = float(voice_band.mean()) if voice_band.size else 0.0
         
         return {
             'rms_mean': rms_mean,
@@ -113,6 +119,8 @@ class SmartMatcher:
             'dynamic_range': dynamic_range,
             'brightness': brightness,
             'noisiness': noisiness,
+            'voice_clarity_mean': voice_clarity_mean,
+            'voice_band_mean': voice_band_mean,
             'tempo': features.tempo,
             'mode': features.mode,
             'key': features.key,
@@ -177,20 +185,53 @@ class SmartMatcher:
         Hauptmethode: Empfiehlt Visualizer + Config basierend auf Audio-Features.
         """
         f = self._extract_features(features)
-        
-        mode = f['mode']
+
         tempo = f['tempo']
         rms_mean = f['rms_mean']
         onset_density = f['onset_density']
         dynamic_range = f['dynamic_range']
-        
+        voice_clarity_mean = f['voice_clarity_mean']
+        voice_band_mean = f['voice_band_mean']
+
+        # Robuste Sprache- vs. Musik-Erkennung
+        # Speech: hohe Voice-Clarity/Band, wenig rhythmische Dichte
+        # Music: rhythmische Dichte, Tempo, niedrige Voice-Clarity
+        speech_score = (
+            voice_clarity_mean * 0.5
+            + voice_band_mean * 0.5
+            + (1.0 - min(1.0, onset_density * 5.0)) * 0.2
+        )
+        music_score = (
+            onset_density * min(2.0, tempo / 100.0)
+            + dynamic_range * 0.3
+            + (1.0 - voice_clarity_mean) * 0.2
+        )
+
+        # Analyzer-Modus als zusaetzlicher Hinweis gewichten
+        analyzer_mode = f['mode']
+        if analyzer_mode == 'speech':
+            speech_score += 0.15
+        elif analyzer_mode == 'music':
+            music_score += 0.15
+
+        # Falls keine Voice-Features vorhanden sind (z.B. alte Caches / Dummy-Daten),
+        # vertrauen wir dem Analyzer-Modus direkt.
+        if voice_clarity_mean == 0 and voice_band_mean == 0:
+            mode = analyzer_mode
+        elif speech_score > 0.35 and music_score < 0.30:
+            mode = 'speech'
+        elif music_score > 0.25 and speech_score < 0.35:
+            mode = 'music'
+        else:
+            mode = 'hybrid'
+
         # Key für Farben
         key_str = f['key'] or ''
         is_minor = 'minor' in key_str.lower() if key_str else False
         primary, secondary, bg = self._get_color_from_key(f['key'], is_minor)
-        
+
         # --- ENTSCHEIDUNGSLOGIK ---
-        
+
         if mode == 'speech':
             # Podcast / Sprache – Sub-Genre-Erkennung
             # WICHTIG: Für Speech NUR dezente, podcast-optimierte Visualizer nutzen.

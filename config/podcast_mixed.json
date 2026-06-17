@@ -1,10 +1,13 @@
 {
-  "description": "Mixed-Format Podcast – dynamisch und vielseitig",
+  "description": "Mixed-Format Podcast \u2013 dynamisch und vielseitig",
   "audio_file": "input.mp3",
   "output_file": "podcast_mixed.mp4",
   "visual": {
     "type": "neon_wave_circle",
-    "resolution": [1920, 1080],
+    "resolution": [
+      1920,
+      1080
+    ],
     "fps": 30,
     "colors": {
       "primary": "#2ECC71",
@@ -22,5 +25,6 @@
     "grain": 0.02,
     "vignette": 0.2,
     "chromatic_aberration": 0.0
-  }
+  },
+  "background_color": "#0A0A0A"
 }

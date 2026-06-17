@@ -1,10 +1,13 @@
 {
-  "description": "Atmosphärisches Storytelling – meditativ und tief",
+  "description": "Atmosph\u00e4risches Storytelling \u2013 meditativ und tief",
   "audio_file": "input.mp3",
   "output_file": "podcast_story.mp4",
   "visual": {
     "type": "sacred_mandala",
-    "resolution": [1920, 1080],
+    "resolution": [
+      1920,
+      1080
+    ],
     "fps": 30,
     "colors": {
       "primary": "#9B59B6",
@@ -21,5 +24,6 @@
     "grain": 0.03,
     "vignette": 0.3,
     "chromatic_aberration": 0.5
-  }
+  },
+  "background_color": "#0A0A0A"
 }

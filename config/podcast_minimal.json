@@ -3,7 +3,10 @@
   "output_file": "podcast_visual.mp4",
   "visual": {
     "type": "typographic",
-    "resolution": [1920, 1080],
+    "resolution": [
+      1920,
+      1080
+    ],
     "fps": 30,
     "colors": {
       "primary": "#00CCFF",
@@ -21,5 +24,6 @@
     "saturation": 0.9,
     "grain": 0.02,
     "vignette": 0.2
-  }
+  },
+  "background_color": "#0A0A0A"
 }

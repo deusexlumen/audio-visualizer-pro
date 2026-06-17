@@ -1,6 +1,6 @@
-"""KI-Panel für die PyQt6-GUI."""
+"""KI-Panel fuer die PyQt6-GUI."""
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QGroupBox,
@@ -11,6 +11,8 @@ from src.gpu_visualizers import get_visualizer
 
 
 class KIPanel(QWidget):
+    optimize_requested = pyqtSignal()
+
     def __init__(self, state, gemini=None, parent=None):
         super().__init__(parent)
         self.state = state
@@ -27,34 +29,23 @@ class KIPanel(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(12)
 
-        # --- SmartMatcher ---
-        auto_box = QGroupBox("Auto-Empfehlung")
-        auto_layout = QVBoxLayout(auto_box)
-        self.btn_auto_viz = QPushButton("Auto-Visualizer empfehlen")
-        self.btn_auto_viz.clicked.connect(self._on_auto_viz)
-        auto_layout.addWidget(self.btn_auto_viz)
-
-        self.lbl_recommendation = QLabel("Noch keine Empfehlung")
-        self.lbl_recommendation.setWordWrap(True)
-        auto_layout.addWidget(self.lbl_recommendation)
-
-        self.btn_apply_recommendation = QPushButton("Übernehmen")
-        self.btn_apply_recommendation.setEnabled(False)
-        self.btn_apply_recommendation.clicked.connect(self._on_apply_recommendation)
-        auto_layout.addWidget(self.btn_apply_recommendation)
-
-        layout.addWidget(auto_box)
-
-        # --- Gemini Optimierung ---
-        opt_box = QGroupBox("KI-Parameter-Optimierung")
+        # --- KI Komplett-Optimierung ---
+        opt_box = QGroupBox("KI-Optimierung")
         opt_layout = QVBoxLayout(opt_box)
+
+        self.lbl_recommendation = QLabel("Noch keine Optimierung durchgefuehrt.")
+        self.lbl_recommendation.setWordWrap(True)
+        opt_layout.addWidget(self.lbl_recommendation)
 
         opt_layout.addWidget(QLabel("Dein Wunsch (optional):"))
         self.prompt_input = QLineEdit()
         self.prompt_input.setPlaceholderText("z.B. dunkler, mehr Kontrast, cyberpunk-Stil")
         opt_layout.addWidget(self.prompt_input)
 
-        self.btn_optimize = QPushButton("Parameter optimieren")
+        self.btn_optimize = QPushButton("Komplett optimieren")
+        self.btn_optimize.setToolTip(
+            "Waehlt automatisch den passenden Visualizer und optimiert Parameter, Farben und Post-Process."
+        )
         self.btn_optimize.clicked.connect(self._on_optimize)
         opt_layout.addWidget(self.btn_optimize)
 
@@ -75,71 +66,70 @@ class KIPanel(QWidget):
     def _on_state_changed(self, key: str):
         if key == "features":
             self._last_recommendation = None
-            self.lbl_recommendation.setText("Noch keine Empfehlung")
-            self.btn_apply_recommendation.setEnabled(False)
+            self.lbl_recommendation.setText("Noch keine Optimierung durchgefuehrt.")
+            self.lbl_status.setText("")
             self._update_button_states()
 
     def _update_button_states(self):
         has_features = self.state.features is not None
         has_gemini = self.gemini is not None
-        self.btn_auto_viz.setEnabled(has_features)
-        self.btn_optimize.setEnabled(has_features and has_gemini)
+        self.btn_optimize.setEnabled(has_features and has_gemini and not self.state.ki_optimizing)
         if not has_gemini:
-            self.lbl_status.setText("KI nicht verfügbar. Prüfe API-Key.")
+            self.lbl_status.setText("KI nicht verfuegbar. Pruefe API-Key in .env (GEMINI_API_KEY).")
 
-    def _on_auto_viz(self):
-        if self.state.features is None:
+    def _on_optimize(self):
+        """Startet die kombinierte SmartMatcher + Gemini Optimierung."""
+        if self.state.features is None or self.gemini is None:
             return
+
+        # 1. SmartMatcher: Visualizer + initiale Parameter + Farben
         try:
             rec = self._matcher.match(self.state.features)
             self._last_recommendation = rec
+            self._apply_recommendation(rec)
             self.lbl_recommendation.setText(
-                f"{rec.visualizer} (Confidence: {rec.confidence:.0%})\n{rec.reason}"
+                f"Empfohlener Visualizer: {rec.visualizer} ({rec.confidence:.0%})\n{rec.reason}"
             )
-            self.btn_apply_recommendation.setEnabled(True)
         except Exception as e:
-            self.lbl_recommendation.setText(f"Fehler: {e}")
-
-    def _on_apply_recommendation(self):
-        rec = getattr(self, "_last_recommendation", None)
-        if rec is None:
+            self.lbl_status.setText(f"SmartMatcher-Fehler: {e}")
             return
+
+        # 2. Gemini-Optimierung anfordern (wird von MainWindow als Worker gestartet)
+        self.state.ki_optimizing = True
+        self.btn_optimize.setEnabled(False)
+        self.btn_optimize.setText("⏳ KI denkt nach...")
+        self.lbl_status.setText("Sende Anfrage an Gemini...")
+        self.optimize_requested.emit()
+
+    def _apply_recommendation(self, rec):
+        """Uebernimmt SmartMatcher-Empfehlung in den Zustand."""
         try:
             viz_class = get_visualizer(rec.visualizer)
         except ValueError:
             viz_class = None
         if viz_class is None:
-            self.lbl_recommendation.setText(f"Fehler: Visualizer '{rec.visualizer}' nicht verfügbar.")
+            self.lbl_status.setText(f"Fehler: Visualizer '{rec.visualizer}' nicht verfuegbar.")
             return
         self.state.visualizer_type = rec.visualizer
-        self.state.viz_params.update(rec.params)
+        self.state.viz_params = {**self.state.viz_params, **rec.params}
         self.state.ki_suggested_colors = rec.colors
-        self.lbl_status.setText("Empfehlung übernommen.")
-
-    def _on_optimize(self):
-        """Bereitet den UI-Zustand für die KI-Optimierung vor.
-
-        Der eigentliche Worker wird von MainWindow gestartet, nachdem es die
-        benötigten Daten über get_optimize_request() abgerufen hat.
-        """
-        if self.state.features is None or self.gemini is None:
-            return
-        self.state.ki_optimizing = True
-        self.btn_optimize.setEnabled(False)
-        self.btn_optimize.setText("⏳ KI denkt nach...")
-        self.lbl_status.setText("Sende Anfrage an Gemini...")
+        self.lbl_colors.setText(
+            f"Primary: {rec.colors.get('primary', '-')}  "
+            f"Secondary: {rec.colors.get('secondary', '-')}  "
+            f"BG: {rec.colors.get('background', '-')}"
+        )
 
     def on_optimize_finished(self, result: dict):
         self.state.ki_optimizing = False
         self.btn_optimize.setEnabled(True)
-        self.btn_optimize.setText("Parameter optimieren")
+        self.btn_optimize.setText("Komplett optimieren")
         self._apply_optimize_result(result)
         self.lbl_status.setText("Parameter optimiert!")
 
     def on_optimize_error(self, msg: str):
         self.state.ki_optimizing = False
         self.btn_optimize.setEnabled(True)
-        self.btn_optimize.setText("Parameter optimieren")
+        self.btn_optimize.setText("Komplett optimieren")
         self.lbl_status.setText(f"KI-Fehler: {msg}")
 
     @staticmethod

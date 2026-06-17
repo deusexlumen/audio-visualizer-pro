@@ -26,6 +26,16 @@ from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.gif'}
 
 
+def _hex_to_rgb(hex_color: str) -> tuple:
+    """Wandelt 6-stelligen Hex-String in RGB (0.0-1.0) um."""
+    hex_color = hex_color.lstrip('#')
+    return (
+        int(hex_color[0:2], 16) / 255.0,
+        int(hex_color[2:4], 16) / 255.0,
+        int(hex_color[4:6], 16) / 255.0,
+    )
+
+
 class GPUBatchRenderer:
     """GPU-Renderer fuer Audio-Visualisierungen mit ModernGL.
 
@@ -80,6 +90,7 @@ class GPUBatchRenderer:
         background_blur: float = 0.0,
         background_vignette: float = 0.0,
         background_opacity: float = 0.3,
+        background_color: str = "#0A0A0A",
         quotes: list = None,
         quote_config: QuoteOverlayConfig = None,
         sync_quotes_to_beats: bool = False,
@@ -290,11 +301,15 @@ class GPUBatchRenderer:
                     time = i / self.fps
                     
                     self.fbo.use()
-                    self.ctx.clear(0.05, 0.05, 0.05)
-                    
+                    if bg_texture is None:
+                        bg_rgb = _hex_to_rgb(background_color)
+                        self.ctx.clear(bg_rgb[0], bg_rgb[1], bg_rgb[2])
+                    else:
+                        self.ctx.clear(0.0, 0.0, 0.0)
+
                     if _DEBUG and i == 0:
                         self._save_debug(self.fbo, "debug_step1_after_clear.png")
-                    
+
                     if bg_texture is not None:
                         if bg_video_frames is not None:
                             # Video-Background: Aktuelles Frame basierend auf Zeit (Loop)

@@ -70,7 +70,48 @@ def test_render_button_starts_render_worker(qtbot, tmp_path, dummy_audio_feature
     assert config["codec"] == window.state.codec
     assert config["quality"] == window.state.quality
     assert config["gpu_encode"] == window.state.gpu_encode
+    assert config["background_color"] == window.state.background_color
 
     mock_worker.start.assert_called_once()
     assert window.btn_render.text() == "⏳ Render..."
     assert window._render_worker is mock_worker
+
+
+def test_preview_button_starts_preview_worker(qtbot, tmp_path, dummy_audio_features):
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    audio = tmp_path / "test.wav"
+    audio.touch()
+    window.state.audio_path = str(audio)
+    window.state.features = dummy_audio_features
+
+    mock_worker = MagicMock()
+    mock_worker.isRunning.return_value = False
+
+    with patch("src.gui.workers.PreviewWorker", return_value=mock_worker) as mock_cls:
+        qtbot.mouseClick(window.btn_preview, Qt.MouseButton.LeftButton)
+
+    assert mock_cls.called
+    config = mock_cls.call_args.kwargs
+    assert config["audio_path"] == str(audio)
+    assert config["visualizer_type"] == window.state.visualizer_type
+    assert config["background_color"] == window.state.background_color
+    assert config["width"] == window.state.preview_width
+    mock_worker.start.assert_called_once()
+    assert window._preview_worker is mock_worker
+
+
+def test_preview_timer_triggers_after_parameter_change(qtbot, tmp_path, dummy_audio_features):
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    audio = tmp_path / "test.wav"
+    audio.touch()
+    window.state.audio_path = str(audio)
+    window.state.features = dummy_audio_features
+
+    with patch.object(window._preview_timer, "start") as mock_timer_start:
+        window.state.color_mode = "fixed"
+        qtbot.wait(100)
+        mock_timer_start.assert_called_once_with(150)

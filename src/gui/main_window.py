@@ -92,6 +92,11 @@ class MainWindow(QMainWindow):
 
         bottom.addStretch()
 
+        self.btn_preview = QPushButton("🔄 Preview")
+        self.btn_preview.setToolTip("Preview manuell neu rendern")
+        self.btn_preview.setFixedWidth(120)
+        bottom.addWidget(self.btn_preview)
+
         self.btn_render = QPushButton("▶ Render")
         self.btn_render.setObjectName("primary")
         self.btn_render.setFixedWidth(120)
@@ -108,9 +113,10 @@ class MainWindow(QMainWindow):
         self.assets_panel.analyze_requested.connect(self._start_analysis)
         self.timeline.time_changed.connect(self._on_time_changed)
         self.state.changed.connect(self._on_state_changed)
-        self.ki_panel.btn_optimize.clicked.connect(self._start_ai_optimize)
+        self.ki_panel.optimize_requested.connect(self._start_ai_optimize)
         self.quotes_panel.btn_extract.clicked.connect(self._start_quote_extract)
         self.btn_render.clicked.connect(self._on_render_clicked)
+        self.btn_preview.clicked.connect(self._start_preview)
 
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
@@ -123,12 +129,13 @@ class MainWindow(QMainWindow):
             "pp_contrast", "pp_saturation", "pp_brightness", "pp_warmth", "pp_grain",
             "background_path", "preview_time_percent",
             "quotes", "quotes_enabled", "quote_config", "ki_suggested_colors",
+            "color_mode", "base_hue", "color_saturation", "brightness",
         }:
-            self._preview_timer.start(50)
+            self._preview_timer.start(150)
 
     def _on_time_changed(self, percent: float):
         self.state.preview_time_percent = percent
-        self._preview_timer.start(50)
+        self._preview_timer.start(150)
 
     def _start_analysis(self):
         from src.gui.workers import AnalyzeWorker
@@ -182,6 +189,7 @@ class MainWindow(QMainWindow):
             background_blur=self.state.bg_blur,
             background_vignette=self.state.bg_vignette,
             background_opacity=self.state.bg_opacity,
+            background_color=self.state.background_color,
             postprocess=self.state.get_postprocess(),
             viz_offset_x=self.state.viz_offset_x,
             viz_offset_y=self.state.viz_offset_y,
@@ -284,6 +292,7 @@ class MainWindow(QMainWindow):
             "background_blur": self.state.bg_blur,
             "background_vignette": self.state.bg_vignette,
             "background_opacity": self.state.bg_opacity,
+            "background_color": self.state.background_color,
             "postprocess": self.state.get_postprocess(),
             "quotes": self.state.quotes if self.state.quotes_enabled else None,
             "quote_config": self.state.quote_config if self.state.quotes_enabled else None,

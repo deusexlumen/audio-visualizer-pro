@@ -3,7 +3,10 @@
   "output_file": "particle_output.mp4",
   "visual": {
     "type": "particle_swarm",
-    "resolution": [1920, 1080],
+    "resolution": [
+      1920,
+      1080
+    ],
     "fps": 60,
     "colors": {
       "primary": "#00F5FF",
@@ -23,5 +26,6 @@
     "grain": 0.04,
     "vignette": 0.3,
     "chromatic_aberration": 1.0
-  }
+  },
+  "background_color": "#0A0A0A"
 }

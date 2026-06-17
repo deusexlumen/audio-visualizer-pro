@@ -1,9 +1,13 @@
 """Panel fuer Visualizer-Auswahl, Parameter und Post-Process."""
 
 from PyQt6.QtCore import Qt
+import colorsys
+
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSlider, QGroupBox,
     QGridLayout, QCheckBox, QLineEdit, QPushButton, QFileDialog, QDoubleSpinBox,
+    QColorDialog,
 )
 
 from src.gui.state import AppState
@@ -42,6 +46,50 @@ class ParamsPanel(QWidget):
         transform_layout.addWidget(QLabel("Scale"), 2, 0)
         transform_layout.addWidget(self.slider_scale, 2, 1)
         layout.addWidget(transform_box)
+
+        # Farb-Einstellungen
+        color_box = QGroupBox("Color")
+        color_layout = QGridLayout(color_box)
+
+        color_layout.addWidget(QLabel("Color Mode"), 0, 0)
+        self.combo_color_mode = QComboBox()
+        self.combo_color_mode.addItems(["chroma", "fixed", "monochrome", "warm", "cool"])
+        self.combo_color_mode.setCurrentText(self.state.color_mode)
+        self.combo_color_mode.currentTextChanged.connect(self._on_color_mode_changed)
+        color_layout.addWidget(self.combo_color_mode, 0, 1)
+
+        self.btn_primary_color, self.lbl_primary_color = self._create_color_picker(
+            "Primary", self.state.primary_color
+        )
+        color_layout.addWidget(QLabel("Primary"), 1, 0)
+        color_layout.addWidget(self.btn_primary_color, 1, 1)
+        color_layout.addWidget(self.lbl_primary_color, 1, 2)
+
+        self.btn_secondary_color, self.lbl_secondary_color = self._create_color_picker(
+            "Secondary", self.state.secondary_color
+        )
+        color_layout.addWidget(QLabel("Secondary"), 2, 0)
+        color_layout.addWidget(self.btn_secondary_color, 2, 1)
+        color_layout.addWidget(self.lbl_secondary_color, 2, 2)
+
+        self.btn_background_color, self.lbl_background_color = self._create_color_picker(
+            "Background", self.state.background_color
+        )
+        color_layout.addWidget(QLabel("Background"), 3, 0)
+        color_layout.addWidget(self.btn_background_color, 3, 1)
+        color_layout.addWidget(self.lbl_background_color, 3, 2)
+
+        color_layout.addWidget(QLabel("Saturation"), 4, 0)
+        self.slider_color_saturation = self._make_slider(0, 100, int(self.state.color_saturation * 100))
+        self.slider_color_saturation.valueChanged.connect(self._on_color_saturation_changed)
+        color_layout.addWidget(self.slider_color_saturation, 4, 1)
+
+        color_layout.addWidget(QLabel("Brightness"), 5, 0)
+        self.slider_viz_brightness = self._make_slider(50, 200, int(self.state.viz_brightness * 100))
+        self.slider_viz_brightness.valueChanged.connect(self._on_viz_brightness_changed)
+        color_layout.addWidget(self.slider_viz_brightness, 5, 1)
+
+        layout.addWidget(color_box)
 
         # Post-Process
         pp_box = QGroupBox("Post-Process")
@@ -227,6 +275,45 @@ class ParamsPanel(QWidget):
     def _set(self, key: str, value):
         setattr(self.state, key, value)
         self.state.set(key, value)
+
+    def _create_color_picker(self, label: str, initial_hex: str):
+        btn = QPushButton()
+        btn.setFixedSize(32, 20)
+        btn.setToolTip(f"{label}-Farbe auswählen")
+        lbl = QLabel(initial_hex)
+        lbl.setMinimumWidth(60)
+        self._update_color_button(btn, initial_hex)
+        btn.clicked.connect(lambda: self._on_color_picked(label.lower(), btn, lbl))
+        return btn, lbl
+
+    def _update_color_button(self, btn: QPushButton, hex_color: str):
+        btn.setStyleSheet(f"background-color: {hex_color}; border: 1px solid #555;")
+
+    def _on_color_picked(self, key: str, btn: QPushButton, lbl: QLabel):
+        current = QColor(getattr(self.state, f"{key}_color", "#FFFFFF"))
+        color = QColorDialog.getColor(current, self, f"{key.capitalize()}-Farbe wählen")
+        if not color.isValid():
+            return
+        hex_color = color.name().upper()
+        setattr(self.state, f"{key}_color", hex_color)
+        self._update_color_button(btn, hex_color)
+        lbl.setText(hex_color)
+
+        if key == "primary":
+            r, g, b = color.redF(), color.greenF(), color.blueF()
+            h, s, v = colorsys.rgb_to_hsv(r, g, b)
+            self.state.base_hue = h
+            self.state.color_saturation = s
+            self.slider_color_saturation.setValue(int(s * 100))
+
+    def _on_color_mode_changed(self, text: str):
+        self.state.color_mode = text
+
+    def _on_color_saturation_changed(self, value: int):
+        self.state.color_saturation = value / 100.0
+
+    def _on_viz_brightness_changed(self, value: int):
+        self.state.viz_brightness = value / 100.0
 
     def _on_intro_enabled_changed(self, state):
         self.state.intro_enabled = bool(state)

@@ -3,7 +3,10 @@
   "output_file": "circle_output.mp4",
   "visual": {
     "type": "neon_wave_circle",
-    "resolution": [1920, 1080],
+    "resolution": [
+      1920,
+      1080
+    ],
     "fps": 60,
     "colors": {
       "primary": "#39FF14",
@@ -21,5 +24,6 @@
     "grain": 0.02,
     "vignette": 0.5,
     "chromatic_aberration": 0.3
-  }
+  },
+  "background_color": "#0A0A0A"
 }

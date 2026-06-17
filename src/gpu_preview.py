@@ -12,6 +12,16 @@ import numpy as np
 from PIL import Image
 
 from .analyzer import AudioAnalyzer
+
+
+def _hex_to_rgb(hex_color: str) -> tuple:
+    """Wandelt einen 6-stelligen Hex-String in RGB (0.0-1.0) um."""
+    hex_color = hex_color.lstrip('#')
+    return (
+        int(hex_color[0:2], 16) / 255.0,
+        int(hex_color[2:4], 16) / 255.0,
+        int(hex_color[4:6], 16) / 255.0,
+    )
 from .gpu_renderer import GPUPreviewRenderer
 from .gpu_visualizers import get_visualizer
 from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
@@ -30,6 +40,7 @@ def render_gpu_preview(
     background_blur: float = 0.0,
     background_vignette: float = 0.0,
     background_opacity: float = 0.3,
+    background_color: str = "#0A0A0A",
     postprocess: dict = None,
     quotes: list = None,
     quote_config: QuoteOverlayConfig = None,
@@ -146,7 +157,11 @@ def render_gpu_preview(
 
         # Frame rendern
         renderer.fbo.use()
-        renderer.ctx.clear(0.05, 0.05, 0.05)
+        if bg_texture is None:
+            bg_rgb = _hex_to_rgb(background_color)
+            renderer.ctx.clear(bg_rgb[0], bg_rgb[1], bg_rgb[2])
+        else:
+            renderer.ctx.clear(0.0, 0.0, 0.0)
 
         if bg_texture is not None:
             renderer._render_background(bg_texture, background_opacity, background_vignette)
