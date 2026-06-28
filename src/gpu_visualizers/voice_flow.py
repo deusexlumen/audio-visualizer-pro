@@ -50,6 +50,7 @@ class VoiceFlowGPU(BaseGPUVisualizer):
             uniform float u_time;
             uniform float u_voice;
             uniform vec3 u_color;
+            uniform float u_hue;
             uniform float u_flow_speed;
             uniform float u_wave_depth;
             uniform float u_color_saturation;
@@ -101,7 +102,7 @@ class VoiceFlowGPU(BaseGPUVisualizer):
                 
                 vec3 bgColor = u_color * 0.08;
                 vec3 col = bgColor;
-                float baseHue = fract(u_color.x);
+                float baseHue = fract(u_hue);
                 
                 int lines = int(u_line_count);
                 int trails = int(u_trail_length);
@@ -210,6 +211,7 @@ class VoiceFlowGPU(BaseGPUVisualizer):
         self._prog["u_time"].value = time
         self._prog["u_voice"].value = voice_smoothed
         self._prog["u_color"].value = color
+        self._prog["u_hue"].value = self._color_to_hue(color)
         self._prog["u_flow_speed"].value = self.params["flow_speed"]
         self._prog["u_wave_depth"].value = self.params["wave_depth"]
         self._prog["u_color_saturation"].value = self.params["color_saturation"]

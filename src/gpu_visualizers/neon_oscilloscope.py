@@ -250,6 +250,7 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
         f = self._get_feature_at_frame(features, frame_idx)
         rms = f["rms"]
         onset = f["onset"]
+        beat_intensity = f.get("beat_intensity", onset)
         spectral = f["spectral_centroid"]
         chroma = f["chroma"]
 
@@ -330,8 +331,9 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
             self._line_vao.render(mode=moderngl.LINES)
 
         # --- Beat-Flash ---
-        if onset > 0.5:
-            flash_alpha = (onset - 0.5) * 0.25
+        flash_trigger = max(onset, beat_intensity)
+        if flash_trigger > 0.5:
+            flash_alpha = (flash_trigger - 0.5) * 0.25
             flash_color = (neon_color[0] * 0.12, neon_color[1] * 0.12, neon_color[2] * 0.12)
             self._flash_prog["u_color"].value = flash_color
             self._flash_prog["u_alpha"].value = flash_alpha

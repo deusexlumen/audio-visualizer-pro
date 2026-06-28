@@ -267,6 +267,11 @@ class BaseGPUVisualizer(abc.ABC):
         else:
             result["voice_band"] = result.get("voice_clarity", result["rms"])  # Fallback
 
+        if "beat_intensity" in features and len(features["beat_intensity"]) > 0:
+            result["beat_intensity"] = _safe_float(features["beat_intensity"], frame_idx, 0.0)
+        else:
+            result["beat_intensity"] = result["onset"]  # Fallback
+
         if "tempo" in features:
             result["tempo"] = float(features["tempo"])
         else:
@@ -295,6 +300,7 @@ class BaseGPUVisualizer(abc.ABC):
                 "u_detail": f["spectral_centroid"],
                 "u_flow": f["rms"] * 0.3,  # Musik: wenig Flow
                 "u_chroma": f["chroma"],
+                "u_beat_intensity": f.get("beat_intensity", f["onset"]),
             }
         elif mode == "speech":
             return {
@@ -304,6 +310,7 @@ class BaseGPUVisualizer(abc.ABC):
                 "u_detail": f["spectral_centroid"] * 0.5,
                 "u_flow": f.get("voice_band", f.get("voice_clarity", f["rms"])),  # Podcast: Voice-Band > Voice-Clarity > RMS
                 "u_chroma": f["chroma"],
+                "u_beat_intensity": f.get("beat_intensity", f["onset"]) * 0.3,
             }
         else:  # hybrid
             return {
@@ -313,62 +320,66 @@ class BaseGPUVisualizer(abc.ABC):
                 "u_detail": f["spectral_centroid"],
                 "u_flow": f.get("voice_clarity", f["rms"]) * 0.5,
                 "u_chroma": f["chroma"],
+                "u_beat_intensity": f.get("beat_intensity", f["onset"]),
             }
 
     def _chroma_to_color(self, chroma: np.ndarray) -> tuple:
         """Wandelt ein Chroma-Vektor in eine RGB-Farbe um.
-        
+
         Beruecksichtigt color_mode Param:
         - 'chroma': Dynamische Farbe aus Audio-Chroma (bunt)
-        - 'fixed': Feste Farbe aus base_hue
+        - 'fixed': Feste Farbe aus primary_color / base_hue
         - 'monochrome': Graustufen
         - 'warm': Warme Toene (Orange/Gelb)
         - 'cool': Kuehle Toene (Blau/Cyan)
         """
         mode = self.params.get('color_mode', 'chroma')
-        saturation = self.params.get('color_saturation', 0.7)
+        saturation = float(self.params.get('color_saturation', 0.7))
+        brightness = float(self.params.get('brightness', 1.0))
+
+        chroma_arr = np.asarray(chroma).flatten()
+        strength = float(np.max(chroma_arr)) if chroma_arr.size > 0 else 0.5
 
         if mode == 'monochrome':
-            return (0.85, 0.85, 0.85)
+            val = 0.55 * brightness
+            return (val, val, val)
         elif mode == 'fixed':
             primary_color = self.params.get('primary_color')
             if primary_color and isinstance(primary_color, str) and primary_color.startswith('#'):
                 rgb = self._hex_to_rgb(primary_color)
                 h, s, v = self._rgb_to_hsv(*rgb)
-                return self._hsv_to_rgb(h, saturation, v)
-            hue = self.params.get('base_hue', 0.55)
-            return self._hsv_to_rgb(hue, saturation, 0.85)
+                return self._hsv_to_rgb(h, saturation * (0.7 + 0.3 * s), v * brightness)
+            hue = float(self.params.get('base_hue', 0.55))
+            return self._hsv_to_rgb(hue, saturation, 0.85 * brightness)
         elif mode == 'warm':
-            # Warme Palette: Orange/Gelb basierend auf RMS
-            chroma_arr = np.asarray(chroma).flatten()
-            strength = float(np.max(chroma_arr)) if chroma_arr.size > 0 else 0.5
             hue = 0.08 + 0.06 * strength  # Orange bis Gelb
-            return self._hsv_to_rgb(hue, saturation, 0.8 + 0.2 * strength)
+            return self._hsv_to_rgb(hue, saturation, brightness * (0.7 + 0.3 * strength))
         elif mode == 'cool':
-            # Kuehle Palette: Blau/Cyan
-            chroma_arr = np.asarray(chroma).flatten()
-            strength = float(np.max(chroma_arr)) if chroma_arr.size > 0 else 0.5
             hue = 0.55 + 0.1 * strength  # Cyan bis Blau
-            return self._hsv_to_rgb(hue, saturation, 0.8 + 0.2 * strength)
-        
+            return self._hsv_to_rgb(hue, saturation, brightness * (0.7 + 0.3 * strength))
+
         # Default: 'chroma' - dynamische Farbe aus Audio
-        chroma = np.asarray(chroma).flatten()
-        if chroma.size < 12:
-            chroma = np.pad(chroma, (0, 12 - chroma.size))
+        if chroma_arr.size < 12:
+            chroma_arr = np.pad(chroma_arr, (0, 12 - chroma_arr.size))
 
         angles = np.linspace(0.0, 2.0 * np.pi, 12, endpoint=False)
-        x = np.sum(chroma * np.cos(angles))
-        y = np.sum(chroma * np.sin(angles))
+        x = np.sum(chroma_arr * np.cos(angles))
+        y = np.sum(chroma_arr * np.sin(angles))
 
         hue = np.arctan2(y, x) / (2.0 * np.pi)
         if hue < 0:
             hue += 1.0
 
-        strength = float(np.max(chroma))
-        saturation = 0.7 + 0.3 * strength
-        value = 0.6 + 0.4 * strength
+        sat = saturation * (0.7 + 0.3 * strength)
+        val = brightness * (0.55 + 0.45 * strength)
 
-        return self._hsv_to_rgb(hue, saturation, value)
+        return self._hsv_to_rgb(hue, sat, val)
+
+    def _color_to_hue(self, rgb: tuple) -> float:
+        """Extrahiert den Hue-Wert (0.0-1.0) aus einem RGB-Tupel."""
+        if rgb is None:
+            return 0.55
+        return self._rgb_to_hsv(*rgb)[0]
 
     @staticmethod
     def _hsv_to_rgb(h: float, s: float, v: float) -> tuple:

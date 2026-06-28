@@ -46,7 +46,9 @@ class LuminaCoreGPU(BaseGPUVisualizer):
             uniform float u_onset;
             uniform float u_transient;
             uniform float u_centroid;
+            uniform float u_beat_intensity;
             uniform vec3 u_color;
+            uniform float u_hue;
             uniform float u_core_intensity; // Kern-Intensitaet (wird verwendet)
             uniform float u_ring_count;
             uniform float u_noise_scale;
@@ -114,7 +116,7 @@ class LuminaCoreGPU(BaseGPUVisualizer):
                 vec2 center = vec2(0.0);
 
                 // === Transient-Explosion ===
-                float explosion = smoothstep(0.3, 1.0, u_transient) * 0.15;
+                float explosion = smoothstep(0.3, 1.0, max(u_transient, u_beat_intensity)) * 0.15;
 
                 // === Zentrale Kugel mit FBM Displacement ===
                 vec2 p = uv - center;
@@ -155,7 +157,7 @@ class LuminaCoreGPU(BaseGPUVisualizer):
                     float ringDist = abs(sdCircle(rp, ringRadius)) - ringWidth;
 
                     // Ring-Farbe (verschobener Hue)
-                    vec3 ringColor = hsv2rgb(vec3(fract(u_color.x + fi * 0.1), 0.8, 1.0));
+                    vec3 ringColor = hsv2rgb(vec3(fract(u_hue + fi * 0.1), 0.8, 1.0));
 
                     // Beat-Puls auf Ringen
                     float pulse = 1.0 + u_onset * 0.3 * sin(rp.y * 20.0 + u_time * 5.0);
@@ -202,7 +204,9 @@ class LuminaCoreGPU(BaseGPUVisualizer):
         self._prog["u_onset"].value = uniforms["u_beat"]
         self._prog["u_transient"].value = uniforms["u_impact"]
         self._prog["u_centroid"].value = uniforms["u_detail"]
+        self._prog["u_beat_intensity"].value = uniforms.get("u_beat_intensity", uniforms["u_beat"])
         self._prog["u_color"].value = color
+        self._prog["u_hue"].value = self._color_to_hue(color)
         self._prog["u_core_intensity"].value = self.params["core_intensity"]
         self._prog["u_ring_count"].value = self.params["ring_count"]
         self._prog["u_noise_scale"].value = self.params["noise_scale"]

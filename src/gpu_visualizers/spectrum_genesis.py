@@ -153,7 +153,7 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
             h = max(2.0, h)
 
             # Farbverlauf
-            hue = (color[0] + i / bar_count * color_shift + color_shift) % 1.0
+            hue = (self._color_to_hue(color) + i / bar_count * color_shift + color_shift) % 1.0
             sat = 0.7 + uniforms["u_energy"] * 0.3
             val = 0.5 + h / max_h * 0.5
             bar_rgb = self._hsv_to_rgb(hue, sat, val)
@@ -198,9 +198,10 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
         self._wave_vao.render(mode=moderngl.TRIANGLE_STRIP)
 
         # Beat Flash
-        if uniforms["u_beat"] > 0.3:
-            flash_alpha = (uniforms["u_beat"] - 0.3) * beat_flash
-            # Einfacher Flash via Clear-Color-Mix waere besser, aber wir nutzen
-            # den vorhandenen Wellenform-Shader der bereits Flash rendert
+        beat_intensity = uniforms.get("u_beat_intensity", uniforms["u_beat"])
+        if beat_intensity > 0.3:
+            # Flash-Intensitaet wird ueber den Wellenform-Shader bereits dargestellt,
+            # hier koennte spaeter ein dedizierter Fullscreen-Flash ergaenzt werden.
+            pass
 
         self.ctx.disable(moderngl.BLEND)

@@ -25,6 +25,7 @@ _FRAGMENT_SHADER = """
 uniform vec2 u_resolution;
 uniform float u_rms;
 uniform float u_onset;
+uniform float u_beat_intensity;
 uniform vec3 u_color;
 uniform float u_pulse_intensity;
 uniform int u_ring_count;
@@ -50,7 +51,7 @@ void main() {
         float ringWidth = 0.015;
         float ringGlow = smoothstep(ringRadius + ringWidth, ringRadius, dist)
                        * smoothstep(ringRadius - ringWidth, ringRadius, dist);
-        ring += ringGlow * (0.2 + u_onset * 0.4);
+        ring += ringGlow * (0.2 + max(u_onset, u_beat_intensity) * 0.4);
     }
 
     vec3 color = u_color * glow + u_color * ring * u_onset * 0.7;
@@ -145,6 +146,7 @@ class PulsingCoreGPU(BaseGPUVisualizer):
 
         rms = f["rms"]
         onset = f["onset"]
+        beat_intensity = f.get("beat_intensity", onset)
         chroma = f["chroma"]
 
         # Farbe aus dominantem Chroma-Ton ableiten
@@ -153,6 +155,7 @@ class PulsingCoreGPU(BaseGPUVisualizer):
         # Uniforms aktualisieren
         self.prog["u_rms"].value = float(rms)
         self.prog["u_onset"].value = float(onset)
+        self.prog["u_beat_intensity"].value = float(beat_intensity)
         self.prog["u_color"].value = color
         self.prog["u_pulse_intensity"].value = float(self.params['pulse_intensity'])
         self.prog["u_ring_count"].value = int(self.params['ring_count'])

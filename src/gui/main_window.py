@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
@@ -326,6 +327,67 @@ class MainWindow(QMainWindow):
     def _on_render_finished(self, output_path: str):
         if self.sender() is not self._render_worker:
             return
+        if self.state.intro_enabled and self.state.intro_path:
+            if Path(self.state.intro_path).exists():
+                self._start_intro_merge(output_path)
+                return
+            self._set_status("Intro-Datei nicht gefunden, überspringe Intro.", "warn")
+        self._finish_render(output_path)
+
+    def _start_intro_merge(self, main_video_path: str):
+        from src.gui.workers import IntroWorker
+
+        if self._intro_worker and self._intro_worker.isRunning():
+            return
+        tmp_path = str(Path(main_video_path).with_suffix(".intro_tmp.mp4"))
+        self._intro_worker = IntroWorker(
+            intro_path=self.state.intro_path,
+            main_video_path=main_video_path,
+            output_path=tmp_path,
+            fade_duration=self.state.intro_fade_duration,
+            parent=self,
+        )
+        self._intro_worker.intro_progress.connect(self._on_intro_progress)
+        self._intro_worker.intro_finished.connect(self._on_intro_finished)
+        self._intro_worker.intro_error.connect(self._on_intro_error)
+        self._intro_worker.finished.connect(lambda: self._cleanup_worker("_intro_worker"))
+        self.btn_render.setText("⏳ Intro...")
+        self._set_status("Füge Intro hinzu...", "warn")
+        self._intro_worker.start()
+
+    def _on_intro_progress(self, progress: float):
+        if self.sender() is not self._intro_worker:
+            return
+        pct = int(progress * 100)
+        self._set_status(f"Intro... {pct}%", "warn")
+
+    def _on_intro_finished(self, tmp_path: str):
+        if self.sender() is not self._intro_worker:
+            return
+        main_path = str(Path(tmp_path).with_suffix(".mp4"))
+        try:
+            os.replace(tmp_path, main_path)
+        except Exception as e:
+            self._set_status(f"Intro-Fehler: {e}", "error")
+            self.btn_render.setText("▶ Render")
+            QMessageBox.critical(self, "Intro-Fehler", f"Konnte Intro-Datei nicht übernehmen:\n{e}")
+            return
+        self._finish_render(main_path)
+
+    def _on_intro_error(self, msg: str):
+        if self.sender() is not self._intro_worker:
+            return
+        self.btn_render.setText("▶ Render")
+        self._set_status(f"Intro-Fehler: {msg}", "error")
+        QMessageBox.critical(self, "Intro-Fehler", msg)
+        tmp_path = getattr(self._intro_worker, "output_path", None)
+        if tmp_path and Path(tmp_path).exists():
+            try:
+                Path(tmp_path).unlink()
+            except Exception:
+                pass
+
+    def _finish_render(self, output_path: str):
         self.btn_render.setText("▶ Render")
         self._set_status(f"Fertig: {output_path}", "ok")
         QMessageBox.information(self, "Render fertig", f"Video gespeichert:\n{output_path}")
@@ -372,6 +434,8 @@ class MainWindow(QMainWindow):
                 worker.requestInterruption()
         if self._render_worker and self._render_worker.isRunning():
             self._render_worker.cancel()
+        if self._intro_worker and self._intro_worker.isRunning():
+            self._intro_worker.cancel()
         for worker in workers:
             if worker and worker.isRunning():
                 worker.wait(2000)

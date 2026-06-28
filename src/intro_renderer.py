@@ -73,6 +73,7 @@ def get_media_info(path: str) -> dict:
         path,
     ]
     sample_rate = 48000
+    has_audio = False
     try:
         audio_result = subprocess.run(
             audio_cmd,
@@ -85,6 +86,7 @@ def get_media_info(path: str) -> dict:
         audio_streams = audio_data.get("streams", [])
         if audio_streams:
             sample_rate = int(audio_streams[0].get("sample_rate", 48000))
+            has_audio = True
     except Exception:
         pass
 
@@ -94,6 +96,7 @@ def get_media_info(path: str) -> dict:
         "height": height,
         "fps": fps,
         "audio_sample_rate": sample_rate,
+        "has_audio": has_audio,
     }
 
 
@@ -101,14 +104,19 @@ def _build_filter_complex(
     intro_info: dict,
     main_info: dict,
     fade_duration: float,
-) -> str:
-    """Baut den FFmpeg filter_complex fuer Intro + Crossfade."""
+) -> tuple[str, bool]:
+    """Baut den FFmpeg filter_complex fuer Intro + Crossfade.
+
+    Returns:
+        Tuple aus (filter_complex_string, has_audio_output).
+    """
     w = main_info["width"]
     h = main_info["height"]
     fps = main_info["fps"]
     sr = main_info["audio_sample_rate"]
 
     intro_dur = intro_info["duration"]
+    main_dur = main_info["duration"]
     if fade_duration >= intro_dur:
         fade_duration = max(0.1, intro_dur - 0.1)
 
@@ -120,26 +128,50 @@ def _build_filter_complex(
         offset = 0.01
         delay_ms = 10
 
-    return (
-        # Intro-Video auf Hauptvideo-Format anpassen
+    intro_has_audio = intro_info.get("has_audio", False)
+    main_has_audio = main_info.get("has_audio", False)
+
+    # Video-Kette
+    video_chain = (
         f"[0:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
         f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,"
         f"format=yuv420p,fps={fps}[v0];"
-        # Haupt-Video auf gleiches Format anpassen
         f"[1:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
         f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,"
         f"format=yuv420p,fps={fps}[v1];"
-        # Video-Crossfade
-        f"[v0][v1]xfade=transition=fade:duration={fade_duration}:offset={offset}[outv];"
-        # Intro-Audio fade-out
-        f"[0:a]aformat=sample_fmts=fltp:sample_rates={sr}:channel_layouts=stereo,"
-        f"afade=t=out:st={offset}:d={fade_duration}[a0];"
-        # Haupt-Audio delayed + fade-in
-        f"[1:a]aformat=sample_fmts=fltp:sample_rates={sr}:channel_layouts=stereo,"
-        f"afade=t=in:st=0:d={fade_duration},adelay={delay_ms}|{delay_ms}[a1];"
-        # Audio mixen
-        f"[a0][a1]amix=inputs=2:duration=longest:dropout_transition=0[outa]"
+        f"[v0][v1]xfade=transition=fade:duration={fade_duration}:offset={offset}[outv]"
     )
+
+    if not intro_has_audio and not main_has_audio:
+        return video_chain, False
+
+    # Intro-Audio: echte Spur oder stummer Platzhalter
+    if intro_has_audio:
+        intro_audio = (
+            f"[0:a]aformat=sample_fmts=fltp:sample_rates={sr}:channel_layouts=stereo,"
+            f"afade=t=out:st={offset}:d={fade_duration}[a0]"
+        )
+    else:
+        intro_audio = (
+            f"anullsrc=r={sr}:cl=stereo,atrim=0:{intro_dur},"
+            f"aformat=sample_fmts=fltp:sample_rates={sr}:channel_layouts=stereo,"
+            f"afade=t=out:st={offset}:d={fade_duration}[a0]"
+        )
+
+    # Haupt-Audio: echte Spur oder stummer Platzhalter
+    if main_has_audio:
+        main_audio = (
+            f"[1:a]aformat=sample_fmts=fltp:sample_rates={sr}:channel_layouts=stereo,"
+            f"afade=t=in:st=0:d={fade_duration},adelay={delay_ms}|{delay_ms}[a1]"
+        )
+    else:
+        main_audio = (
+            f"anullsrc=r={sr}:cl=stereo,atrim=0:{main_dur},"
+            f"adelay={delay_ms}|{delay_ms}[a1]"
+        )
+
+    audio_chain = f"{intro_audio};{main_audio};[a0][a1]amix=inputs=2:duration=longest:dropout_transition=0[outa]"
+    return f"{video_chain};{audio_chain}", True
 
 
 def render_with_intro(
@@ -181,7 +213,7 @@ def render_with_intro(
     if main_info["duration"] <= 0:
         raise IntroRendererError("Haupt-Video hat keine gueltige Dauer")
 
-    filter_complex = _build_filter_complex(intro_info, main_info, fade_duration)
+    filter_complex, has_audio_output = _build_filter_complex(intro_info, main_info, fade_duration)
 
     cmd = [
         "ffmpeg", "-y",
@@ -189,14 +221,15 @@ def render_with_intro(
         "-i", str(main_video_path),
         "-filter_complex", filter_complex,
         "-map", "[outv]",
-        "-map", "[outa]",
+    ]
+    if has_audio_output:
+        cmd.extend(["-map", "[outa]", "-c:a", "aac", "-b:a", "192k"])
+    cmd.extend([
         "-c:v", "libx264",
         "-preset", "veryfast",
         "-crf", "23",
-        "-c:a", "aac",
-        "-b:a", "192k",
         str(output_path),
-    ]
+    ])
 
     creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     process = subprocess.Popen(

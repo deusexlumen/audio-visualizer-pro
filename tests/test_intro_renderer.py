@@ -88,3 +88,24 @@ def test_render_with_intro_cancel(intro_and_main, tmp_path):
             output_path=str(output),
             cancel_event=cancel_event,
         )
+
+
+def test_render_with_intro_no_audio(tmp_path):
+    """Intro ohne Ton sollte trotzdem vor ein Video mit Ton gesetzt werden können."""
+    intro = tmp_path / "intro_no_audio.mp4"
+    main = tmp_path / "main.mp4"
+    _generate_test_video(intro, 1.0)
+    _generate_test_video(main, 3.0)
+    output = tmp_path / "result_no_audio_intro.mp4"
+
+    result = render_with_intro(
+        intro_path=str(intro),
+        main_video_path=str(main),
+        output_path=str(output),
+        fade_duration=0.5,
+    )
+
+    assert Path(result).exists()
+    info = get_media_info(result)
+    assert info["duration"] >= 3.4
+    assert info["has_audio"] is True
