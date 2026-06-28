@@ -237,6 +237,7 @@ class AIOptimizeWorker(QThread):
         colors: dict,
         param_specs: dict | None = None,
         user_prompt: str | None = None,
+        recommendation: dict | None = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -247,6 +248,7 @@ class AIOptimizeWorker(QThread):
         self.colors = colors
         self.param_specs = param_specs or {}
         self.user_prompt = user_prompt
+        self.recommendation = recommendation
 
     def run(self):
         try:
@@ -257,6 +259,7 @@ class AIOptimizeWorker(QThread):
                 colors=self.colors,
                 param_specs=self.param_specs,
                 user_prompt=self.user_prompt,
+                recommendation=self.recommendation,
             )
             result = future.result(timeout=60)
             self.optimize_ready.emit(result)

@@ -242,11 +242,12 @@ class GeminiIntegration:
     def optimize_all_settings_async(self, visualizer_type: str, current_params: dict,
                                      audio_features: dict, colors: dict,
                                      param_specs: dict = None,
-                                     user_prompt: str = None) -> concurrent.futures.Future:
+                                     user_prompt: str = None,
+                                     recommendation: dict = None) -> concurrent.futures.Future:
         """Asynchrone Parameter-Optimierung. Gibt ein Future zurueck."""
         return self._executor.submit(
             self.optimize_all_settings, visualizer_type, current_params,
-            audio_features, colors, param_specs, user_prompt
+            audio_features, colors, param_specs, user_prompt, recommendation
         )
 
     def generate_background_prompt_async(self, audio_features: dict) -> concurrent.futures.Future:
@@ -637,10 +638,146 @@ class GeminiIntegration:
             return [GeminiIntegration._sanitize_for_json(v) for v in obj]
         return obj
 
+    @staticmethod
+    def _is_valid_hex(color: str) -> bool:
+        """Prueft ob ein String ein gueltiger #RRGGBB Hex-Code ist."""
+        if not isinstance(color, str):
+            return False
+        color = color.strip()
+        return len(color) == 7 and color.startswith('#') and all(
+            c in '0123456789abcdefABCDEF' for c in color[1:]
+        )
+
+    def _validate_optimized_result(self, optimized: dict, current_params: dict,
+                                   colors: dict, param_specs: dict) -> dict:
+        """Validiert und korrigiert das KI-Ergebnis (Clamp, Hex-Check, Defaults)."""
+        import re
+
+        default_quotes = {
+            "font_size": 52, "box_color": "#1a1a2e", "font_color": "#FFFFFF",
+            "position": "bottom", "display_duration": 8.0, "auto_scale_font": True,
+            "text_shadow_enabled": True, "box_gradient": True, "accent_line": True,
+            "accent_line_color": "#FFC864", "box_padding": 32,
+            "box_radius": 16, "box_margin_bottom": 100, "max_width_ratio": 0.75,
+            "fade_duration": 0.6, "line_spacing": 1.35, "max_font_size": 72,
+            "max_chars_per_line": 40,
+        }
+
+        # --- Params validieren ---
+        result_params = {}
+        raw_params = optimized.get("params") or {}
+        for name, val in raw_params.items():
+            if name in (param_specs or {}):
+                default, min_val, max_val, step = param_specs[name]
+                # String-Parameter ohne numerische Bounds
+                if min_val is None or max_val is None or step is None:
+                    if isinstance(val, str):
+                        allowed = {
+                            "color_mode": {"chroma", "fixed", "monochrome", "warm", "cool"},
+                        }
+                        if name in allowed and val in allowed[name]:
+                            result_params[name] = val
+                    continue
+                try:
+                    val = float(val)
+                except (TypeError, ValueError):
+                    val = default
+                val = max(min_val, min(max_val, val))
+                if isinstance(step, int):
+                    val = round(val / step) * step
+                    val = int(val)
+                else:
+                    val = round(val / step) * step
+                result_params[name] = val
+            elif name in current_params:
+                # Bekannte aktuelle Parameter, die nicht in specs sind (z.B. String-Parameter)
+                if isinstance(val, str):
+                    allowed = {
+                        "color_mode": {"chroma", "fixed", "monochrome", "warm", "cool"},
+                    }
+                    if name in allowed and val in allowed[name]:
+                        result_params[name] = val
+                elif isinstance(val, (int, float)):
+                    result_params[name] = val
+
+        # --- Farben validieren ---
+        result_colors = {}
+        for key, default in [("primary", colors.get("primary", "#FF0055")),
+                             ("secondary", colors.get("secondary", "#00CCFF")),
+                             ("background", colors.get("background", "#0A0A0A"))]:
+            val = optimized.get("colors", {}).get(key)
+            result_colors[key] = val if self._is_valid_hex(val) else default
+
+        # --- Postprocess validieren ---
+        pp_defaults = {"contrast": 1.0, "saturation": 1.0, "brightness": 0.0,
+                       "warmth": 0.0, "film_grain": 0.0}
+        result_pp = {}
+        raw_pp = optimized.get("postprocess") or {}
+        for key, default in pp_defaults.items():
+            val = raw_pp.get(key, default)
+            try:
+                val = float(val)
+            except (TypeError, ValueError):
+                val = default
+            if key in ("contrast", "saturation"):
+                val = max(0.3, min(2.5, val))
+            elif key == "brightness":
+                val = max(-0.5, min(0.5, val))
+            elif key in ("warmth", "film_grain"):
+                val = max(0.0, min(1.0, val))
+            result_pp[key] = val
+
+        # --- Hintergrund validieren ---
+        bg_defaults = {"opacity": 0.3, "blur": 0.0, "vignette": 0.0}
+        result_bg = {}
+        raw_bg = optimized.get("background") or {}
+        for key, default in bg_defaults.items():
+            val = raw_bg.get(key, default)
+            try:
+                val = float(val)
+            except (TypeError, ValueError):
+                val = default
+            result_bg[key] = max(0.0, min(1.0, val))
+
+        # --- Quotes validieren ---
+        raw_quotes = optimized.get("quotes") or {}
+        result_quotes = {**default_quotes}
+        for key, default in default_quotes.items():
+            val = raw_quotes.get(key)
+            if val is None:
+                continue
+            if key in ("font_size", "box_padding", "box_radius", "box_margin_bottom",
+                       "max_chars_per_line", "max_font_size"):
+                try:
+                    result_quotes[key] = int(val)
+                except (TypeError, ValueError):
+                    pass
+            elif key in ("display_duration", "fade_duration", "line_spacing", "max_width_ratio"):
+                try:
+                    result_quotes[key] = max(0.0, float(val))
+                except (TypeError, ValueError):
+                    pass
+            elif key in ("auto_scale_font", "text_shadow_enabled", "box_gradient", "accent_line"):
+                result_quotes[key] = bool(val)
+            elif key in ("box_color", "font_color", "accent_line_color"):
+                if self._is_valid_hex(val):
+                    result_quotes[key] = val
+            elif key == "position" and val in {"bottom", "center", "top"}:
+                result_quotes[key] = val
+
+        return {
+            "params": result_params,
+            "colors": result_colors,
+            "postprocess": result_pp,
+            "background": result_bg,
+            "quotes": result_quotes,
+        }
+
     def optimize_all_settings(self, visualizer_type: str, current_params: dict,
                               audio_features: dict, colors: dict,
                               param_specs: dict = None,
-                              user_prompt: str = None) -> dict:
+                              user_prompt: str = None,
+                              recommendation: dict = None) -> dict:
         """
         Nutzt Gemini, um ALLE Einstellungen basierend auf Audio-Analyse zu optimieren.
         
@@ -788,10 +925,24 @@ class GeminiIntegration:
             onset_std = audio_features.get('onset_std', 0.0)
             transient_mean = audio_features.get('transient_mean', 0.0)
             voice_clarity_mean = audio_features.get('voice_clarity_mean', 0.0)
+            brightness = audio_features.get('brightness', 0.5)
+            noisiness = audio_features.get('noisiness', 0.1)
             mode = audio_features.get('mode', 'music')
             tempo = audio_features.get('tempo', 120)
             rms_mean = audio_features.get('rms_mean', 0.5)
             onset_mean = audio_features.get('onset_mean', 0.3)
+
+            rec_text = ""
+            if recommendation:
+                rec_text = f"""
+================================================================================
+SMARTMATCHER-EMPFEHLUNG
+================================================================================
+- Visualizer: {recommendation.get('visualizer', visualizer_type)}
+- Konfidenz: {recommendation.get('confidence', 0.0):.0%}
+- Begruendung: {recommendation.get('reason', 'Keine')}
+- Vorgeschlagene Farben: Primary={recommendation.get('colors', {}).get('primary', '-')}, Secondary={recommendation.get('colors', {}).get('secondary', '-')}, Background={recommendation.get('colors', {}).get('background', '-')}
+"""
 
             prompt = f"""Du bist ein professioneller Motion-Graphics-Designer und Color-Grading-Experte.
 
@@ -807,8 +958,9 @@ AUDIO-ANALYSE
 - Onset (Beat-Staerke): mean={onset_mean:.2f}, std={onset_std:.2f}
 - Transienten (Kick/Snare-Praesenz): {transient_mean:.2f}
 - Voice-Clarity (Sprach-Anteil): {voice_clarity_mean:.2f}
-- Spektrale Dominanz: {audio_features.get('spectral_mean', 0.5):.2f}
-
+- Spektrale Helligkeit: {brightness:.2f}
+- Rausch-Anteil: {noisiness:.2f}
+{rec_text}
 ================================================================================
 VISUALIZER: {visualizer_type}
 ================================================================================
@@ -874,6 +1026,43 @@ Quote-Regeln:
 - Ruhig:        sehr grosse Schrift (56-72px), Position center, nur Fade
 
 ================================================================================
+BEISPIELE (Few-Shot)
+================================================================================
+Beispiel 1 – Ruhender Podcast (voice_flow):
+Audio: 90 BPM, mode=speech, RMS mean=0.20, Voice-Clarity=0.55
+{{
+  "params": {{
+    "flow_speed": 0.25, "wave_depth": 0.45, "breathe_intensity": 0.35,
+    "line_count": 4, "glow_strength": 0.5, "line_width": 0.004,
+    "trail_length": 2, "trail_decay": 0.75, "brightness": 1.0
+  }},
+  "colors": {{"primary": "#667EEA", "secondary": "#764BA2", "background": "#1A1A2E"}},
+  "postprocess": {{"contrast": 1.05, "saturation": 0.8, "brightness": 0.0, "warmth": 0.1, "film_grain": 0.05}},
+  "background": {{"opacity": 0.3, "blur": 0.0, "vignette": 0.0}},
+  "quotes": {{
+    "font_size": 58, "box_color": "#1a1a2e", "font_color": "#FFFFFF",
+    "position": "bottom", "display_duration": 8.0, "auto_scale_font": true,
+    "text_shadow_enabled": true, "box_gradient": true, "accent_line": true,
+    "accent_line_color": "#FFC864", "box_padding": 36,
+    "box_radius": 20, "box_margin_bottom": 100, "max_width_ratio": 0.7,
+    "fade_duration": 0.8, "line_spacing": 1.5, "max_font_size": 72,
+    "max_chars_per_line": 40
+  }}
+}}
+
+Beispiel 2 – Energische Musik (spectrum_bars):
+Audio: 140 BPM, mode=music, RMS mean=0.65, Onset mean=0.40
+{{
+  "params": {{
+    "bar_count": 64, "height_scale": 1.3, "spacing": 0.25, "color_shift": 0.05
+  }},
+  "colors": {{"primary": "#FF0055", "secondary": "#00CCFF", "background": "#0A0A0A"}},
+  "postprocess": {{"contrast": 1.25, "saturation": 1.35, "brightness": -0.03, "warmth": 0.0, "film_grain": 0.05}},
+  "background": {{"opacity": 0.25, "blur": 0.0, "vignette": 0.15}},
+  "quotes": {{}}
+}}
+
+================================================================================
 AUSGABEFORMAT (STRIKTES JSON)
 ================================================================================
 Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown-Code-Block.
@@ -898,7 +1087,8 @@ WICHTIGE HINWEISE:
 1. Jeder Wert in "params" MUSS innerhalb des jeweiligen min/max-Bereichs liegen.
 2. Float-Werte MUSSEN auf die angegebene step-Schrittweite gerundet werden.
 3. Bei "colors" verwende gueltige Hex-Codes (#RRGGBB).
-4. Der User-Prompt hat Prioritaet ueber alle automatischen Regeln.
+4. Bei "postprocess" muessen contrast >= 0.3, saturation >= 0.0 und grain <= 1.0 sein.
+5. Der User-Prompt hat Prioritaet ueber alle automatischen Regeln.
 """
             
             if user_prompt:
@@ -916,19 +1106,8 @@ WICHTIGE HINWEISE:
 
             optimized = self._parse_json_response(response.text)
 
-            default_quotes = {
-                "font_size": 52, "box_color": "#1a1a2e", "font_color": "#FFFFFF",
-                "position": "bottom", "display_duration": 8.0, "auto_scale_font": True,
-                "text_shadow_enabled": True, "box_gradient": True, "accent_line": True,
-                "accent_line_color": "#FFC864", "box_padding": 32,
-                "box_radius": 16, "box_margin_bottom": 100, "max_width_ratio": 0.75,
-                "fade_duration": 0.6, "line_spacing": 1.35, "max_font_size": 72,
-                "max_chars_per_line": 40,
-            }
-
             if not isinstance(optimized, dict):
                 print(f"[Gemini] KI-Antwort war kein Dictionary (Typ: {type(optimized).__name__}), verwende Fallback")
-                # Versuche default.json zu laden und mit internem Fallback zu mergen
                 cfg_fallback = self._load_default_config()
                 if cfg_fallback:
                     return {
@@ -939,45 +1118,8 @@ WICHTIGE HINWEISE:
                         "quotes": default_result["quotes"],
                     }
                 return default_result
-            
-            # === PARAM CLAMPING ===
-            result_params = {}
-            if optimized.get("params") and param_specs:
-                for name, val in optimized["params"].items():
-                    if name in param_specs:
-                        default, min_val, max_val, step = param_specs[name]
-                        # Clamping
-                        val = max(min_val, min(max_val, val))
-                        # Auf Step runden
-                        if isinstance(step, int):
-                            val = round(val / step) * step
-                            val = int(val)
-                        else:
-                            val = round(val / step) * step
-                        result_params[name] = val
-                    else:
-                        result_params[name] = val
-            else:
-                result_params = optimized.get("params", current_params) or current_params
-            
-            result = {
-                "params": result_params,
-                "colors": optimized.get("colors", colors),
-                "postprocess": optimized.get("postprocess", {"contrast": 1.0, "saturation": 1.0, "brightness": 0.0,
-                                                               "warmth": 0.0, "film_grain": 0.0}),
-                "background": optimized.get("background", {"opacity": 0.3, "blur": 0.0, "vignette": 0.0}),
-                "quotes": {**default_quotes, **(optimized.get("quotes", {}) or {})},
-            }
-            
-            # Stelle sicher, dass alle erwarteten Keys existieren
-            for k in ["contrast", "saturation", "brightness", "warmth", "film_grain"]:
-                if k not in result["postprocess"]:
-                    result["postprocess"][k] = default_result["postprocess"][k]
-            for k in ["opacity", "blur", "vignette"]:
-                if k not in result["background"]:
-                    result["background"][k] = default_result["background"][k]
-            
-            return result
+
+            return self._validate_optimized_result(optimized, current_params, colors, param_specs)
             
         except Exception as e:
             print(f"[Gemini] All-Settings-Optimierung fehlgeschlagen: {e}, verwende Fallback")

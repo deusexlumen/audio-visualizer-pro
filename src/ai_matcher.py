@@ -128,36 +128,83 @@ class SmartMatcher:
     
     def _get_color_from_key(self, key: Optional[str], is_minor: bool = False) -> Tuple[str, str, str]:
         """
-        Erzeugt eine Farbpalette aus der Tonart.
-        
+        Erzeugt eine harmonische Farbpalette aus der Tonart.
+
         Returns:
             Tuple von (primary, secondary, background) als Hex-Codes.
         """
         if not key:
             # Fallback: neutrale Podcast-Farben
             return '#667EEA', '#764BA2', '#1A1A2E'
-        
+
         # Extrahiere die Note (erster Buchstabe, evtl. mit #)
         key_clean = key.split()[0]  # "C major" → "C"
         if len(key_clean) >= 2 and key_clean[1] == '#':
             note = key_clean[:2]
         else:
             note = key_clean[0]
-        
+
         primary = self.KEY_COLORS.get(note, '#667EEA')
-        
-        # Secondary: etwas dunkler/heller je nach Modus
+
+        # Secondary: Komplementaerfarbe zur Primary fuer harmonischen Kontrast
+        primary_hsv = self._hex_to_hsv(primary)
+        secondary_hue = (primary_hsv[0] + 0.5) % 1.0
+        secondary_sat = min(1.0, primary_hsv[1] * 0.9)
+        secondary_val = min(1.0, primary_hsv[2] * 1.15)
+        secondary = self._hsv_to_hex((secondary_hue, secondary_sat, secondary_val))
+
+        # Background: je nach Modus dunkler/heller
         if is_minor:
-            # Moll = dunkler, gedämpfter
-            secondary = self._darken_color(primary, 0.3)
             bg = '#0F0F1A'
         else:
-            # Dur = heller, offener
-            secondary = self._lighten_color(primary, 0.2)
             bg = '#1A1A2E'
-        
+
         return primary, secondary, bg
-    
+
+    @staticmethod
+    def _hex_to_hsv(hex_color: str) -> Tuple[float, float, float]:
+        """Wandelt Hex-Farbe in HSV-Tupel (0.0-1.0) um."""
+        hex_color = hex_color.lstrip('#')
+        r = int(hex_color[0:2], 16) / 255.0
+        g = int(hex_color[2:4], 16) / 255.0
+        b = int(hex_color[4:6], 16) / 255.0
+
+        mx = max(r, g, b)
+        mn = min(r, g, b)
+        diff = mx - mn
+
+        if diff == 0:
+            h = 0.0
+        elif mx == r:
+            h = (60 * ((g - b) / diff) + 360) % 360
+        elif mx == g:
+            h = (60 * ((b - r) / diff) + 120) % 360
+        else:
+            h = (60 * ((r - g) / diff) + 240) % 360
+
+        s = 0.0 if mx == 0 else diff / mx
+        v = mx
+        return (h / 360.0, s, v)
+
+    @staticmethod
+    def _hsv_to_hex(hsv: Tuple[float, float, float]) -> str:
+        """Wandelt HSV-Tupel (0.0-1.0) in Hex-Farbe um."""
+        h, s, v = hsv
+        h = h % 1.0
+        i = int(h * 6.0)
+        f = (h * 6.0) - i
+        p = v * (1.0 - s)
+        q = v * (1.0 - s * f)
+        t = v * (1.0 - s * (1.0 - f))
+
+        i = i % 6
+        rgb_map = [
+            (v, t, p), (q, v, p), (p, v, t),
+            (p, q, v), (t, p, v), (v, p, q),
+        ]
+        r, g, b = rgb_map[i]
+        return f'#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}'
+
     def _darken_color(self, hex_color: str, factor: float) -> str:
         """Dunkelt eine Hex-Farbe ab."""
         hex_color = hex_color.lstrip('#')
@@ -168,7 +215,7 @@ class SmartMatcher:
         g = int(g * (1 - factor))
         b = int(b * (1 - factor))
         return f'#{r:02x}{g:02x}{b:02x}'
-    
+
     def _lighten_color(self, hex_color: str, factor: float) -> str:
         """Hellt eine Hex-Farbe auf."""
         hex_color = hex_color.lstrip('#')

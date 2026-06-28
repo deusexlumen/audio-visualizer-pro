@@ -220,6 +220,7 @@ class MainWindow(QMainWindow):
             colors=req["colors"],
             param_specs=req["param_specs"],
             user_prompt=req["user_prompt"],
+            recommendation=req.get("recommendation"),
             parent=self,
         )
         self._ai_optimize_worker.optimize_ready.connect(self.ki_panel.on_optimize_finished)

@@ -58,6 +58,7 @@ def test_ai_optimize_worker_emits_optimize_ready(qtbot):
         colors={"primary": "#000000"},
         param_specs={"intensity": {"min": 0.0, "max": 3.0}},
         user_prompt="make it brighter",
+        recommendation=None,
     )
 
 

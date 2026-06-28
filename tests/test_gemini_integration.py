@@ -282,3 +282,52 @@ class TestGeminiIntegration:
 
             gemini = GeminiIntegration(api_key="test-key")
             assert gemini.model == "gemini-3.1-flash-lite"
+
+    def test_validate_optimized_result_clamps_and_filters(self):
+        """Das Ergebnis soll validiert, gecuttet und auf gueltige Werte reduziert werden."""
+        with patch('src.gemini_integration.genai'):
+            from src.gemini_integration import GeminiIntegration
+
+            gemini = GeminiIntegration(api_key="test-key")
+            current_params = {"pulse_intensity": 0.5, "bar_count": 40, "color_mode": "chroma"}
+            param_specs = {
+                "pulse_intensity": (0.5, 0.0, 1.0, 0.05),
+                "bar_count": (40, 10, 100, 5),
+            }
+            colors = {"primary": "#111111", "secondary": "#222222", "background": "#333333"}
+
+            optimized = {
+                "params": {
+                    "pulse_intensity": 99.0,  # muss gecuttet werden
+                    "bar_count": 42,          # muss auf Step 5 gerundet werden
+                    "unknown_param": 123,     # darf nicht im Ergebnis bleiben
+                    "color_mode": "fixed",    # String-Parameter erlaubt
+                },
+                "colors": {
+                    "primary": "#GGGGGG",   # ungueltig -> Fallback
+                    "secondary": "#00FF00", # gueltig
+                },
+                "postprocess": {
+                    "contrast": 5.0,        # muss gecuttet werden
+                    "saturation": -1.0,     # muss gecuttet werden
+                    "brightness": "bad",    # muss Fallback werden
+                },
+                "background": {
+                    "opacity": 1.5,         # muss gecuttet werden
+                },
+            }
+
+            result = gemini._validate_optimized_result(
+                optimized, current_params, colors, param_specs
+            )
+
+            assert result["params"]["pulse_intensity"] == 1.0
+            assert result["params"]["bar_count"] == 40
+            assert "unknown_param" not in result["params"]
+            assert result["params"]["color_mode"] == "fixed"
+            assert result["colors"]["primary"] == colors["primary"]
+            assert result["colors"]["secondary"] == "#00FF00"
+            assert result["postprocess"]["contrast"] == 2.5
+            assert result["postprocess"]["saturation"] == 0.3
+            assert result["postprocess"]["brightness"] == 0.0
+            assert result["background"]["opacity"] == 1.0

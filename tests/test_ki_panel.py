@@ -113,6 +113,10 @@ def test_apply_optimize_result_updates_state(qtbot, state):
         "secondary": "#00FF00",
         "background": "#0000FF",
     }
+    assert state.primary_color == "#FF0000"
+    assert state.secondary_color == "#00FF00"
+    assert state.background_color == "#0000FF"
+    assert state.color_mode == "fixed"
 
 
 def test_safe_float_ignores_invalid_values(qtbot, state):
@@ -159,3 +163,39 @@ def test_features_change_resets_recommendation(qtbot, state):
 
     assert panel._last_recommendation is None
     assert "Noch keine Optimierung" in panel.lbl_recommendation.text()
+
+
+def test_smartmatcher_colors_applied_to_state(qtbot, state):
+    panel = KIPanel(state, gemini=None)
+    qtbot.addWidget(panel)
+
+    rec = panel._matcher.match(DummyFeatures())
+    panel._apply_recommendation(rec)
+
+    assert state.color_mode == "fixed"
+    assert state.primary_color == rec.colors["primary"]
+    assert state.background_color == rec.colors["background"]
+
+
+def test_get_optimize_request_includes_recommendation(qtbot, state):
+    panel = KIPanel(state, gemini=MagicMock())
+    qtbot.addWidget(panel)
+
+    state.features = DummyFeatures()
+    qtbot.mouseClick(panel.btn_optimize, Qt.MouseButton.LeftButton)
+
+    req = panel.get_optimize_request()
+    assert req["recommendation"] is not None
+    assert req["recommendation"]["visualizer"] == panel._last_recommendation.visualizer
+
+
+def test_get_optimize_request_contains_brightness_and_noisiness(qtbot, state):
+    panel = KIPanel(state, gemini=MagicMock())
+    qtbot.addWidget(panel)
+
+    state.features = DummyFeatures()
+    req = panel.get_optimize_request()
+
+    assert "brightness" in req["audio_features"]
+    assert "noisiness" in req["audio_features"]
+    assert req["audio_features"]["brightness"] > 0

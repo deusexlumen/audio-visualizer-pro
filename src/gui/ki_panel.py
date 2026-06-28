@@ -1,6 +1,9 @@
 """KI-Panel fuer die PyQt6-GUI."""
 
+import colorsys
+
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QGroupBox,
@@ -113,11 +116,35 @@ class KIPanel(QWidget):
         self.state.visualizer_type = rec.visualizer
         self.state.viz_params = {**self.state.viz_params, **rec.params}
         self.state.ki_suggested_colors = rec.colors
+        self._apply_colors_to_state(rec.colors)
         self.lbl_colors.setText(
             f"Primary: {rec.colors.get('primary', '-')}  "
             f"Secondary: {rec.colors.get('secondary', '-')}  "
             f"BG: {rec.colors.get('background', '-')}"
         )
+
+    def _apply_colors_to_state(self, colors: dict):
+        """Wendet eine Farbpalette auf den GUI-State an."""
+        primary = colors.get("primary")
+        if primary and primary.startswith('#') and len(primary) == 7:
+            self.state.primary_color = primary.upper()
+            try:
+                r = int(primary[1:3], 16) / 255.0
+                g = int(primary[3:5], 16) / 255.0
+                b = int(primary[5:7], 16) / 255.0
+                h, s, _ = colorsys.rgb_to_hsv(r, g, b)
+                self.state.base_hue = h
+                self.state.color_saturation = s
+            except Exception:
+                pass
+        secondary = colors.get("secondary")
+        if secondary and secondary.startswith('#') and len(secondary) == 7:
+            self.state.secondary_color = secondary.upper()
+        background = colors.get("background")
+        if background and background.startswith('#') and len(background) == 7:
+            self.state.background_color = background.upper()
+        # Damit die vorgeschlagenen Farben tatsaechlich greifen, wechseln wir in den fixed-Modus
+        self.state.color_mode = "fixed"
 
     def on_optimize_finished(self, result: dict):
         self.state.ki_optimizing = False
@@ -177,6 +204,7 @@ class KIPanel(QWidget):
         colors = result.get("colors", {})
         if colors:
             self.state.ki_suggested_colors = colors
+            self._apply_colors_to_state(colors)
             self.lbl_colors.setText(
                 f"Primary: {colors.get('primary', '-')}  "
                 f"Secondary: {colors.get('secondary', '-')}  "
@@ -190,13 +218,28 @@ class KIPanel(QWidget):
         except ValueError:
             viz_class = None
         param_specs = {}
-        if viz_class is None:
-            param_specs = {}
-        else:
+        if viz_class is not None:
             if hasattr(viz_class, "EFFECTS"):
                 param_specs.update(viz_class.EFFECTS)
+            if hasattr(viz_class, "COLOR_PARAMS"):
+                # String-Parameter bekommen einen "Bereich" aus erlaubten Werten
+                for k, v in viz_class.COLOR_PARAMS.items():
+                    if isinstance(v, tuple) and len(v) == 4:
+                        param_specs[k] = v
+                    elif isinstance(v, str):
+                        # Pseudo-Spec fuer color_mode etc. (keine numerische Clamp)
+                        param_specs[k] = (v, None, None, None)
             if hasattr(viz_class, "PARAMS"):
                 param_specs.update(viz_class.PARAMS)
+
+        rec = None
+        if self._last_recommendation is not None:
+            rec = {
+                "visualizer": self._last_recommendation.visualizer,
+                "confidence": self._last_recommendation.confidence,
+                "reason": self._last_recommendation.reason,
+                "colors": self._last_recommendation.colors,
+            }
 
         return {
             "gemini": self.gemini,
@@ -206,6 +249,7 @@ class KIPanel(QWidget):
             "colors": self.state.ki_suggested_colors or {},
             "param_specs": param_specs,
             "user_prompt": self.prompt_input.text().strip() or None,
+            "recommendation": rec,
         }
 
     @staticmethod
@@ -229,6 +273,8 @@ class KIPanel(QWidget):
             "onset_mean": _mean(getattr(features, "onset", [])),
             "onset_std": _std(getattr(features, "onset", [])),
             "spectral_mean": _mean(getattr(features, "spectral_centroid", [])),
+            "brightness": _mean(getattr(features, "spectral_centroid", [])),
+            "noisiness": _mean(getattr(features, "zero_crossing_rate", [])),
             "transient_mean": _mean(getattr(features, "transient", [])),
             "voice_clarity_mean": _mean(getattr(features, "voice_clarity", [])),
         }
