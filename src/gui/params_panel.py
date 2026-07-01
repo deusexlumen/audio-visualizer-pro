@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.gui.state import AppState
-from src.gpu_visualizers import list_visualizers
+from src.gpu_visualizers import list_visualizers, get_visualizer
 
 
 class ParamsPanel(QWidget):
@@ -28,6 +28,7 @@ class ParamsPanel(QWidget):
         viz_layout = QVBoxLayout(viz_box)
         self.combo_viz = QComboBox()
         self.combo_viz.addItems(list_visualizers())
+        self.combo_viz.setCurrentText(self.state.visualizer_type)
         self.combo_viz.currentTextChanged.connect(self._on_visualizer_changed)
         viz_layout.addWidget(self.combo_viz)
         layout.addWidget(viz_box)
@@ -90,6 +91,11 @@ class ParamsPanel(QWidget):
         color_layout.addWidget(self.slider_viz_brightness, 5, 1)
 
         layout.addWidget(color_box)
+
+        # Visualizer-spezifische Parameter
+        self.viz_params_box = QGroupBox("Visualizer Params")
+        self.viz_params_layout = QGridLayout(self.viz_params_box)
+        layout.addWidget(self.viz_params_box)
 
         # Post-Process
         pp_box = QGroupBox("Post-Process")
@@ -212,6 +218,8 @@ class ParamsPanel(QWidget):
         self.slider_warmth.valueChanged.connect(lambda v: self._set("pp_warmth", v / 100.0))
         self.slider_grain.valueChanged.connect(lambda v: self._set("pp_grain", v / 100.0))
 
+        self._rebuild_viz_params(self.state.visualizer_type)
+
     def _make_slider(self, min_val: int, max_val: int, default: int):
         slider = QSlider(Qt.Orientation.Horizontal)
         slider.setRange(min_val, max_val)
@@ -222,6 +230,7 @@ class ParamsPanel(QWidget):
         self.state.visualizer_type = text
         self.state.viz_params = {}
         self.state.set("visualizer_type", text)
+        self._rebuild_viz_params(text)
 
     def _on_resolution_changed(self, text: str):
         try:
@@ -314,6 +323,77 @@ class ParamsPanel(QWidget):
 
     def _on_viz_brightness_changed(self, value: int):
         self.state.viz_brightness = value / 100.0
+
+    def _rebuild_viz_params(self, viz_name: str):
+        """Baut die pro-Visualizer Parameter-Regler dynamisch auf."""
+        # Alte Widgets entfernen
+        while self.viz_params_layout.count():
+            item = self.viz_params_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        try:
+            viz_class = get_visualizer(viz_name)
+        except Exception:
+            self.viz_params_layout.addWidget(QLabel("Keine Parameter verfuegbar"), 0, 0)
+            return
+
+        specs = {}
+        for source in (
+            getattr(viz_class, "EFFECTS", {}),
+            getattr(viz_class, "PARAMS", {}),
+            getattr(viz_class, "COLOR_PARAMS", {}),
+        ):
+            specs.update(source)
+
+        # Diese Werte werden bereits oben im Panel gesteuert
+        blacklist = {
+            "color_mode", "base_hue", "color_saturation",
+            "primary_color", "secondary_color", "background_color",
+        }
+
+        row = 0
+        for name, spec in sorted(specs.items()):
+            if name in blacklist:
+                continue
+            if not isinstance(spec, (list, tuple)) or len(spec) != 4:
+                continue
+            default, min_val, max_val, step = spec
+            # String-Parameter (min/max None) ueberspringen
+            if min_val is None or max_val is None:
+                continue
+            try:
+                min_val = float(min_val)
+                max_val = float(max_val)
+                step = float(step)
+                default = float(default)
+            except (TypeError, ValueError):
+                continue
+
+            current = self.state.viz_params.get(name, default)
+            spin = QDoubleSpinBox()
+            spin.setRange(min_val, max_val)
+            spin.setSingleStep(step)
+            # Dezimalstellen an step anpassen
+            if step >= 1.0 and step == int(step):
+                spin.setDecimals(0)
+            elif step >= 0.1 and step == round(step, 1):
+                spin.setDecimals(1)
+            else:
+                spin.setDecimals(2)
+            spin.setValue(float(current))
+            spin.valueChanged.connect(lambda v, n=name: self._on_viz_param_changed(n, v))
+
+            self.viz_params_layout.addWidget(QLabel(name.replace("_", " ").title()), row, 0)
+            self.viz_params_layout.addWidget(spin, row, 1)
+            row += 1
+
+        if row == 0:
+            self.viz_params_layout.addWidget(QLabel("Keine weiteren Parameter"), 0, 0)
+
+    def _on_viz_param_changed(self, name: str, value: float):
+        self.state.viz_params[name] = value
+        self.state.set("viz_params", self.state.viz_params)
 
     def _on_intro_enabled_changed(self, state):
         self.state.intro_enabled = bool(state)

@@ -89,3 +89,45 @@ def test_viz_brightness_slider_updates_state(qtbot):
     panel.slider_viz_brightness.setValue(150)
 
     assert abs(state.viz_brightness - 1.5) < 0.01
+
+
+def test_visualizer_params_rebuilt_on_change(qtbot):
+    state = AppState()
+    panel = ParamsPanel(state)
+    qtbot.addWidget(panel)
+
+    # Lumina Core hat PARAMS -> es sollten Regler angelegt werden
+    idx = panel.combo_viz.findText("lumina_core")
+    panel.combo_viz.setCurrentIndex(idx)
+
+    assert panel.viz_params_layout.count() > 0
+    assert "core_intensity" in state.viz_params or any(
+        panel.viz_params_layout.itemAt(i).widget() is not None
+        for i in range(panel.viz_params_layout.count())
+    )
+
+
+def test_visualizer_param_spin_updates_state(qtbot):
+    state = AppState()
+    panel = ParamsPanel(state)
+    qtbot.addWidget(panel)
+
+    idx = panel.combo_viz.findText("lumina_core")
+    panel.combo_viz.setCurrentIndex(idx)
+
+    # Suche den ersten QDoubleSpinBox und aendere seinen Wert
+    spin = None
+    for i in range(panel.viz_params_layout.count()):
+        widget = panel.viz_params_layout.itemAt(i).widget()
+        if widget is not None and widget.__class__.__name__ == "QDoubleSpinBox":
+            spin = widget
+            break
+
+    assert spin is not None
+    new_value = spin.value() + spin.singleStep()
+    spin.setValue(new_value)
+
+    param_label = panel.viz_params_layout.itemAt(
+        panel.viz_params_layout.indexOf(spin) - 1
+    ).widget().text().lower().replace(" ", "_")
+    assert state.viz_params.get(param_label) == new_value

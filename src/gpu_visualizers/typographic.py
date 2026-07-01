@@ -19,6 +19,11 @@ class TypographicGPU(BaseGPUVisualizer):
         'bar_width': (3, 1, 10, 1),
         'bar_spacing': (1, 0, 5, 1),
         'animation_speed': (0.2, 0.0, 1.0, 0.05),
+        'bar_max_height': (0.3, 0.1, 0.5, 0.05),
+        'wave_count': (4, 1, 12, 1),
+        'indicator_threshold': (0.3, 0.0, 1.0, 0.05),
+        'indicator_radius': (20.0, 5.0, 60.0, 5.0),
+        'progress_y': (30.0, 10.0, 80.0, 5.0),
     }
 
     def _setup(self):
@@ -91,7 +96,7 @@ class TypographicGPU(BaseGPUVisualizer):
         quad = np.array([[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]], dtype=np.float32)
         self._quad_vbo = self.ctx.buffer(quad.tobytes())
 
-        max_rects = 500
+        max_rects = 2000
         self._rect_data = np.zeros((max_rects, 8), dtype=np.float32)
         self._rect_vbo = self.ctx.buffer(reserve=max_rects * 8 * 4, dynamic=True)
         self._rect_vao = self.ctx.vertex_array(
@@ -120,36 +125,50 @@ class TypographicGPU(BaseGPUVisualizer):
         bar_w = int(self.params["bar_width"])
         spacing = int(self.params["bar_spacing"])
         anim_speed = self.params["animation_speed"]
+        wave_count = int(self.params.get("wave_count", 4))
+        bar_max_h = float(self.params.get("bar_max_height", 0.3))
+        indicator_threshold = float(self.params.get("indicator_threshold", 0.3))
+        indicator_radius = float(self.params.get("indicator_radius", 20.0))
+        progress_y = float(self.params.get("progress_y", 30.0))
 
         num_bars = self.width // (bar_w + spacing)
+        num_bars = min(num_bars, len(self._rect_data) // 2)
         wave_y = self.height / 2.0
-        max_h = self.height * 0.3
+        max_h = self.height * bar_max_h
 
-        # Farben
-        primary = (0.0, 0.78, 1.0)      # Cyan
-        secondary = (1.0, 0.39, 0.39)   # Rot
+        # Farben ueber color_mode-System
+        primary = self._chroma_to_color(f["chroma"])
+        h, s, v = self._rgb_to_hsv(*primary)
+        secondary = self._hsv_to_rgb((h + 0.5) % 1.0, s, v)
+        bg_color = self.params.get('background_color')
+        if bg_color and isinstance(bg_color, str) and bg_color.startswith('#'):
+            bg_rgb = self._hex_to_rgb(bg_color)
+        else:
+            bg_rgb = (0.2, 0.2, 0.2)
 
         rect_idx = 0
 
         # --- Balken ---
         for i in range(num_bars):
-            phase = (i / num_bars) * np.pi * 4
+            phase = (i / num_bars) * np.pi * wave_count
             t_off = frame_idx * anim_speed
             wave = np.sin(phase + t_off) * rms
             wave += np.sin(phase * 2.5 + t_off * 1.3) * 0.25
             wave = max(-1.0, min(1.0, wave))
             bar_h = abs(wave) * max_h
 
-            # Farbverlauf
+            # Farbverlauf Primary -> Secondary
             if i < num_bars // 2:
                 ratio = i / (num_bars // 2) if num_bars // 2 > 0 else 0
+            else:
+                ratio = (i - num_bars // 2) / (num_bars // 2) if num_bars // 2 > 0 else 0
+            if i < num_bars // 2:
                 color = (
                     primary[0] * ratio + secondary[0] * (1 - ratio),
                     primary[1] * ratio + secondary[1] * (1 - ratio),
                     primary[2] * ratio + secondary[2] * (1 - ratio),
                 )
             else:
-                ratio = (i - num_bars // 2) / (num_bars // 2) if num_bars // 2 > 0 else 0
                 color = (
                     secondary[0] * ratio + primary[0] * (1 - ratio),
                     secondary[1] * ratio + primary[1] * (1 - ratio),
@@ -159,22 +178,20 @@ class TypographicGPU(BaseGPUVisualizer):
             x = i * (bar_w + spacing) + bar_w / 2.0
 
             # Oberer Balken
-            if rect_idx < len(self._rect_data):
-                self._rect_data[rect_idx] = [
-                    x, wave_y - bar_h / 2.0,
-                    bar_w / 2.0, bar_h / 2.0,
-                    color[0], color[1], color[2], 1.0
-                ]
-                rect_idx += 1
+            self._rect_data[rect_idx] = [
+                x, wave_y - bar_h / 2.0,
+                bar_w / 2.0, bar_h / 2.0,
+                color[0], color[1], color[2], 1.0
+            ]
+            rect_idx += 1
 
             # Unterer Balken
-            if rect_idx < len(self._rect_data):
-                self._rect_data[rect_idx] = [
-                    x, wave_y + bar_h / 2.0,
-                    bar_w / 2.0, bar_h / 2.0,
-                    color[0], color[1], color[2], 1.0
-                ]
-                rect_idx += 1
+            self._rect_data[rect_idx] = [
+                x, wave_y + bar_h / 2.0,
+                bar_w / 2.0, bar_h / 2.0,
+                color[0], color[1], color[2], 1.0
+            ]
+            rect_idx += 1
 
         # --- Mittellinie ---
         line_color = (max(0.0, primary[0] - 0.4), max(0.0, primary[1] - 0.4), max(0.0, primary[2] - 0.4))
@@ -184,33 +201,31 @@ class TypographicGPU(BaseGPUVisualizer):
         ], dtype=np.float32)
 
         # --- Beat-Indikator (Ring) ---
-        if onset > 0.3:
-            radius = 20.0 + onset * 30.0
-            if rect_idx < len(self._rect_data):
-                self._rect_data[rect_idx] = [
-                    self.width / 2.0, wave_y,
-                    radius, radius,
-                    primary[0], primary[1], primary[2], 0.6
-                ]
-                rect_idx += 1
+        if onset > indicator_threshold:
+            radius = indicator_radius + onset * 30.0
+            self._rect_data[rect_idx] = [
+                self.width / 2.0, wave_y,
+                radius, radius,
+                primary[0], primary[1], primary[2], 0.6
+            ]
+            rect_idx += 1
 
         # --- Fortschrittsbalken ---
-        bar_y = self.height - 30.0
+        bar_y = self.height - progress_y
         bar_width = self.width * 0.6
         bar_x = (self.width - bar_width) / 2.0
 
         # Hintergrund
-        if rect_idx < len(self._rect_data):
-            self._rect_data[rect_idx] = [
-                bar_x + bar_width / 2.0, bar_y + 3.0,
-                bar_width / 2.0, 3.0,
-                0.2, 0.2, 0.2, 1.0
-            ]
-            rect_idx += 1
+        self._rect_data[rect_idx] = [
+            bar_x + bar_width / 2.0, bar_y + 3.0,
+            bar_width / 2.0, 3.0,
+            bg_rgb[0], bg_rgb[1], bg_rgb[2], 1.0
+        ]
+        rect_idx += 1
 
         # Füllung
         progress_width = bar_width * progress
-        if rect_idx < len(self._rect_data) and progress_width > 0:
+        if progress_width > 0:
             self._rect_data[rect_idx] = [
                 bar_x + progress_width / 2.0, bar_y + 3.0,
                 progress_width / 2.0, 3.0,
@@ -233,7 +248,7 @@ class TypographicGPU(BaseGPUVisualizer):
         # Mittellinie
         self._line_prog["u_resolution"].value = (self.width, self.height)
         self._line_vbo.write(line_verts.tobytes())
-        self._line_vao.render(mode=moderngl.LINES)
+        self._line_vao.render(mode=moderngl.LINES, vertices=2)
 
         # Rechtecke
         if rect_idx > 0:

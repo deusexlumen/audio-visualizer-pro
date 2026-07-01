@@ -23,6 +23,10 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
         'num_points': (200, 50, 500, 10),
         'glow_radius': (12, 4, 40, 2),
         'grid_enabled': (1, 0, 1, 1),
+        'grid_spacing': (50.0, 20.0, 100.0, 5.0),
+        'border_enabled': (1, 0, 1, 1),
+        'scan_line_enabled': (1, 0, 1, 1),
+        'wave_amplitude': (0.25, 0.05, 0.5, 0.05),
     }
 
     def _setup(self):
@@ -33,6 +37,7 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
             #version 330
             uniform vec2 u_resolution;
             uniform float u_thickness;
+            uniform float u_glow_radius;
 
             in vec2 in_pos;      // Mittelpunkt des Bands (Pixel)
             in float in_t;       // -1.0 = untere Kante, +1.0 = obere Kante
@@ -57,6 +62,7 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
             fragment_shader="""
             #version 330
             uniform float u_brightness;
+            uniform float u_glow_radius;
             in vec3 v_color;
             in float v_alpha;
             in float v_t;
@@ -64,14 +70,15 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
 
             void main() {
                 float dist = abs(v_t);  // 0.0 = Mitte, 1.0 = Rand
+                float glow = u_glow_radius * 0.1;
 
                 // Kern: scharfe Mitte
                 float core = 1.0 - smoothstep(0.0, 0.35, dist);
                 // Glow: weicher, exponentieller Abfall
-                float glow = exp(-dist * dist * 5.0);
+                float halo = exp(-dist * dist * glow);
 
-                vec3 final_color = v_color * (core + glow * 0.8) * u_brightness;
-                float alpha = (core * 0.95 + glow * 0.5) * v_alpha;
+                vec3 final_color = v_color * (core + halo * 0.8) * u_brightness;
+                float alpha = (core * 0.95 + halo * 0.5) * v_alpha;
 
                 f_color = vec4(final_color, alpha);
             }
@@ -174,17 +181,18 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
         cy = self.height / 2.0
         points = np.zeros((num_points, 2), dtype=np.float32)
 
+        amplitude = self.params.get("wave_amplitude", 0.25)
         phase = frame_idx * 0.1
         freq1 = 0.02 * (1.0 + spectral)
         freq2 = 0.05 * (1.0 + rms)
 
         for i in range(num_points):
             x = (i / (num_points - 1)) * self.width
-            wave1 = np.sin(i * freq1 + phase) * rms * self.height * 0.25
-            wave2 = np.sin(i * freq2 + phase * 1.5) * rms * self.height * 0.15
-            wave3 = np.sin(i * 0.01 + phase * 0.5) * spectral * self.height * 0.1
+            wave1 = np.sin(i * freq1 + phase) * rms * self.height * amplitude
+            wave2 = np.sin(i * freq2 + phase * 1.5) * rms * self.height * (amplitude * 0.6)
+            wave3 = np.sin(i * 0.01 + phase * 0.5) * spectral * self.height * (amplitude * 0.4)
             y = cy + wave1 + wave2 + wave3
-            y = max(50.0, min(self.height - 50.0, y))
+            y = max(self.height * 0.05, min(self.height * 0.95, y))
             points[i] = [x, y]
 
         return points
@@ -206,7 +214,7 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
         if not self.params["grid_enabled"]:
             return np.zeros((0, 6), dtype=np.float32)
 
-        spacing = 50.0
+        spacing = float(self.params["grid_spacing"])
         grid_color = (20 / 255.0, 20 / 255.0, 40 / 255.0)
         alpha = 1.0
 
@@ -228,6 +236,9 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
 
     def _build_border_lines(self, color: tuple) -> np.ndarray:
         """Baut Rahmen-Vertices als LINE_LOOP."""
+        if not self.params["border_enabled"]:
+            return np.zeros((0, 6), dtype=np.float32)
+
         alpha = 1.0
         return np.array([
             [2.0, 2.0, *color, alpha],
@@ -238,6 +249,9 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
 
     def _build_scan_line(self, x: float, color: tuple) -> np.ndarray:
         """Baut Scan-Linien-Vertices als LINES."""
+        if not self.params["scan_line_enabled"]:
+            return np.zeros((0, 6), dtype=np.float32)
+
         alpha = 1.0
         return np.array([
             [x, 0.0, *color, alpha],
@@ -254,15 +268,11 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
         spectral = f["spectral_centroid"]
         chroma = f["chroma"]
 
-        # Farben aus Chroma
-        if chroma is not None and chroma.size > 0:
-            dominant = int(np.argmax(chroma))
-            base_hue = dominant / 12.0
-        else:
-            base_hue = 0.5
-        neon_color = self._hsv_to_rgb(base_hue, 0.35, 0.7)
-        secondary_hue = (base_hue + 0.5) % 1.0
-        secondary_color = self._hsv_to_rgb(secondary_hue, 0.35, 0.7)
+        # Farben aus dem konfigurierten color_mode ableiten
+        neon_color = self._chroma_to_color(chroma)
+        secondary_color = self._chroma_to_color(chroma)
+        # Sekundaere Farbe leicht versetzt, damit Trail sichtbar variiert
+        secondary_color = tuple(min(1.0, c * 0.7) for c in secondary_color)
 
         # --- Wellenform generieren und in History speichern ---
         waveform = self._generate_waveform(float(frame_idx), rms, spectral)
@@ -273,8 +283,8 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
 
         # --- Ribbon rendern (Trail + Hauptlinie) ---
         self._ribbon_prog["u_resolution"].value = (self.width, self.height)
-        thickness_scale = 0.5 + (self.params.get("line_width", 0.003) - 0.001) / 0.019 * 1.5
-        self._ribbon_prog["u_thickness"].value = float(self.params["line_thickness"]) * thickness_scale
+        self._ribbon_prog["u_thickness"].value = float(self.params["line_thickness"])
+        self._ribbon_prog["u_glow_radius"].value = float(self.params["glow_radius"])
 
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
@@ -289,8 +299,8 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
         trail_decay = self.params.get("trail_decay", 0.7)
         for i, hist_wave in enumerate(self._history[:-1]):
             trail_idx = len(self._history) - 1 - i
-            trailFade = pow(1.0 - trail_decay, trail_idx)
-            trail_alpha = trailFade * 0.5
+            trail_fade = pow(trail_decay, trail_idx)
+            trail_alpha = trail_fade * 0.5
             trail_color = (
                 secondary_color[0] * trail_alpha,
                 secondary_color[1] * trail_alpha,
@@ -298,12 +308,12 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
             )
             verts = self._build_ribbon_vertices(hist_wave, trail_color, trail_alpha)
             self._ribbon_vbo.write(verts.tobytes())
-            self._ribbon_vao.render(mode=moderngl.TRIANGLE_STRIP)
+            self._ribbon_vao.render(mode=moderngl.TRIANGLE_STRIP, vertices=len(verts))
 
         # Haupt-Wellenform (helle Neon-Linie)
         main_verts = self._build_ribbon_vertices(waveform, neon_color, 1.0)
         self._ribbon_vbo.write(main_verts.tobytes())
-        self._ribbon_vao.render(mode=moderngl.TRIANGLE_STRIP)
+        self._ribbon_vao.render(mode=moderngl.TRIANGLE_STRIP, vertices=len(main_verts))
 
         # --- Grid, Rahmen, Scan-Linie (LINES) ---
         line_verts = []
@@ -314,21 +324,23 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
             line_verts.append(grid_verts)
 
         # Rahmen
-        border_color = (max(0.0, c - 0.2) for c in neon_color)
-        border_verts = self._build_border_lines(tuple(border_color))
-        line_verts.append(border_verts)
+        border_color = tuple(max(0.0, c - 0.2) for c in neon_color)
+        border_verts = self._build_border_lines(border_color)
+        if len(border_verts) > 0:
+            line_verts.append(border_verts)
 
         # Scan-Linie
         scan_x = frame_idx % self.width
         scan_color = (neon_color[0] * 0.25, neon_color[1] * 0.25, neon_color[2] * 0.25)
         scan_verts = self._build_scan_line(float(scan_x), scan_color)
-        line_verts.append(scan_verts)
+        if len(scan_verts) > 0:
+            line_verts.append(scan_verts)
 
         if line_verts:
             all_lines = np.concatenate(line_verts, axis=0)
             self._line_prog["u_resolution"].value = (self.width, self.height)
             self._line_vbo.write(all_lines.tobytes())
-            self._line_vao.render(mode=moderngl.LINES)
+            self._line_vao.render(mode=moderngl.LINES, vertices=len(all_lines))
 
         # --- Beat-Flash ---
         flash_trigger = max(onset, beat_intensity)

@@ -29,6 +29,14 @@ class LuminaCoreGPU(BaseGPUVisualizer):
         'glow_strength': (0.8, 0.0, 2.0, 0.1),
         'chromatic_aberration': (0.003, 0.0, 0.02, 0.001),
         'rotation_speed': (0.3, 0.0, 1.0, 0.05),
+        'core_base_radius': (0.15, 0.05, 0.4, 0.01),
+        'ring_base_radius': (0.25, 0.1, 0.5, 0.01),
+        'ring_spacing': (0.08, 0.02, 0.15, 0.01),
+        'ring_width': (0.008, 0.001, 0.05, 0.001),
+        'noise_amount': (0.03, 0.0, 0.1, 0.005),
+        'pulse_intensity': (0.3, 0.0, 1.0, 0.05),
+        'specular_power': (32.0, 4.0, 128.0, 1.0),
+        'bg_brightness': (0.5, 0.0, 2.0, 0.05),
     }
 
     def _setup(self):
@@ -48,13 +56,23 @@ class LuminaCoreGPU(BaseGPUVisualizer):
             uniform float u_centroid;
             uniform float u_beat_intensity;
             uniform vec3 u_color;
-            uniform float u_hue;
+            uniform vec3 u_secondary_color;
+            uniform vec3 u_background_color;
             uniform float u_core_intensity; // Kern-Intensitaet (wird verwendet)
             uniform float u_ring_count;
             uniform float u_noise_scale;
             uniform float u_glow_strength;
             uniform float u_chromatic_aberration;
             uniform float u_rotation_speed;
+            uniform float u_core_base_radius;
+            uniform float u_ring_base_radius;
+            uniform float u_ring_spacing;
+            uniform float u_ring_width;
+            uniform float u_noise_amount;
+            uniform float u_pulse_intensity;
+            uniform float u_specular_power;
+            uniform float u_bg_brightness;
+            uniform float u_brightness;
 
             out vec4 f_color;
 
@@ -65,11 +83,6 @@ class LuminaCoreGPU(BaseGPUVisualizer):
             mat2 rot2(float a) {
                 float c = cos(a), s = sin(a);
                 return mat2(c, -s, s, c);
-            }
-            vec3 hsv2rgb(vec3 c) {
-                vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-                vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-                return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
             }
 
             // === Lygia Noise ===
@@ -112,7 +125,7 @@ class LuminaCoreGPU(BaseGPUVisualizer):
                 vec2 uv = (gl_FragCoord.xy / u_resolution) * 2.0 - 1.0;
                 uv.x *= u_resolution.x / u_resolution.y;
 
-                vec3 col = vec3(0.02, 0.02, 0.03);
+                vec3 col = u_background_color * u_bg_brightness;
                 vec2 center = vec2(0.0);
 
                 // === Transient-Explosion ===
@@ -120,9 +133,9 @@ class LuminaCoreGPU(BaseGPUVisualizer):
 
                 // === Zentrale Kugel mit FBM Displacement ===
                 vec2 p = uv - center;
-                float baseRadius = (0.15 + u_rms * 0.08 + explosion) * u_core_intensity;
+                float baseRadius = (u_core_base_radius + u_rms * 0.08 + explosion) * u_core_intensity;
                 float n = fbm(p * u_noise_scale * 10.0 + u_time * 0.5, 4);
-                float displacedRadius = baseRadius + n * 0.03 * u_centroid;
+                float displacedRadius = baseRadius + n * u_noise_amount * u_centroid;
                 float d = sdCircle(p, displacedRadius);
 
                 // 3D Normal aus Noise-Gradient approximieren
@@ -135,7 +148,7 @@ class LuminaCoreGPU(BaseGPUVisualizer):
 
                 // Kugel-Farbe mit Chroma
                 vec3 sphereColor = u_color * (0.8 + u_rms * 0.4);
-                vec3 lit = phong(normal, lightDir, viewDir, sphereColor, 32.0);
+                vec3 lit = phong(normal, lightDir, viewDir, sphereColor, u_specular_power);
 
                 // Kugel-Glow
                 float glow = exp(-d * d * 80.0) * u_glow_strength;
@@ -147,8 +160,8 @@ class LuminaCoreGPU(BaseGPUVisualizer):
                 for (int i = 0; i < 8; i++) {
                     if (i >= rings) break;
                     float fi = float(i);
-                    float ringRadius = 0.25 + fi * 0.08 + u_rms * 0.03;
-                    float ringWidth = 0.008 + u_rms * 0.004;
+                    float ringRadius = u_ring_base_radius + fi * u_ring_spacing + u_rms * 0.03;
+                    float ringWidth = u_ring_width + u_rms * 0.004;
 
                     // Rotation
                     float angle = u_time * u_rotation_speed * (1.0 + fi * 0.3) * (mod(fi, 2.0) < 1.0 ? 1.0 : -1.0);
@@ -156,11 +169,11 @@ class LuminaCoreGPU(BaseGPUVisualizer):
 
                     float ringDist = abs(sdCircle(rp, ringRadius)) - ringWidth;
 
-                    // Ring-Farbe (verschobener Hue)
-                    vec3 ringColor = hsv2rgb(vec3(fract(u_hue + fi * 0.1), 0.8, 1.0));
+                    // Ring-Farbe aus Primary/Secondary ableiten
+                    vec3 ringColor = mix(u_color, u_secondary_color, clamp(fi * 0.15, 0.0, 1.0));
 
                     // Beat-Puls auf Ringen
-                    float pulse = 1.0 + u_onset * 0.3 * sin(rp.y * 20.0 + u_time * 5.0);
+                    float pulse = 1.0 + u_onset * u_pulse_intensity * sin(rp.y * 20.0 + u_time * 5.0);
 
                     float ringGlow = exp(-ringDist * ringDist * 2000.0) * u_glow_strength * pulse;
                     col += ringColor * ringGlow;
@@ -181,6 +194,7 @@ class LuminaCoreGPU(BaseGPUVisualizer):
                 // Tonemapping
                 col = col / (1.0 + col);
                 col = pow(col, vec3(0.95));
+                col *= u_brightness;
 
                 f_color = vec4(col, 1.0);
             }
@@ -198,6 +212,17 @@ class LuminaCoreGPU(BaseGPUVisualizer):
 
         color = self._chroma_to_color(uniforms["u_chroma"])
 
+        def _rgb_from_hex(value, default):
+            if isinstance(value, str) and value.startswith('#'):
+                try:
+                    return self._hex_to_rgb(value)
+                except Exception:
+                    pass
+            return default
+
+        secondary = _rgb_from_hex(self.params.get("secondary_color"), (0.0, 0.8, 1.0))
+        background = _rgb_from_hex(self.params.get("background_color"), (0.02, 0.02, 0.04))
+
         self._prog["u_resolution"].value = (self.width, self.height)
         self._prog["u_time"].value = time
         self._prog["u_rms"].value = uniforms["u_energy"]
@@ -206,12 +231,22 @@ class LuminaCoreGPU(BaseGPUVisualizer):
         self._prog["u_centroid"].value = uniforms["u_detail"]
         self._prog["u_beat_intensity"].value = uniforms.get("u_beat_intensity", uniforms["u_beat"])
         self._prog["u_color"].value = color
-        self._prog["u_hue"].value = self._color_to_hue(color)
+        self._prog["u_secondary_color"].value = secondary
+        self._prog["u_background_color"].value = background
         self._prog["u_core_intensity"].value = self.params["core_intensity"]
         self._prog["u_ring_count"].value = self.params["ring_count"]
         self._prog["u_noise_scale"].value = self.params["noise_scale"]
         self._prog["u_glow_strength"].value = self.params["glow_strength"]
         self._prog["u_chromatic_aberration"].value = self.params["chromatic_aberration"]
         self._prog["u_rotation_speed"].value = self.params["rotation_speed"]
+        self._prog["u_core_base_radius"].value = self.params["core_base_radius"]
+        self._prog["u_ring_base_radius"].value = self.params["ring_base_radius"]
+        self._prog["u_ring_spacing"].value = self.params["ring_spacing"]
+        self._prog["u_ring_width"].value = self.params["ring_width"]
+        self._prog["u_noise_amount"].value = self.params["noise_amount"]
+        self._prog["u_pulse_intensity"].value = self.params["pulse_intensity"]
+        self._prog["u_specular_power"].value = self.params["specular_power"]
+        self._prog["u_bg_brightness"].value = self.params["bg_brightness"]
+        self._prog["u_brightness"].value = self.params["brightness"]
 
         self._vao.render(mode=moderngl.TRIANGLE_STRIP)

@@ -6,7 +6,8 @@ Zentrale Tempel-SDF-Form pulst mit Bass, vertikale Bass-Balken reagieren
 auf RMS, Stroboskop-Flashes bei Onsets, Shockwave-Ringe expandieren
 vom Zentrum, und chromatische Aberration bei starken Beats.
 
-Farbpalette: Deep Purple, Crimson Red, Near-Black.
+Farbpalette: Respektiert color_mode ueber u_primary_color / u_secondary_color
+/ u_bg_color statt hartkodierter Werte.
 """
 
 import numpy as np
@@ -32,10 +33,22 @@ uniform float u_onset;
 uniform float u_beat_intensity;
 uniform float u_spectral_centroid;
 uniform vec3 u_chroma_color;
+uniform vec3 u_primary_color;
+uniform vec3 u_secondary_color;
+uniform vec3 u_bg_color;
+uniform vec3 u_flash_color;
+uniform vec3 u_sparkle_color;
 uniform float u_bass_intensity;
 uniform float u_strobe_threshold;
+uniform float u_strobe_intensity;
 uniform float u_color_shift;
 uniform float u_shockwave_speed;
+uniform float u_temple_scale;
+uniform float u_bar_count;
+uniform float u_contrast_gamma;
+uniform float u_vignette_strength;
+uniform float u_noise_intensity;
+uniform float u_sparkle_intensity;
 
 out vec4 f_color;
 
@@ -100,30 +113,31 @@ float sdHexagon(vec2 p, float r) {
 
 // === Tempel-SDF ===
 float templeSDF(vec2 p, float pulse) {
+    float scale = u_temple_scale;
     // Zentraler hexagonaler Monolith
-    float d = sdHexagon(p * vec2(1.0, 0.58), 0.18 * pulse);
+    float d = sdHexagon(p * vec2(1.0, 0.58), 0.18 * pulse * scale);
 
     // Dachkappe
-    float cap = sdBox(p - vec2(0.0, 0.13 * pulse), vec2(0.19 * pulse, 0.012));
+    float cap = sdBox(p - vec2(0.0, 0.13 * pulse * scale), vec2(0.19 * pulse * scale, 0.012));
     d = min(d, cap);
 
     // Sockel
-    float base = sdBox(p + vec2(0.0, 0.15 * pulse), vec2(0.21 * pulse, 0.012));
+    float base = sdBox(p + vec2(0.0, 0.15 * pulse * scale), vec2(0.21 * pulse * scale, 0.012));
     d = min(d, base);
 
     // Seitenpfeiler
-    float pillarL = sdBox(p - vec2(-0.24 * pulse, 0.0), vec2(0.025, 0.18) * pulse);
-    float pillarR = sdBox(p - vec2( 0.24 * pulse, 0.0), vec2(0.025, 0.18) * pulse);
+    float pillarL = sdBox(p - vec2(-0.24 * pulse * scale, 0.0), vec2(0.025, 0.18) * pulse * scale);
+    float pillarR = sdBox(p - vec2( 0.24 * pulse * scale, 0.0), vec2(0.025, 0.18) * pulse * scale);
     d = min(d, pillarL);
     d = min(d, pillarR);
 
     // Innere Tuer (subtrahiert)
-    float door = sdBox(p - vec2(0.0, -0.04 * pulse), vec2(0.04 * pulse, 0.08 * pulse));
+    float door = sdBox(p - vec2(0.0, -0.04 * pulse * scale), vec2(0.04 * pulse * scale, 0.08 * pulse * scale));
     d = max(d, -door);
 
     // Horizontale Fugen fuer architektonische Details
-    float groove1 = sdBox(p - vec2(0.0,  0.05 * pulse), vec2(0.14 * pulse, 0.003));
-    float groove2 = sdBox(p - vec2(0.0, -0.06 * pulse), vec2(0.14 * pulse, 0.003));
+    float groove1 = sdBox(p - vec2(0.0,  0.05 * pulse * scale), vec2(0.14 * pulse * scale, 0.003));
+    float groove2 = sdBox(p - vec2(0.0, -0.06 * pulse * scale), vec2(0.14 * pulse * scale, 0.003));
     d = max(d, -groove1);
     d = max(d, -groove2);
 
@@ -133,7 +147,7 @@ float templeSDF(vec2 p, float pulse) {
 // === Vertikale Bass-Balken ===
 float bassBars(vec2 p, float rms, float intensity) {
     float bar = 1e6;
-    float barCount = 14.0;
+    float barCount = u_bar_count;
     float w = 1.0 / barCount;
 
     for (float i = 0.0; i < barCount; i += 1.0) {
@@ -168,24 +182,22 @@ float shockwave(vec2 p, float time, float speed, float intensity) {
 
 // === Szene ===
 vec3 scene(vec2 uv, vec2 uv_full, float time) {
-    // Dunkler Hintergrund mit subtilem Purpur-Stich
-    vec3 col = vec3(0.008, 0.003, 0.012);
+    // Hintergrund aus color_mode
+    vec3 col = u_bg_color;
 
     // Hintergrund-Rauschen via FBM
     float bgNoise = fbm(uv * 2.5 + time * 0.12, 4);
-    col += vec3(0.02, 0.0, 0.035) * bgNoise;
+    col += mix(u_bg_color, u_primary_color, 0.3) * bgNoise * u_noise_intensity;
 
     // Vignette
     float vig = 1.0 - smoothstep(0.25, 1.1, length(uv));
-    col *= 0.4 + 0.6 * vig;
+    col *= 1.0 - u_vignette_strength * (1.0 - vig);
 
-    // Farbpalette: Deep Purple, Crimson, Near-Black
-    vec3 purple = vec3(0.12, 0.0, 0.22);
-    vec3 crimson = vec3(0.55, 0.0, 0.08);
-    vec3 black = vec3(0.0, 0.0, 0.0);
+    // Dunkle Basis- und Highlight-Farbe
+    vec3 dark = u_bg_color * 0.2;
 
-    // Highlight-Farbe mischt zwischen Palette und Chroma-Farbe
-    vec3 highlight = mix(purple, crimson, u_rms);
+    // Highlight-Farbe mischt zwischen primaerer und sekundaerer Farbe
+    vec3 highlight = mix(u_primary_color, u_secondary_color, u_rms);
     highlight = mix(highlight, u_chroma_color, u_color_shift * 0.5);
 
     // Puls-Faktor aus RMS und Beat-Intensitaet
@@ -194,17 +206,17 @@ vec3 scene(vec2 uv, vec2 uv_full, float time) {
     // --- Tempel ---
     float temple = templeSDF(uv, pulse);
     float templeMask = smoothstep(0.006, -0.006, temple);
-    vec3 templeCol = mix(black, highlight, 0.5 + u_rms * 0.5);
+    vec3 templeCol = mix(dark, highlight, 0.5 + u_rms * 0.5);
 
     // Tempel-Kanten-Glow
     float templeEdge = exp(-abs(temple) * 90.0) * (u_rms * 2.5 + u_beat_intensity * 1.5);
-    col += mix(crimson, highlight, 0.5) * templeEdge;
+    col += mix(u_secondary_color, highlight, 0.5) * templeEdge;
 
     col = mix(col, templeCol, templeMask);
 
     // Inneres Tempel-Glow (durch die Tuer)
     float innerGlow = exp(-length(uv) * length(uv) * 8.0) * u_rms * 0.6;
-    col += crimson * innerGlow;
+    col += u_secondary_color * innerGlow;
 
     // --- Bass-Balken (links und rechts) ---
     float barIntensity = u_bass_intensity * 0.4;
@@ -224,16 +236,16 @@ vec3 scene(vec2 uv, vec2 uv_full, float time) {
 
     // --- Shockwave-Ringe ---
     float sw = shockwave(uv, time, u_shockwave_speed, u_beat_intensity + u_onset * 0.5);
-    col += vec3(0.45, 0.04, 0.15) * sw;
+    col += u_secondary_color * sw;
 
     // --- Stroboskop-Flash ---
     float strobe = step(u_strobe_threshold, u_onset);
-    col = mix(col, vec3(0.92, 0.92, 1.0), strobe * 0.55);
+    col = mix(col, u_flash_color, strobe * u_strobe_intensity);
 
     // --- Spektrale Funken ---
     float sparkles = hash(uv * 120.0 + time * 12.0);
     sparkles = pow(sparkles, 25.0) * u_spectral_centroid * 3.0;
-    col += vec3(0.35, 0.08, 0.45) * sparkles;
+    col += u_sparkle_color * sparkles * u_sparkle_intensity;
 
     return col;
 }
@@ -251,8 +263,8 @@ void main() {
     col.g = scene(uv,           uv_full, u_time).g;
     col.b = scene(uv - caOffset, uv_full, u_time).b;
 
-    // Kontrast-Boost bei Beat
-    col = pow(col, vec3(0.88));
+    // Kontrast-Boost bei Beat (Gamma, per Parameter)
+    col = pow(col, vec3(u_contrast_gamma));
     col *= 1.0 + u_rms * 0.35 + u_beat_intensity * 0.2;
 
     f_color = vec4(clamp(col, 0.0, 1.0), 1.0);
@@ -271,8 +283,15 @@ class BassTempleGPU(BaseGPUVisualizer):
     PARAMS = {
         'bass_intensity': (1.2, 0.0, 3.0, 0.1),
         'strobe_threshold': (0.55, 0.0, 1.0, 0.05),
+        'strobe_intensity': (0.55, 0.0, 1.0, 0.05),
         'color_shift': (0.0, 0.0, 1.0, 0.05),
         'shockwave_speed': (2.5, 0.5, 6.0, 0.1),
+        'temple_scale': (1.0, 0.5, 2.0, 0.1),
+        'bar_count': (14.0, 4.0, 32.0, 1.0),
+        'contrast_gamma': (0.88, 0.5, 1.5, 0.01),
+        'vignette_strength': (0.6, 0.0, 1.0, 0.05),
+        'noise_intensity': (0.2, 0.0, 1.0, 0.05),
+        'sparkle_intensity': (1.0, 0.0, 3.0, 0.1),
     }
 
     def _setup(self):
@@ -297,6 +316,20 @@ class BassTempleGPU(BaseGPUVisualizer):
             [(self.vbo, "2f", "in_position")],
         )
 
+    def _color_tuple(self, value):
+        """Hilfsmethode: Konvertiert Hex-String oder Sequenz in RGB-Tupel."""
+        if value is None:
+            return None
+        if isinstance(value, str) and value.startswith('#'):
+            return self._hex_to_rgb(value)
+        try:
+            rgb = tuple(float(v) for v in value)
+            if len(rgb) >= 3:
+                return rgb[:3]
+        except Exception:
+            pass
+        return None
+
     def render(self, features: dict, time: float):
         """Rendert einen Frame mit aktuellen Audio-Features.
 
@@ -313,16 +346,31 @@ class BassTempleGPU(BaseGPUVisualizer):
         onset = f["onset"]
         chroma = f["chroma"]
         spectral_centroid = f["spectral_centroid"]
+        beat_intensity = f.get("beat_intensity", min(onset * 1.5, 1.0))
 
-        # beat_intensity aus Features oder als Fallback aus Onset berechnen
-        beat_intensity = features.get("beat_intensity", None)
-        if beat_intensity is not None and len(np.atleast_1d(beat_intensity)) > frame_idx:
-            beat_intensity = float(np.atleast_1d(beat_intensity)[frame_idx])
+        # Farben aus color_mode ableiten
+        primary_color = self._chroma_to_color(chroma)
+
+        secondary = self._color_tuple(self.params.get('secondary_color'))
+        if secondary is not None:
+            secondary_color = secondary
         else:
-            beat_intensity = min(onset * 1.5, 1.0)
+            h, s, v = self._rgb_to_hsv(*primary_color)
+            secondary_color = self._hsv_to_rgb((h + 0.5) % 1.0, min(1.0, s * 1.2), v)
 
-        # Farbe aus dominantem Chroma-Ton ableiten
-        chroma_color = self._chroma_to_color(chroma)
+        background = self._color_tuple(self.params.get('background_color'))
+        if background is not None:
+            bg_color = background
+        else:
+            h, s, v = self._rgb_to_hsv(*primary_color)
+            bg_color = self._hsv_to_rgb(h, s * 0.3, v * 0.08)
+
+        # Flash-Farbe: aufgehellte Sekundaerfarbe
+        h, s, v = self._rgb_to_hsv(*secondary_color)
+        flash_color = self._hsv_to_rgb(h, s * 0.5, min(1.0, v * 1.5))
+
+        # Funken-Farbe: Primaerfarbe
+        sparkle_color = primary_color
 
         # Uniforms aktualisieren
         self.prog["u_time"].value = float(time)
@@ -330,11 +378,23 @@ class BassTempleGPU(BaseGPUVisualizer):
         self.prog["u_onset"].value = float(onset)
         self.prog["u_beat_intensity"].value = float(beat_intensity)
         self.prog["u_spectral_centroid"].value = float(spectral_centroid)
-        self.prog["u_chroma_color"].value = chroma_color
+        self.prog["u_chroma_color"].value = primary_color
+        self.prog["u_primary_color"].value = primary_color
+        self.prog["u_secondary_color"].value = secondary_color
+        self.prog["u_bg_color"].value = bg_color
+        self.prog["u_flash_color"].value = flash_color
+        self.prog["u_sparkle_color"].value = sparkle_color
         self.prog["u_bass_intensity"].value = float(self.params['bass_intensity'])
         self.prog["u_strobe_threshold"].value = float(self.params['strobe_threshold'])
+        self.prog["u_strobe_intensity"].value = float(self.params['strobe_intensity'])
         self.prog["u_color_shift"].value = float(self.params['color_shift'])
         self.prog["u_shockwave_speed"].value = float(self.params['shockwave_speed'])
+        self.prog["u_temple_scale"].value = float(self.params['temple_scale'])
+        self.prog["u_bar_count"].value = float(self.params['bar_count'])
+        self.prog["u_contrast_gamma"].value = float(self.params['contrast_gamma'])
+        self.prog["u_vignette_strength"].value = float(self.params['vignette_strength'])
+        self.prog["u_noise_intensity"].value = float(self.params['noise_intensity'])
+        self.prog["u_sparkle_intensity"].value = float(self.params['sparkle_intensity'])
 
         # Zeichnen
         self.vao.render(mode=moderngl.TRIANGLE_STRIP)

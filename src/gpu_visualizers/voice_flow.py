@@ -26,11 +26,17 @@ class VoiceFlowGPU(BaseGPUVisualizer):
         'wave_depth': (0.5, 0.1, 1.0, 0.05),
         'color_saturation': (0.7, 0.3, 1.0, 0.05),
         'breathe_intensity': (0.4, 0.0, 0.8, 0.05),
+        'breathe_speed': (0.6, 0.1, 2.0, 0.1),
         'line_count': (5, 3, 12, 1),
+        'line_spacing': (0.6, 0.2, 1.5, 0.05),
         'glow_strength': (0.6, 0.0, 1.0, 0.05),
+        'glow_size': (0.08, 0.01, 0.3, 0.01),
         'line_width': (0.003, 0.001, 0.02, 0.001),     # Dicke der Wellen
         'trail_length': (3, 0, 12, 1),                   # Anzahl Echos (0 = kein Schweif)
         'trail_decay': (0.7, 0.1, 0.95, 0.05),           # Verblass-Geschwindigkeit
+        'trail_time_offset': (0.04, 0.01, 0.1, 0.005),
+        'scanline_intensity': (0.05, 0.0, 0.3, 0.01),
+        'vignette_intensity': (0.6, 0.0, 1.5, 0.05),
         'brightness': (1.0, 0.5, 2.0, 0.05),             # Gesamthelligkeit
     }
 
@@ -49,17 +55,24 @@ class VoiceFlowGPU(BaseGPUVisualizer):
             uniform vec2 u_resolution;
             uniform float u_time;
             uniform float u_voice;
-            uniform vec3 u_color;
+            uniform vec3 u_secondary_color;
+            uniform vec3 u_background_color;
             uniform float u_hue;
             uniform float u_flow_speed;
             uniform float u_wave_depth;
             uniform float u_color_saturation;
             uniform float u_breathe_intensity;
+            uniform float u_breathe_speed;
             uniform float u_line_count;
+            uniform float u_line_spacing;
             uniform float u_glow_strength;
+            uniform float u_glow_size;
             uniform float u_line_width;
             uniform float u_trail_length;
             uniform float u_trail_decay;
+            uniform float u_trail_time_offset;
+            uniform float u_scanline_intensity;
+            uniform float u_vignette_intensity;
             uniform float u_brightness;
 
             out vec4 f_color;
@@ -70,38 +83,18 @@ class VoiceFlowGPU(BaseGPUVisualizer):
                 return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
             }
 
-            float hash(vec2 p) {
-                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-            }
-
-            // Berechnet die Wellen-Intensitaet an einem bestimmten Zeitpunkt
-            float getWaveIntensity(float x, float y, float t, float fi, float totalAmp, float lineY, int lineIndex) {
-                float freq = 2.0 + fi * 1.5;
-                float phase = fi * 1.047;
-                float speed = 1.0 + fi * 0.3;
-                
-                float wave = sin(x * freq * 3.14159 + t * speed + phase);
-                wave += sin(x * freq * 2.5 + t * speed * 1.3 + phase * 2.0) * 0.3;
-                
-                float amp = totalAmp * (0.8 + fi * 0.1);
-                float yOffset = wave * amp * 0.15;
-                
-                return abs(y - (lineY + yOffset));
-            }
-
             void main() {
                 vec2 uv = gl_FragCoord.xy / u_resolution;
                 float x = uv.x;
                 float y = uv.y;
                 
-                float breathe = sin(u_time * 0.6) * 0.5 + 0.5;
+                float breathe = sin(u_time * u_breathe_speed) * 0.5 + 0.5;
                 float breatheAmt = u_breathe_intensity * (0.3 + breathe * 0.7);
                 float voiceAmt = max(0.15, u_voice) * u_wave_depth;
                 float totalAmp = voiceAmt + breatheAmt * 0.2;
                 float t = u_time * u_flow_speed;
                 
-                vec3 bgColor = u_color * 0.08;
-                vec3 col = bgColor;
+                vec3 col = u_background_color * 0.08;
                 float baseHue = fract(u_hue);
                 
                 int lines = int(u_line_count);
@@ -111,13 +104,14 @@ class VoiceFlowGPU(BaseGPUVisualizer):
                     if (i >= lines) break;
                     
                     float fi = float(i);
-                    float lineY = 0.2 + fi * 0.6 / max(float(lines - 1), 1.0);
+                    float lineY = 0.2 + fi * u_line_spacing / max(float(lines - 1), 1.0);
                     float freq = 2.0 + fi * 1.5;
                     float phase = fi * 1.047;
                     float speed = 1.0 + fi * 0.3;
                     float hue = fract(baseHue + fi * 0.08 + sin(t * 0.1) * 0.02);
                     float sat = u_color_saturation * (0.8 + fi * 0.05);
                     vec3 lineColor = hsv2rgb(vec3(hue, sat, 1.0));
+                    lineColor = mix(lineColor, u_secondary_color, clamp(fi * 0.12, 0.0, 1.0));
                     
                     // === HAUPT-WELLE + TRAIL-ECHOS ===
                     for (int trail = 0; trail <= 12; trail++) {
@@ -131,9 +125,9 @@ class VoiceFlowGPU(BaseGPUVisualizer):
                         if (trail > 0) {
                             float trailF = float(trail);
                             // Echo ist in der Vergangenheit
-                            trailTime = t - trailF * 0.04;
+                            trailTime = t - trailF * u_trail_time_offset;
                             // Verblasst mit trail_decay
-                            trailFade = pow(1.0 - u_trail_decay, trailF);
+                            trailFade = pow(u_trail_decay, trailF);
                             // Glow und Width auch reduzieren
                             trailGlowStr *= trailFade * 0.6;
                             trailWidth *= (0.5 + trailFade * 0.5);
@@ -152,7 +146,7 @@ class VoiceFlowGPU(BaseGPUVisualizer):
                         float core = smoothstep(trailWidth, 0.0, dist) * trailFade;
                         
                         // Glow um die Linie
-                        float glow = smoothstep(0.08, 0.0, dist) * trailGlowStr * trailFade;
+                        float glow = smoothstep(u_glow_size, 0.0, dist) * trailGlowStr * trailFade;
                         glow *= (0.5 + u_voice * 0.5);
                         
                         // Zur Farbe addieren
@@ -163,11 +157,11 @@ class VoiceFlowGPU(BaseGPUVisualizer):
                 
                 // Horizontaler Scanline-Effekt
                 float scanline = sin(y * u_resolution.y * 0.5 + t * 2.0) * 0.5 + 0.5;
-                col *= 0.95 + scanline * 0.05 * (0.5 + u_voice * 0.5);
+                col *= 0.95 + scanline * u_scanline_intensity * (0.5 + u_voice * 0.5);
                 
                 // Vignette
                 vec2 center = uv - 0.5;
-                float vig = 1.0 - length(center) * 0.6;
+                float vig = 1.0 - length(center) * u_vignette_intensity;
                 vig = smoothstep(0.0, 1.0, vig);
                 col *= 0.7 + vig * 0.3;
                 
@@ -207,20 +201,38 @@ class VoiceFlowGPU(BaseGPUVisualizer):
 
         color = self._chroma_to_color(f["chroma"])
 
+        def _rgb_from_hex(value, default):
+            if isinstance(value, str) and value.startswith('#'):
+                try:
+                    return self._hex_to_rgb(value)
+                except Exception:
+                    pass
+            return default
+
+        secondary = _rgb_from_hex(self.params.get("secondary_color"), (0.0, 0.8, 1.0))
+        background = _rgb_from_hex(self.params.get("background_color"), (0.02, 0.02, 0.04))
+
         self._prog["u_resolution"].value = (self.width, self.height)
         self._prog["u_time"].value = time
         self._prog["u_voice"].value = voice_smoothed
-        self._prog["u_color"].value = color
+        self._prog["u_secondary_color"].value = secondary
+        self._prog["u_background_color"].value = background
         self._prog["u_hue"].value = self._color_to_hue(color)
         self._prog["u_flow_speed"].value = self.params["flow_speed"]
         self._prog["u_wave_depth"].value = self.params["wave_depth"]
         self._prog["u_color_saturation"].value = self.params["color_saturation"]
         self._prog["u_breathe_intensity"].value = self.params["breathe_intensity"]
+        self._prog["u_breathe_speed"].value = self.params["breathe_speed"]
         self._prog["u_line_count"].value = self.params["line_count"]
+        self._prog["u_line_spacing"].value = self.params["line_spacing"]
         self._prog["u_glow_strength"].value = self.params["glow_strength"]
+        self._prog["u_glow_size"].value = self.params["glow_size"]
         self._prog["u_line_width"].value = self.params["line_width"]
         self._prog["u_trail_length"].value = self.params["trail_length"]
         self._prog["u_trail_decay"].value = self.params["trail_decay"]
+        self._prog["u_trail_time_offset"].value = self.params["trail_time_offset"]
+        self._prog["u_scanline_intensity"].value = self.params["scanline_intensity"]
+        self._prog["u_vignette_intensity"].value = self.params["vignette_intensity"]
         self._prog["u_brightness"].value = self.params["brightness"]
 
         self._vao.render(mode=moderngl.TRIANGLE_STRIP)

@@ -3,7 +3,7 @@ GPU-beschleunigter Pulsing-Core-Visualizer mit ModernGL.
 
 Nutzt einen Fullscreen-Quad und Distance-Field-Rendering im Fragment-Shader.
 Der zentrale Kreis pulsiert mit RMS, Ringe reagieren auf Onsets,
-und die Farbe aendert sich basierend auf dem dominanten Chroma-Ton.
+und die Farbe aendert sich basierend auf dem aktuellen color_mode.
 """
 
 import numpy as np
@@ -28,27 +28,33 @@ uniform float u_onset;
 uniform float u_beat_intensity;
 uniform vec3 u_color;
 uniform float u_pulse_intensity;
+uniform float u_base_radius;
 uniform int u_ring_count;
+uniform float u_ring_spacing;
+uniform float u_ring_width;
 uniform float u_glow_radius;
 uniform float u_trail_length;
 uniform float u_trail_decay;
+uniform float u_bg_brightness;
 uniform float u_brightness;
 out vec4 f_color;
 
 void main() {
+    // Aspektkorrektur: Kreise bleiben rund, unabhaengig von der Aufloesung
     vec2 uv = gl_FragCoord.xy / u_resolution;
+    vec2 aspect = vec2(u_resolution.x / u_resolution.y, 1.0);
     vec2 center = vec2(0.5, 0.5);
-    float dist = distance(uv, center);
+    float dist = distance(uv * aspect, center * aspect);
 
-    float radius = 0.1 + u_rms * 0.15 * u_pulse_intensity;
+    float radius = u_base_radius + u_rms * 0.15 * u_pulse_intensity;
     float glow = exp(-dist * dist / (radius * radius * 2.0 / u_glow_radius));
 
     // Konzentrische Ringe
     float ring = 0.0;
     for (int i = 1; i <= 8; i++) {
         if (i > u_ring_count) break;
-        float ringRadius = radius + float(i) * 0.06;
-        float ringWidth = 0.015;
+        float ringRadius = radius + float(i) * u_ring_spacing;
+        float ringWidth = u_ring_width;
         float ringGlow = smoothstep(ringRadius + ringWidth, ringRadius, dist)
                        * smoothstep(ringRadius - ringWidth, ringRadius, dist);
         ring += ringGlow * (0.2 + max(u_onset, u_beat_intensity) * 0.4);
@@ -60,14 +66,14 @@ void main() {
     int trails = int(u_trail_length);
     for (int t = 1; t <= 8; t++) {
         if (t > trails) break;
-        float trailFade = pow(1.0 - u_trail_decay, float(t));
+        float trailFade = pow(u_trail_decay, float(t));
         float trailRadius = max(0.02, radius - float(t) * 0.03);
         float trailGlow = exp(-dist * dist / (trailRadius * trailRadius * 2.0 / u_glow_radius));
         color += u_color * trailGlow * 0.12 * trailFade;
     }
 
     // Subtiler Hintergrund-Glow
-    float bgGlow = exp(-dist * dist / ((radius + 0.2) * (radius + 0.2) * 3.0)) * u_rms * 0.15;
+    float bgGlow = exp(-dist * dist / ((radius + 0.2) * (radius + 0.2) * 3.0)) * u_rms * u_bg_brightness;
     color += u_color * bgGlow;
 
     f_color = vec4(color * u_brightness, 1.0);
@@ -84,9 +90,12 @@ class PulsingCoreGPU(BaseGPUVisualizer):
 
     PARAMS = {
         'pulse_intensity': (1.0, 0.0, 3.0, 0.1),
+        'base_radius': (0.1, 0.02, 0.3, 0.01),
         'ring_count': (3, 1, 8, 1),
+        'ring_spacing': (0.06, 0.02, 0.15, 0.01),
+        'ring_width': (0.015, 0.005, 0.05, 0.005),
         'glow_radius': (1.0, 0.2, 3.0, 0.1),
-        'bg_brightness': (0.05, 0.0, 0.3, 0.01),
+        'bg_brightness': (0.15, 0.0, 0.5, 0.01),
     }
 
     def _setup(self):
@@ -111,27 +120,6 @@ class PulsingCoreGPU(BaseGPUVisualizer):
             [(self.vbo, "2f", "in_position")],
         )
 
-    @staticmethod
-    def _chroma_to_color(chroma: np.ndarray) -> tuple:
-        """Wandelt ein Chroma-Vektor in eine elegante, gedaempfte RGB-Farbe um."""
-        chroma = np.asarray(chroma).flatten()
-        if chroma.size < 12:
-            chroma = np.pad(chroma, (0, 12 - chroma.size))
-
-        angles = np.linspace(0.0, 2.0 * np.pi, 12, endpoint=False)
-        x = np.sum(chroma * np.cos(angles))
-        y = np.sum(chroma * np.sin(angles))
-
-        hue = np.arctan2(y, x) / (2.0 * np.pi)
-        if hue < 0:
-            hue += 1.0
-
-        strength = float(np.max(chroma))
-        saturation = min(0.35, 0.2 + 0.15 * strength)
-        value = min(0.7, 0.5 + 0.2 * strength)
-
-        return PulsingCoreGPU._hsv_to_rgb(hue, saturation, value)
-
     def render(self, features: dict, time: float):
         """Rendert einen Frame mit aktuellem RMS, Onset und Chroma-Farbe.
 
@@ -149,7 +137,7 @@ class PulsingCoreGPU(BaseGPUVisualizer):
         beat_intensity = f.get("beat_intensity", onset)
         chroma = f["chroma"]
 
-        # Farbe aus dominantem Chroma-Ton ableiten
+        # Farbe aus dem konfigurierten color_mode ableiten
         color = self._chroma_to_color(chroma)
 
         # Uniforms aktualisieren
@@ -158,10 +146,14 @@ class PulsingCoreGPU(BaseGPUVisualizer):
         self.prog["u_beat_intensity"].value = float(beat_intensity)
         self.prog["u_color"].value = color
         self.prog["u_pulse_intensity"].value = float(self.params['pulse_intensity'])
+        self.prog["u_base_radius"].value = float(self.params['base_radius'])
         self.prog["u_ring_count"].value = int(self.params['ring_count'])
+        self.prog["u_ring_spacing"].value = float(self.params['ring_spacing'])
+        self.prog["u_ring_width"].value = float(self.params['ring_width'])
         self.prog["u_glow_radius"].value = float(self.params['glow_radius'])
         self.prog["u_trail_length"].value = float(self.params.get('trail_length', 0))
         self.prog["u_trail_decay"].value = float(self.params.get('trail_decay', 0.7))
+        self.prog["u_bg_brightness"].value = float(self.params['bg_brightness'])
         self.prog["u_brightness"].value = float(self.params.get('brightness', 1.0))
 
         # Zeichnen

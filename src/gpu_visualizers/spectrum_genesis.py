@@ -24,7 +24,10 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
 
     PARAMS = {
         'bar_count': (64, 16, 128, 8),
+        'bar_height': (0.35, 0.1, 0.7, 0.05),
         'wave_intensity': (0.6, 0.0, 1.5, 0.1),
+        'wave_frequency': (10.0, 1.0, 40.0, 1.0),
+        'wave_complexity': (3, 1, 6, 1),
         'glow_radius': (12.0, 4.0, 30.0, 2.0),
         'color_shift': (0.0, 0.0, 1.0, 0.05),
         'beat_flash': (0.4, 0.0, 1.0, 0.05),
@@ -58,12 +61,17 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
             in vec3 v_color;
             in float v_alpha;
             in vec2 v_local;
+            uniform float u_glow_radius;
             out vec4 f_color;
             void main() {
-                float d = length(v_local);
+                // Rechteckige Balken mit abgerundeten Ecken statt Kreisen
+                vec2 q = abs(v_local);
+                float d = max(q.x, q.y);
                 if (d > 1.0) discard;
-                float core = 1.0 - smoothstep(0.0, 0.5, d);
-                float glow = exp(-d * d * 4.0);
+
+                float core = 1.0 - smoothstep(0.85, 1.0, d);
+                // glow_radius steuert die Weite des Außenleuchtens
+                float glow = exp(-max(0.0, d - 0.5) * max(0.0, d - 0.5) * u_glow_radius);
                 vec3 col = v_color * (core + glow * 0.8);
                 float a = (core * 0.95 + glow * 0.5) * v_alpha;
                 f_color = vec4(col, a);
@@ -86,6 +94,9 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
             uniform float u_onset;
             uniform float u_voice;
             uniform float u_wave_intensity;
+            uniform float u_wave_frequency;
+            uniform int u_wave_complexity;
+            uniform float u_beat_flash;
             uniform vec3 u_color;
             out vec4 f_color;
 
@@ -93,16 +104,23 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
                 vec2 uv = (gl_FragCoord.xy / u_resolution) * 2.0 - 1.0;
                 uv.x *= u_resolution.x / u_resolution.y;
 
-                // Wellenform
-                float wave = sin(uv.x * 10.0 + u_time * 2.0) * u_rms * u_wave_intensity;
-                wave += sin(uv.x * 20.0 - u_time * 3.0) * u_voice * u_wave_intensity * 0.5;
-                wave += sin(uv.x * 5.0 + u_time) * u_onset * u_wave_intensity * 0.3;
+                // Wellenform: Anzahl und Frequenz der Komponenten per Parameter
+                float wave = 0.0;
+                for (int i = 0; i < u_wave_complexity; i++) {
+                    float fi = float(i);
+                    float freq = u_wave_frequency * (1.0 + fi * 0.5);
+                    float phase = u_time * (2.0 + fi);
+                    float amp = 1.0 / (1.0 + fi * 0.7);
+                    float source = mix(u_rms, u_voice, float(i == 1));
+                    if (i == 2) source = u_onset;
+                    wave += sin(uv.x * freq + phase) * source * u_wave_intensity * amp;
+                }
 
                 float dist = abs(uv.y - wave);
                 float line = exp(-dist * dist * 200.0);
 
-                // Beat-Flash als Overlay
-                float flash = u_onset * 0.1;
+                // Beat-Flash als Overlay, Intensitaet per Parameter
+                float flash = u_onset * u_beat_flash;
 
                 vec3 col = u_color * line + vec3(flash);
                 f_color = vec4(col, line * 0.8 + flash);
@@ -112,7 +130,7 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
 
         quad = np.array([[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]], dtype=np.float32)
 
-        # Bar VAO
+        # Bar VAO: 2 Instanzen pro Balken (obere/untere Haelfte)
         self._bar_max = 128
         self._bar_data = np.zeros((self._bar_max * 2, 8), dtype=np.float32)
         self._bar_vbo = self.ctx.buffer(reserve=self._bar_max * 2 * 8 * 4, dynamic=True)
@@ -137,14 +155,17 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
 
         color = self._chroma_to_color(uniforms["u_chroma"])
         bar_count = int(self.params["bar_count"])
+        bar_height = self.params["bar_height"]
         glow = self.params["glow_radius"]
         color_shift = self.params["color_shift"]
         beat_flash = self.params["beat_flash"]
 
         # === Bars generieren ===
         bar_w = self.width / bar_count
-        max_h = self.height * 0.35
+        max_h = self.height * bar_height
         instance_idx = 0
+
+        base_h, base_s, base_v = self._rgb_to_hsv(*color)
 
         for i in range(bar_count):
             # Simulierte Bar-Hoehe aus Features
@@ -152,11 +173,15 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
             h = (np.sin(phase) * 0.3 + uniforms["u_energy"] * 0.5 + uniforms["u_impact"] * 0.3) * max_h
             h = max(2.0, h)
 
-            # Farbverlauf
-            hue = (self._color_to_hue(color) + i / bar_count * color_shift + color_shift) % 1.0
-            sat = 0.7 + uniforms["u_energy"] * 0.3
-            val = 0.5 + h / max_h * 0.5
-            bar_rgb = self._hsv_to_rgb(hue, sat, val)
+            # Farbverlauf: bei Monochrom/Farblos einfach Helligkeit modulieren,
+            # sonst den Hue entlang der Balken verschieben.
+            val = base_v * (0.4 + (h / max_h) * 0.6)
+            if base_s < 0.05:
+                bar_rgb = self._hsv_to_rgb(base_h, base_s, val)
+            else:
+                hue = (base_h + (i / bar_count) * color_shift) % 1.0
+                sat = base_s * (0.7 + uniforms["u_energy"] * 0.3)
+                bar_rgb = self._hsv_to_rgb(hue, sat, val)
 
             x = i * bar_w + bar_w / 2.0
             cy = self.height / 2.0
@@ -184,6 +209,7 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
         # Bars
         if instance_idx > 0:
             self._prog["u_resolution"].value = (self.width, self.height)
+            self._prog["u_glow_radius"].value = glow
             self._bar_vbo.write(self._bar_data[:instance_idx].tobytes())
             self._bar_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_idx)
 
@@ -194,14 +220,10 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
         self._wave_prog["u_onset"].value = uniforms["u_beat"]
         self._wave_prog["u_voice"].value = uniforms["u_flow"]
         self._wave_prog["u_wave_intensity"].value = self.params["wave_intensity"]
+        self._wave_prog["u_wave_frequency"].value = self.params["wave_frequency"]
+        self._wave_prog["u_wave_complexity"].value = int(self.params["wave_complexity"])
+        self._wave_prog["u_beat_flash"].value = beat_flash
         self._wave_prog["u_color"].value = color
         self._wave_vao.render(mode=moderngl.TRIANGLE_STRIP)
-
-        # Beat Flash
-        beat_intensity = uniforms.get("u_beat_intensity", uniforms["u_beat"])
-        if beat_intensity > 0.3:
-            # Flash-Intensitaet wird ueber den Wellenform-Shader bereits dargestellt,
-            # hier koennte spaeter ein dedizierter Fullscreen-Flash ergaenzt werden.
-            pass
 
         self.ctx.disable(moderngl.BLEND)

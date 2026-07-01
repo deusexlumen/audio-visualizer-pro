@@ -43,7 +43,8 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
 
     Jeder Balken besteht aus 4 Vertices (2 Dreiecke). Die Vertex-Daten
     werden pro Frame neu in das VBO geschrieben, um die Balkenhoehen
-    anzupassen. Farbverlaeufe werden pro Vertex interpoliert.
+    anzupassen. Farbverlaeufe werden pro Vertex interpoliert und
+    respektieren den gemeinsamen color_mode.
     """
 
     PARAMS = {
@@ -51,6 +52,10 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
         'height_scale': (1.0, 0.2, 3.0, 0.1),
         'spacing': (0.25, 0.0, 0.8, 0.05),
         'color_shift': (0.0, 0.0, 1.0, 0.05),
+        'base_height': (0.1, 0.0, 0.5, 0.05),
+        'height_boost': (0.85, 0.0, 1.2, 0.05),
+        'wave_count': (0.3, 0.0, 2.0, 0.1),
+        'color_spread': (0.02, 0.0, 0.1, 0.005),
     }
 
     def _setup(self):
@@ -104,28 +109,34 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
         chroma = f["chroma"]
 
         # Dynamische Hoehe basierend auf RMS und Spectral-Centroid
-        base_height = 0.1
+        base_height = self.params['base_height']
+        height_boost = self.params['height_boost']
         height_scale = (rms * 0.7 + spectral_centroid * 0.3) * self.params['height_scale']
-        max_height = self.height * (base_height + height_scale * 0.85)
+        max_height = self.height * (base_height + height_scale * height_boost)
 
-        # Farbe aus Chroma ableiten
-        dominant_note = int(np.argmax(chroma))
-        hue = dominant_note / 12.0
+        # Basisfarbe ueber den gemeinsamen color_mode ermitteln
+        base_rgb = self._chroma_to_color(chroma)
+        hue = self._color_to_hue(base_rgb)
+        saturation = float(self.params.get('color_saturation', 0.7))
+        brightness = float(self.params.get('brightness', 1.0))
 
         # Neue Vertex-Daten generieren
-        vertices = self._build_bar_vertices(max_height, hue)
+        vertices = self._build_bar_vertices(max_height, hue, saturation, brightness)
         self.vbo.write(vertices.tobytes())
 
         # Brightness binden und zeichnen
         self.prog["u_brightness"].value = self.params.get("brightness", 1.0)
         self.vao.render(mode=moderngl.TRIANGLES)
 
-    def _build_bar_vertices(self, max_height: float, hue: float) -> np.ndarray:
+    def _build_bar_vertices(self, max_height: float, hue: float,
+                            saturation: float, brightness: float) -> np.ndarray:
         """Baut das VBO-Array fuer alle Balken.
 
         Args:
             max_height: Maximale Balkenhoehe in Pixeln.
             hue: Grund-Farbton (0.0-1.0).
+            saturation: Saettigung aus den gemeinsamen Farb-Parametern.
+            brightness: Helligkeit aus den gemeinsamen Effekt-Parametern.
 
         Returns:
             Numpy-Array mit allen Vertex-Daten.
@@ -137,9 +148,13 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
         bar_width = total_bar_width * (1.0 - self.bar_spacing_ratio)
         spacing = total_bar_width * self.bar_spacing_ratio
 
+        wave_count = self.params['wave_count']
+        color_spread = self.params['color_spread']
+        color_shift = self.params['color_shift']
+
         for i in range(self.bar_count):
             # Individuelle Hoehe pro Balken leicht variieren fuer visuelle Dynamik
-            bar_height = max_height * (0.4 + 0.6 * np.sin(i * 0.3 + hue * 6.28) ** 2)
+            bar_height = max_height * (0.4 + 0.6 * np.sin(i * wave_count + hue * 6.28) ** 2)
             bar_height = max(2.0, min(bar_height, self.height))
 
             x_left = i * total_bar_width + spacing / 2.0
@@ -148,9 +163,9 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
             y_top = bar_height
 
             # Farbverlauf von unten (dunkel) nach oben (hell)
-            color_shift = self.params['color_shift']
-            color_bottom = self._hue_to_rgb(hue + i * 0.02 + color_shift, 0.8, 0.4)
-            color_top = self._hue_to_rgb(hue + i * 0.02 + color_shift, 0.9, 1.0)
+            local_hue = hue + i * color_spread + color_shift
+            color_bottom = self._hsv_to_rgb(local_hue, saturation, 0.45 * brightness)
+            color_top = self._hsv_to_rgb(local_hue, saturation, 0.95 * brightness)
 
             idx = i * self._vertices_per_bar
 
@@ -176,34 +191,4 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
 
         return vertices
 
-    @staticmethod
-    def _hue_to_rgb(h: float, s: float, v: float) -> tuple:
-        """Konvertiert Hue-Saturation-Value nach RGB-Tupel.
 
-        Args:
-            h: Hue im Bereich 0.0-1.0.
-            s: Saturation im Bereich 0.0-1.0.
-            v: Value im Bereich 0.0-1.0.
-
-        Returns:
-            Tuple (r, g, b) im Bereich 0.0-1.0.
-        """
-        h = h % 1.0
-        i = int(h * 6.0)
-        f = (h * 6.0) - i
-        p = v * (1.0 - s)
-        q = v * (1.0 - s * f)
-        t = v * (1.0 - s * (1.0 - f))
-
-        i = i % 6
-        if i == 0:
-            return (v, t, p)
-        if i == 1:
-            return (q, v, p)
-        if i == 2:
-            return (p, v, t)
-        if i == 3:
-            return (p, q, v)
-        if i == 4:
-            return (t, p, v)
-        return (v, p, q)

@@ -18,6 +18,13 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
     PARAMS = {
         'circle_count': (5, 2, 10, 1),
         'wave_amplitude': (1.0, 0.2, 3.0, 0.1),
+        'ring_segments': (100, 30, 200, 10),
+        'ray_count': (12, 0, 32, 1),
+        'num_bars': (12, 0, 24, 1),
+        'bar_max_height': (40.0, 10.0, 120.0, 5.0),
+        'core_radius': (30.0, 10.0, 80.0, 5.0),
+        'glow_distance': (4.0, 0.0, 12.0, 1.0),
+        'beat_flash': (0.4, 0.0, 1.0, 0.05),
     }
 
     def _setup(self):
@@ -94,7 +101,7 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
         quad = np.array([[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]], dtype=np.float32)
         self._quad_vbo = self.ctx.buffer(quad.tobytes())
 
-        max_line_verts = 8000
+        max_line_verts = 12000
         self._line_vbo = self.ctx.buffer(reserve=max_line_verts * 6 * 4, dynamic=True)
         self._line_vao = self.ctx.vertex_array(
             self._line_prog,
@@ -113,7 +120,7 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
         self.center = (self.width / 2.0, self.height / 2.0)
         self.max_radius = min(self.width, self.height) / 2.0 - 50.0
 
-    def _append_wavy_ring(self, verts, center, base_radius, amplitude, wave_count, phase, color, alpha, rms, segments=100):
+    def _append_wavy_ring(self, verts, center, base_radius, amplitude, wave_count, phase, color, alpha, segments=100):
         """Fuegt einen wellenfoermigen Ring als Line Strip hinzu."""
         points = []
         for i in range(segments + 1):
@@ -135,17 +142,11 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
         rms = f["rms"]
         onset = f["onset"]
         chroma = f["chroma"]
-        spectral = f["spectral_centroid"]
 
-        if chroma is not None and chroma.size > 0:
-            dominant = int(np.argmax(chroma))
-            base_hue = dominant / 12.0
-        else:
-            dominant = 0
-            base_hue = 0.5
-
-        primary = self._hsv_to_rgb(base_hue, 0.9, 1.0)
-        secondary = self._hsv_to_rgb((base_hue + 0.33) % 1.0, 0.8, 1.0)
+        primary = self._chroma_to_color(chroma)
+        # Sekundaerfarbe als Komplementaerton zur primaeren Farbe
+        h, s, v = self._rgb_to_hsv(*primary)
+        secondary = self._hsv_to_rgb((h + 0.33) % 1.0, s, v)
 
         num_rings = int(self.params.get("circle_count", 5))
         if num_rings < 1:
@@ -155,6 +156,7 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
         cx, cy = self.center
         line_verts = []
 
+        ring_segments = int(self.params.get("ring_segments", 100))
         # --- Ring-Daten JEDES FRAME frisch berechnen (kein persistenter State) ---
         ring_data = []
         for i in range(num_rings):
@@ -164,9 +166,11 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
                 "frequency": 0.1 + i * 0.02,
                 "phase": i * np.pi / 3.0,
                 "wave_count": 6 + i * 2,
+                "segments": ring_segments,
             })
 
         # --- Ringe von aussen nach innen ---
+        glow_distance = float(self.params.get("glow_distance", 4.0))
         for i in range(num_rings - 1, -1, -1):
             ring = ring_data[i]
             audio_boost = 1.0 + rms * 0.5
@@ -175,10 +179,7 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
             current_radius = ring["base_radius"] * audio_boost
             current_amp = ring["amplitude"] * (0.5 + rms * 1.5) * wave_amp
 
-            ring_hue = (base_hue + i * 0.1) % 1.0
-            ring_sat = 0.8 + spectral * 0.2
             ring_val = 0.5 + rms * 0.5
-
             if i % 2 == 0:
                 ring_color = tuple(primary[j] * (0.5 + ring_val * 0.5) for j in range(3))
             else:
@@ -187,19 +188,22 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
             # Haupt-Ring
             self._append_wavy_ring(
                 line_verts, self.center, current_radius, current_amp,
-                ring["wave_count"], t + ring["phase"], ring_color, 1.0, rms
+                ring["wave_count"], t + ring["phase"], ring_color, 1.0,
+                segments=ring["segments"]
             )
 
             # Glow fuer aeussere Ringe
             if i < 2:
                 glow_color = tuple(c * 0.3 for c in ring_color)
                 self._append_wavy_ring(
-                    line_verts, self.center, current_radius + 4.0, current_amp,
-                    ring["wave_count"], t + ring["phase"], glow_color, 0.5, rms, segments=80
+                    line_verts, self.center, current_radius + glow_distance, current_amp,
+                    ring["wave_count"], t + ring["phase"], glow_color, 0.5,
+                    segments=ring["segments"]
                 )
 
         # --- Kern (gefuellter Kreis) ---
-        core_radius = 30.0 + rms * 40.0
+        core_base = float(self.params.get("core_radius", 30.0))
+        core_radius = core_base + rms * 40.0
         core_data = np.array([[
             cx, cy,
             primary[0], primary[1], primary[2],
@@ -207,16 +211,15 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
         ]], dtype=np.float32)
 
         # --- Partikel-Strahlen bei Beats ---
-        if onset > 0.4:
-            num_rays = 12
+        beat_flash = float(self.params.get("beat_flash", 0.4))
+        num_rays = int(self.params.get("ray_count", 12))
+        if onset > beat_flash and num_rays > 0:
             ray_length = self.max_radius * (0.3 + onset * 0.5)
             for i in range(num_rays):
                 angle = (i / num_rays) * np.pi * 2.0 + t * 0.5
-                start_r = 30.0 + rms * 40.0
+                start_r = core_base + rms * 40.0
                 sx = cx + np.cos(angle) * start_r
                 sy = cy + np.sin(angle) * start_r
-                ex = cx + np.cos(angle) * (self.max_radius + ray_length)
-                ey = cy + np.sin(angle) * (self.max_radius + ray_length)
                 for j in range(3):
                     oa = j * 0.02
                     ox = cx + np.cos(angle + oa) * (self.max_radius + ray_length * 0.8)
@@ -226,19 +229,21 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
                     line_verts.append([ox, oy, *ray_color, 0.8])
 
         # --- Frequenz-Balken am aeusseren Ring ---
-        num_bars = 12
-        bar_w = 15.0
-        max_bar_h = 40.0
+        num_bars = int(self.params.get("num_bars", 12))
+        max_bar_h = float(self.params.get("bar_max_height", 40.0))
         ring_r = self.max_radius + 20.0
         for i in range(num_bars):
             angle = (i / num_bars) * np.pi * 2.0 - np.pi / 2.0
-            bar_h = max_bar_h * (chroma[i] if chroma is not None else 0.5) * (0.5 + rms)
+            chroma_val = chroma[i % 12] if chroma is not None and chroma.size > 0 else 0.5
+            bar_h = max_bar_h * chroma_val * (0.5 + rms)
             bx = cx + np.cos(angle) * ring_r
             by = cy + np.sin(angle) * ring_r
             ex = cx + np.cos(angle) * (ring_r + bar_h)
             ey = cy + np.sin(angle) * (ring_r + bar_h)
-            bar_color = self._hsv_to_rgb(i / 12.0, 0.9, 0.8 + (chroma[i] if chroma is not None else 0.0) * 0.2)
-            # Balken als dicke Linie
+            # Balkenfarbe aus Chroma-Palette, abgestimmt an Farbmodus
+            note_chroma = np.zeros(12, dtype=np.float32)
+            note_chroma[i % 12] = 1.0
+            bar_color = self._chroma_to_color(note_chroma)
             line_verts.append([bx, by, *bar_color, 1.0])
             line_verts.append([ex, ey, *bar_color, 1.0])
 
@@ -268,21 +273,21 @@ class NeonWaveCircleGPU(BaseGPUVisualizer):
             if not hist:
                 continue
             trail_idx = len(self._line_history) - 1 - hi
-            trailFade = pow(1.0 - trail_decay, trail_idx)
+            trailFade = pow(trail_decay, trail_idx)
             faded = []
             for v in hist:
                 faded.append([v[0], v[1], v[2], v[3], v[4], v[5] * trailFade])
             arr = np.array(faded, dtype=np.float32)
             self._line_prog["u_resolution"].value = (self.width, self.height)
             self._line_vbo.write(arr.tobytes())
-            self._line_vao.render(mode=moderngl.LINES)
+            self._line_vao.render(mode=moderngl.LINES, vertices=len(hist))
 
         # Aktuelle Linien
         if line_verts:
             arr = np.array(line_verts, dtype=np.float32)
             self._line_prog["u_resolution"].value = (self.width, self.height)
             self._line_vbo.write(arr.tobytes())
-            self._line_vao.render(mode=moderngl.LINES)
+            self._line_vao.render(mode=moderngl.LINES, vertices=len(line_verts))
 
         # Kern
         self._quad_prog["u_resolution"].value = (self.width, self.height)

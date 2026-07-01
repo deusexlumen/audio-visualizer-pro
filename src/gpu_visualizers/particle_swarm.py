@@ -23,8 +23,14 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         'particle_count': (150, 50, 500, 10),
         'explosion_threshold': (0.4, 0.1, 0.9, 0.05),
         'glow_size': (3, 0, 10, 1),
+        'glow_strength': (0.7, 0.0, 2.0, 0.1),
         'trail_length': (5, 0, 10, 1),
         'depth_enabled': (1, 0, 1, 1),
+        'speed_scale': (1.0, 0.2, 3.0, 0.1),
+        'center_force': (0.04, 0.0, 0.2, 0.01),
+        'friction': (0.985, 0.9, 0.999, 0.001),
+        'life_decay': (0.004, 0.001, 0.02, 0.001),
+        'size_scale': (1.0, 0.2, 3.0, 0.1),
     }
 
     def _setup(self):
@@ -45,13 +51,16 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
             out vec2 v_local_pos;
 
             void main() {
-                // Quad-Vertex skalieren und auf Partikel-Position addieren
-                vec2 pixel_pos = in_particle_pos + in_vertex_pos * in_particle_size;
-                // Pixel -> Normalized Device Coordinates (-1 .. 1)
-                vec2 ndc = (pixel_pos / u_resolution) * 2.0 - 1.0;
-                // OpenGL-Y zeigt nach oben, unsere Pixel-Koordinaten nach unten
-                ndc.y = -ndc.y;
-                gl_Position = vec4(ndc, 0.0, 1.0);
+                // Zentrum und Offset getrennt in NDC umrechnen, damit Kreise
+                // bei nicht-quadratischer Aufloesung kreisrund bleiben.
+                vec2 center_ndc = (in_particle_pos / u_resolution) * 2.0 - 1.0;
+                center_ndc.y = -center_ndc.y;
+
+                vec2 offset_ndc = in_vertex_pos * in_particle_size / u_resolution * 2.0;
+                // X-Offset an Pixel-Aspekt anpassen (1 Pixel in X = height/width Pixel in Y)
+                offset_ndc.x *= u_resolution.x / u_resolution.y;
+
+                gl_Position = vec4(center_ndc + offset_ndc, 0.0, 1.0);
 
                 v_color = in_particle_color;
                 v_alpha = in_particle_alpha;
@@ -61,6 +70,7 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
             fragment_shader="""
             #version 330
             uniform float u_brightness;
+            uniform float u_glow_strength;
             in vec3 v_color;
             in float v_alpha;
             in vec2 v_local_pos;
@@ -75,7 +85,7 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
                 // Glow: exponentieller Abfall
                 float glow = exp(-dist * dist * 3.5);
 
-                vec3 final_color = v_color * (core + glow * 0.7) * u_brightness;
+                vec3 final_color = v_color * (core + glow * u_glow_strength) * u_brightness;
                 float alpha = (core * 0.95 + glow * 0.45) * v_alpha;
 
                 f_color = vec4(final_color, alpha);
@@ -151,6 +161,25 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
             self._particles[i, 8] = np.random.random()  # depth
             self._trails[i] = []
 
+    def _new_hue(self, chroma: np.ndarray = None) -> float:
+        """Gibt einen neuen Farbton basierend auf color_mode zurueck."""
+        mode = self.params.get('color_mode', 'chroma')
+        if mode == 'chroma':
+            if chroma is not None and chroma.size > 0:
+                return self._color_to_hue(self._chroma_to_color(chroma))
+            return 0.55
+        if mode == 'fixed':
+            primary = self.params.get('primary_color')
+            if primary and isinstance(primary, str) and primary.startswith('#'):
+                return self._color_to_hue(self._hex_to_rgb(primary))
+            return float(self.params.get('base_hue', 0.55))
+        if mode == 'warm':
+            return 0.08 + np.random.random() * 0.06
+        if mode == 'cool':
+            return 0.55 + np.random.random() * 0.1
+        # monochrome
+        return 0.0
+
     def _explode_particle(self, idx: int, chroma: np.ndarray):
         """Explodiert ein Partikel vom Zentrum aus."""
         cx, cy = self.width / 2.0, self.height / 2.0
@@ -158,6 +187,7 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         # ease_out_expo
         t = np.random.random()
         speed = (1.0 - pow(2.0, -10.0 * t)) * 12.0 + 3.0
+        speed *= self.params["speed_scale"]
 
         self._particles[idx, 0] = cx
         self._particles[idx, 1] = cy
@@ -166,14 +196,11 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         self._particles[idx, 4] = 1.0
         self._particles[idx, 5] = 0.5 + np.random.random() * 1.0
         self._particles[idx, 6] = 2.0 + np.random.random() * 5.0
-        if chroma is not None and chroma.size > 0:
-            self._particles[idx, 7] = float(np.argmax(chroma)) / 12.0
-        else:
-            self._particles[idx, 7] = np.random.random()
+        self._particles[idx, 7] = self._new_hue(chroma) + np.random.random() * 0.1
         self._particles[idx, 8] = np.random.random()
         self._trails[idx] = []
 
-    def _reset_particle(self, idx: int):
+    def _reset_particle(self, idx: int, chroma: np.ndarray = None):
         """Setzt ein Partikel auf zufaellige Startposition zurueck."""
         cx, cy = self.width / 2.0, self.height / 2.0
         angle = np.random.random() * np.pi * 2
@@ -186,7 +213,7 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         self._particles[idx, 4] = 1.0
         self._particles[idx, 5] = 0.5 + np.random.random() * 1.0
         self._particles[idx, 6] = 2.0 + np.random.random() * 5.0
-        self._particles[idx, 7] = np.random.random()
+        self._particles[idx, 7] = self._new_hue(chroma) + np.random.random() * 0.1
         self._particles[idx, 8] = np.random.random()
         self._trails[idx] = []
 
@@ -203,7 +230,12 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         threshold = self.params["explosion_threshold"]
         trail_len = int(self.params["trail_length"])
         glow_size = self.params["glow_size"]
+        glow_strength = self.params["glow_strength"]
         depth_enabled = self.params["depth_enabled"] > 0.5
+        center_force = self.params["center_force"]
+        friction = self.params["friction"]
+        life_decay = self.params["life_decay"]
+        size_scale = self.params["size_scale"]
 
         # Beat-Explosion
         if onset > threshold:
@@ -212,12 +244,11 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
                 idx = np.random.randint(0, count)
                 self._explode_particle(idx, chroma)
 
-        # Hauptfarbe aus Chroma fuer Zentrumspuls
-        if chroma is not None and chroma.size > 0:
-            main_hue = float(np.argmax(chroma)) / 12.0
-        else:
-            main_hue = 0.5
-        main_color = self._hsv_to_rgb(main_hue, 0.35, 0.7)
+        # Farbe aus color_mode/Chroma fuer Partikel und Zentrumspuls
+        base_color = self._chroma_to_color(chroma)
+        main_color = tuple(c * 0.7 for c in base_color)
+        color_mode = self.params.get('color_mode', 'chroma')
+        base_saturation = 0.0 if color_mode == 'monochrome' else float(self.params.get('color_saturation', 0.7))
 
         # Instance-Array fuellen
         instance_idx = 0
@@ -245,16 +276,16 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
             dx = cx - x
             dy = cy - y
             dist = np.sqrt(dx * dx + dy * dy) + 1.0
-            force = 0.04 * rms
+            force = center_force * rms
             vx += (dx / dist) * force
             vy += (dy / dist) * force
-            vx *= 0.985
-            vy *= 0.985
+            vx *= friction
+            vy *= friction
 
-            life -= 0.004 * (1.0 + rms)
+            life -= life_decay * (1.0 + rms)
 
             if life <= 0:
-                self._reset_particle(i)
+                self._reset_particle(i, chroma)
                 x = self._particles[i, 0]
                 y = self._particles[i, 1]
                 vx = self._particles[i, 2]
@@ -274,12 +305,16 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
 
             # Farbe und Groesse berechnen
             life_ratio = life / max_life if max_life > 0 else 0.0
-            saturation = 0.3 + rms * 0.15
-            value = life_ratio * (0.4 + rms * 0.3)
-            rgb = self._hsv_to_rgb(float(hue), saturation, value)
+            value = life_ratio * (0.5 + rms * 0.3)
+            # Leichte Hue-Variation pro Partikel, ansonsten Farbe aus color_mode
+            rgb = self._hsv_to_rgb(
+                (self._color_to_hue(base_color) + float(hue) * 0.15) % 1.0,
+                base_saturation * (0.5 + rms * 0.2),
+                value,
+            )
 
             depth_scale = 0.6 + depth * 0.4 if depth_enabled else 1.0
-            current_size = size * life_ratio * (0.8 + rms * 0.4) * depth_scale
+            current_size = size * life_ratio * (0.8 + rms * 0.4) * depth_scale * size_scale
             total_size = current_size * 1.5 + glow_size * rms
 
             # Trail-Punkte als Instanzen
@@ -293,7 +328,8 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
                             else 0
                         )
                         trail_dist = len(self._trails[i]) - 1 - ti
-                        trail_fade = pow(1.0 - trail_decay, trail_dist)
+                        # Korrektes Trail-Fading: juengere Punkte staerker (decay^dist)
+                        trail_fade = pow(trail_decay, trail_dist)
                         t_alpha = 0.35 * t_ratio * tl * trail_fade
                         t_size = max(1.0, current_size * 0.4)
                         self._instance_data[instance_idx] = [
@@ -342,6 +378,7 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         # Aufloesung und Brightness an Shader uebergeben
         self._prog["u_resolution"].value = (self.width, self.height)
         self._prog["u_brightness"].value = self.params.get("brightness", 1.0)
+        self._prog["u_glow_strength"].value = glow_strength
 
         # Rendern
         if instance_idx > 0:

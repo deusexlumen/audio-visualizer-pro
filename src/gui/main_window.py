@@ -340,6 +340,8 @@ class MainWindow(QMainWindow):
 
         if self._intro_worker and self._intro_worker.isRunning():
             return
+        # Original-Pfad merken, damit Dateien mit mehreren Punkten im Namen korrekt ersetzt werden
+        self._intro_main_path = main_video_path
         tmp_path = str(Path(main_video_path).with_suffix(".intro_tmp.mp4"))
         self._intro_worker = IntroWorker(
             intro_path=self.state.intro_path,
@@ -365,8 +367,10 @@ class MainWindow(QMainWindow):
     def _on_intro_finished(self, tmp_path: str):
         if self.sender() is not self._intro_worker:
             return
-        main_path = str(Path(tmp_path).with_suffix(".mp4"))
+        main_path = getattr(self, "_intro_main_path", None) or str(Path(tmp_path).with_suffix(".mp4"))
         try:
+            if Path(main_path).exists():
+                Path(main_path).unlink()
             os.replace(tmp_path, main_path)
         except Exception as e:
             self._set_status(f"Intro-Fehler: {e}", "error")

@@ -6,7 +6,6 @@ Eleganter, warmer Visualizer fuer Orchester- und Kammermusik:
 - Dynamik-basiertes Schwellen: forte = mehr Partikel, heller, weiter
 - piano = weniger Partikel, gedimmter, kontrollierter
 - Langsame, sanfte Bewegung mit Sinus-Wellen
-- Warme Farbpalette: Gold, Bernstein, sanftes Orange, tiefes Burgunder
 """
 
 import numpy as np
@@ -19,11 +18,23 @@ class OrchestralSwellGPU(BaseGPUVisualizer):
     Orchestral Swell - Eleganter GPU-Visualizer fuer klassische Musik-Dynamik.
     """
 
+    COLOR_PARAMS = {
+        'color_mode': 'warm',     # Orchestral-Look: warme Toene als Default
+        'base_hue': 0.10,         # 0.0-1.0, nur fuer 'fixed'
+        'color_saturation': 0.75, # 0.0-1.0
+    }
+
     PARAMS = {
         'swell_intensity': (1.0, 0.2, 2.0, 0.05),
         'particle_count': (64, 8, 128, 8),
         'gold_tint': (0.5, 0.0, 1.0, 0.05),
         'dynamics_response': (1.2, 0.5, 2.5, 0.1),
+        'bg_brightness': (0.08, 0.0, 0.5, 0.01),
+        'vignette_strength': (0.6, 0.0, 1.5, 0.05),
+        'spotlight_strength': (0.3, 0.0, 1.0, 0.05),
+        'ray_strength': (0.06, 0.0, 0.3, 0.01),
+        'grain_amount': (0.015, 0.0, 0.1, 0.005),
+        'particle_spread': (1.0, 0.0, 4.0, 0.1),
     }
 
     def _setup(self):
@@ -43,6 +54,16 @@ class OrchestralSwellGPU(BaseGPUVisualizer):
             uniform float u_particle_count;
             uniform float u_gold_tint;
             uniform float u_dynamics_response;
+            uniform float u_bg_brightness;
+            uniform float u_vignette_strength;
+            uniform float u_spotlight_strength;
+            uniform float u_ray_strength;
+            uniform float u_grain_amount;
+            uniform float u_particle_spread;
+            uniform float u_brightness;
+            uniform vec3 u_primary_color;
+            uniform vec3 u_secondary_color;
+            uniform vec3 u_background_color;
 
             out vec4 f_color;
 
@@ -88,21 +109,21 @@ class OrchestralSwellGPU(BaseGPUVisualizer):
                 float dyn = rms * u_dynamics_response;
 
                 // === Deep warm background ===
-                vec3 col = vec3(0.03, 0.015, 0.008);
+                vec3 col = u_background_color * u_bg_brightness;
 
                 // Subtle warm vignette
                 vec2 center = vec2(aspect * 0.5, 0.5);
                 float dist = length(uv - center);
-                col *= smoothstep(1.2, 0.2, dist);
+                col *= smoothstep(1.2, 0.2, dist * u_vignette_strength);
 
                 // === Central warm glow (spotlight effect) ===
                 float spotGlow = exp(-dist * dist * 2.0) * (0.1 + dyn * 0.4);
-                vec3 spotColor = vec3(1.0, 0.85, 0.6);
-                col += spotColor * spotGlow * u_swell_intensity;
+                vec3 spotColor = mix(u_primary_color, vec3(1.0, 0.95, 0.85), 0.25);
+                col += spotColor * spotGlow * u_spotlight_strength * u_swell_intensity;
 
                 // === Particles (embers/dust) ===
                 int activeParticles = int(u_particle_count * (0.4 + rms * 0.6));
-                float spread = 1.0 + dyn * 2.5;
+                float spread = 1.0 + dyn * 2.5 * u_particle_spread;
                 float globalBright = 0.5 + dyn * 0.5;
 
                 for (int i = 0; i < 128; i++) {
@@ -130,21 +151,19 @@ class OrchestralSwellGPU(BaseGPUVisualizer):
                     float pSize = 0.004 + hash(seed * 5.23) * 0.006 + dyn * 0.006;
                     float glow = exp(-d * d / (pSize * pSize));
 
-                    // Warm palette
-                    vec3 pColor;
+                    // Palette aus primary/secondary abgeleitet
                     float ci = hash(seed * 11.11);
-                    if (ci < 0.25) {
-                        pColor = vec3(1.0, 0.84, 0.0);      // gold
-                    } else if (ci < 0.5) {
-                        pColor = vec3(1.0, 0.65, 0.1);      // amber
-                    } else if (ci < 0.75) {
-                        pColor = vec3(1.0, 0.5, 0.2);       // soft orange
+                    vec3 pColor;
+                    if (ci < 0.33) {
+                        pColor = u_primary_color;
+                    } else if (ci < 0.66) {
+                        pColor = mix(u_primary_color, u_secondary_color, 0.5);
                     } else {
-                        pColor = vec3(0.55, 0.08, 0.12);    // deep burgundy
+                        pColor = u_secondary_color;
                     }
 
                     // Gold tint bias
-                    pColor = mix(pColor, vec3(1.0, 0.84, 0.0), u_gold_tint * 0.25);
+                    pColor = mix(pColor, u_primary_color, u_gold_tint * 0.25);
 
                     // Brightness per particle + dynamics
                     float pBright = (0.3 + hash(seed * 9.99) * 0.5) * globalBright;
@@ -165,17 +184,17 @@ class OrchestralSwellGPU(BaseGPUVisualizer):
                 rays *= (0.2 + dyn * 0.8);
                 rays *= smoothstep(0.0, 0.3, uv.y); // fade at bottom
 
-                vec3 rayColor = mix(vec3(1.0, 0.9, 0.7), vec3(1.0, 0.7, 0.4), dyn);
-                col += rayColor * rays * 0.06 * u_swell_intensity;
+                vec3 rayColor = mix(u_primary_color, u_secondary_color, dyn);
+                col += rayColor * rays * u_ray_strength * u_swell_intensity;
 
                 // === Film grain ===
-                float grain = hash(gl_FragCoord.xy + fract(t * 100.0) * 100.0) * 0.015 - 0.0075;
+                float grain = hash(gl_FragCoord.xy + fract(t * 100.0) * 100.0) * u_grain_amount - u_grain_amount * 0.5;
                 col += grain;
 
                 // Tone mapping
                 col = col / (1.0 + col * 0.5);
 
-                f_color = vec4(col, 1.0);
+                f_color = vec4(col * u_brightness, 1.0);
             }
             """,
         )
@@ -197,11 +216,44 @@ class OrchestralSwellGPU(BaseGPUVisualizer):
 
         rms = _safe_float(features.get("rms"), frame_idx, 0.0)
         onset = _safe_float(features.get("onset"), frame_idx, 0.0)
+        chroma = features.get("chroma")
+        if chroma is not None and hasattr(chroma, "shape") and len(chroma.shape) > 1:
+            if chroma.shape[0] == 12 and chroma.shape[1] > frame_idx >= 0:
+                chroma_frame = chroma[:, frame_idx]
+            elif chroma.shape[1] == 12 and chroma.shape[0] > frame_idx >= 0:
+                chroma_frame = chroma[frame_idx, :]
+            else:
+                chroma_frame = np.zeros(12, dtype=np.float32)
+        elif chroma is not None and hasattr(chroma, "__len__") and len(chroma) > frame_idx >= 0:
+            chroma_frame = chroma[frame_idx]
+        else:
+            chroma_frame = np.zeros(12, dtype=np.float32)
+
         beat_intensity_arr = features.get("beat_intensity")
         if beat_intensity_arr is not None and hasattr(beat_intensity_arr, "__len__") and len(beat_intensity_arr) > frame_idx >= 0:
             beat_intensity = float(beat_intensity_arr[frame_idx])
         else:
             beat_intensity = min(onset * 1.5, 1.0)
+
+        # Farben aus dem konfigurierten color_mode ableiten
+        primary_color = self._chroma_to_color(chroma_frame)
+        # Sekundaere Farbe: etwas waermer/heller, falls nicht via Parameter gesetzt
+        secondary_param = self.params.get('secondary_color')
+        if secondary_param and isinstance(secondary_param, str) and secondary_param.startswith('#'):
+            secondary_color = self._hex_to_rgb(secondary_param)
+        else:
+            secondary_color = (
+                min(1.0, primary_color[0] * 1.1 + 0.1),
+                min(1.0, primary_color[1] * 0.9 + 0.05),
+                min(1.0, primary_color[2] * 0.7),
+            )
+
+        background_param = self.params.get('background_color')
+        if background_param and isinstance(background_param, str) and background_param.startswith('#'):
+            background_color = self._hex_to_rgb(background_param)
+        else:
+            background_color = (0.03, 0.015, 0.008)
+
         self._prog["u_resolution"].value = (self.width, self.height)
         self._prog["u_time"].value = time
         self._prog["u_rms"].value = rms
@@ -210,5 +262,15 @@ class OrchestralSwellGPU(BaseGPUVisualizer):
         self._prog["u_particle_count"].value = self.params["particle_count"]
         self._prog["u_gold_tint"].value = self.params["gold_tint"]
         self._prog["u_dynamics_response"].value = self.params["dynamics_response"]
+        self._prog["u_bg_brightness"].value = self.params["bg_brightness"]
+        self._prog["u_vignette_strength"].value = self.params["vignette_strength"]
+        self._prog["u_spotlight_strength"].value = self.params["spotlight_strength"]
+        self._prog["u_ray_strength"].value = self.params["ray_strength"]
+        self._prog["u_grain_amount"].value = self.params["grain_amount"]
+        self._prog["u_particle_spread"].value = self.params["particle_spread"]
+        self._prog["u_brightness"].value = self.params.get("brightness", 1.0)
+        self._prog["u_primary_color"].value = primary_color
+        self._prog["u_secondary_color"].value = secondary_color
+        self._prog["u_background_color"].value = background_color
 
         self._vao.render(mode=moderngl.TRIANGLE_STRIP)

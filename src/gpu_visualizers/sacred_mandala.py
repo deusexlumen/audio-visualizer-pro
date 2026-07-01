@@ -17,6 +17,12 @@ class SacredMandalaGPU(BaseGPUVisualizer):
 
     PARAMS = {
         'rotation_speed': (0.005, 0.001, 0.02, 0.001),
+        'base_radius_scale': (0.33, 0.15, 0.5, 0.01),
+        'circle_count': (6, 3, 12, 1),
+        'circle_radius_scale': (0.3, 0.1, 0.6, 0.05),
+        'glow_strength': (0.7, 0.0, 2.0, 0.1),
+        'particle_count': (20, 0, 50, 1),
+        'beat_flash': (0.2, 0.0, 1.0, 0.05),
     }
 
     def _setup(self):
@@ -75,6 +81,7 @@ class SacredMandalaGPU(BaseGPUVisualizer):
             fragment_shader="""
             #version 330
             uniform float u_brightness;
+            uniform float u_glow_strength;
             in vec3 v_color;
             in float v_alpha;
             in vec2 v_local;
@@ -84,7 +91,7 @@ class SacredMandalaGPU(BaseGPUVisualizer):
                 if (dist > 1.0) discard;
                 float core = 1.0 - smoothstep(0.0, 0.5, dist);
                 float glow = exp(-dist * dist * 4.0);
-                vec3 col = v_color * (core + glow * 0.7);
+                vec3 col = v_color * (core + glow * u_glow_strength);
                 f_color = vec4(col * u_brightness, (core * 0.9 + glow * 0.4) * v_alpha);
             }
             """,
@@ -113,7 +120,31 @@ class SacredMandalaGPU(BaseGPUVisualizer):
         )
 
         self.rotation = 0.0
-        self.base_radius = min(self.width, self.height) / 3.0
+        self._update_base_radius()
+
+    def _update_base_radius(self):
+        """Aktualisiert den Basis-Radius abhaengig vom Parameter."""
+        self.base_radius = min(self.width, self.height) * self.params["base_radius_scale"]
+
+    def _on_params_changed(self):
+        self._update_base_radius()
+
+    def _note_color(self, note_index: int, strength: float) -> tuple:
+        """Berechnet eine Farbe fuer eine Note und beruecksichtigt color_mode."""
+        mode = self.params.get('color_mode', 'chroma')
+        if mode == 'chroma':
+            # Im Chroma-Modus: Note als Hue verwenden
+            return self._hsv_to_rgb(note_index / 12.0,
+                                    0.6 + strength * 0.25,
+                                    0.45 + strength * 0.45)
+        # Sonstige Modi: Basisfarbe aus dem Chroma-Vektor, leicht per Note variiert
+        chroma = np.zeros(12, dtype=np.float32)
+        chroma[note_index % 12] = 0.6 + strength * 0.4
+        base = self._chroma_to_color(chroma)
+        # Leichte Hue-Verschiebung pro Note fuer visuelle Trennung
+        h, s, v = self._rgb_to_hsv(*base)
+        h = (h + (note_index % 12) / 144.0) % 1.0
+        return self._hsv_to_rgb(h, s, v)
 
     def _append_circle(self, verts, cx, cy, radius, color, alpha, segments=32):
         """Fuegt einen Kreis als Liniensegmente hinzu."""
@@ -167,20 +198,11 @@ class SacredMandalaGPU(BaseGPUVisualizer):
         rms = f["rms"]
         onset = f["onset"]
         chroma = f["chroma"]
-        spectral = f["spectral_centroid"]
 
         if chroma is not None and chroma.size > 0:
             dominant = int(np.argmax(chroma))
-            base_hue = dominant / 12.0
         else:
             dominant = 0
-            base_hue = 0.5
-
-        # Farbpalette
-        colors = []
-        for i, strength in enumerate(chroma if chroma is not None else [0.5] * 12):
-            rgb = self._hsv_to_rgb(i / 12.0, 0.6 + strength * 0.4, 0.5 + strength * 0.5)
-            colors.append(rgb)
 
         # Rotation
         self.rotation += self.params["rotation_speed"] + rms * 0.02
@@ -190,53 +212,57 @@ class SacredMandalaGPU(BaseGPUVisualizer):
         cx, cy = self.width / 2.0, self.height / 2.0
         line_verts = []
 
-        # 1. Flower of Life (6 Kreise + Zentrum)
-        num_circles = 6
-        circle_radius = self.base_radius * 0.3 * (1.0 + rms * 0.3)
+        # 1. Flower of Life
+        num_circles = int(self.params["circle_count"])
+        circle_radius = self.base_radius * self.params["circle_radius_scale"] * (1.0 + rms * 0.3)
         for i in range(num_circles):
             angle = (i / num_circles) * np.pi * 2.0 + self.rotation
             x = cx + np.cos(angle) * (self.base_radius * 0.5)
             y = cy + np.sin(angle) * (self.base_radius * 0.5)
             ci = i % 12
             strength = float(chroma[ci]) if chroma is not None else 0.5
-            c_rgb = self._hsv_to_rgb(ci / 12.0, 0.7 + strength * 0.3, 0.5 + strength * 0.5)
+            c_rgb = self._note_color(ci, strength)
             self._append_circle(line_verts, x, y, circle_radius, c_rgb, 1.0)
+
         # Zentraler Kreis
-        self._append_circle(line_verts, cx, cy, circle_radius * (1.0 + rms * 0.5), colors[dominant], 1.0, segments=48)
+        central_color = self._chroma_to_color(chroma if chroma is not None else np.zeros(12))
+        self._append_circle(line_verts, cx, cy, circle_radius * (1.0 + rms * 0.5), central_color, 1.0, segments=48)
 
         # 2. Sechseck
-        hex_color = colors[(dominant + 2) % 12]
+        hex_color = self._note_color((dominant + 2) % 12, 0.6)
         self._append_polygon(line_verts, cx, cy, self.base_radius * 0.75, 6, self.rotation, hex_color, 1.0, rms)
 
         # 3. Stern (12-spitzig)
-        star_color = colors[(dominant + 4) % 12]
+        star_color = self._note_color((dominant + 4) % 12, 0.6)
         self._append_star(line_verts, cx, cy, self.base_radius * 0.5, 12, self.rotation * -1.5, star_color, 1.0, rms)
 
         # 4. Inneres Dreieck
-        tri_color = colors[(dominant + 6) % 12]
+        tri_color = self._note_color((dominant + 6) % 12, 0.6)
         self._append_polygon(line_verts, cx, cy, self.base_radius * 0.3, 3, self.rotation * 2.0, tri_color, 1.0, rms)
 
         # 5. Zentrumspuls (als Kreis)
         pulse_r = 20.0 + rms * 60.0
-        self._append_circle(line_verts, cx, cy, pulse_r, colors[dominant], 1.0, segments=48)
+        self._append_circle(line_verts, cx, cy, pulse_r, central_color, 1.0, segments=48)
 
         # 6. Verbindungslinien bei Beat
-        if onset > 0.3:
+        beat_flash = self.params["beat_flash"]
+        if onset > 0.3 and beat_flash > 0.0:
             num_lines = 12
             for i in range(num_lines):
                 angle = (i / num_lines) * np.pi * 2.0 + self.rotation
                 x1 = cx + np.cos(angle) * self.base_radius
                 y1 = cy + np.sin(angle) * self.base_radius
-                x2 = cx + np.cos(angle) * (self.base_radius + self.base_radius * 0.2 * onset)
-                y2 = cy + np.sin(angle) * (self.base_radius + self.base_radius * 0.2 * onset)
-                line_verts.append([x1, y1, *colors[dominant], onset])
-                line_verts.append([x2, y2, *colors[dominant], onset])
+                x2 = cx + np.cos(angle) * (self.base_radius + self.base_radius * 0.2 * onset * beat_flash)
+                y2 = cy + np.sin(angle) * (self.base_radius + self.base_radius * 0.2 * onset * beat_flash)
+                line_verts.append([x1, y1, *central_color, onset])
+                line_verts.append([x2, y2, *central_color, onset])
 
         # --- Energie-Partikel bei hohem RMS ---
         p_idx = 0
-        if rms > 0.6:
+        max_particles = int(self.params["particle_count"])
+        if rms > 0.6 and max_particles > 0:
             np.random.seed(frame_idx // 10)
-            num_particles = int(rms * 20)
+            num_particles = min(int(rms * 20), max_particles)
             for i in range(num_particles):
                 if p_idx >= self._max_particles:
                     break
@@ -245,8 +271,8 @@ class SacredMandalaGPU(BaseGPUVisualizer):
                 x = cx + np.cos(angle) * distance
                 y = cy + np.sin(angle) * distance
                 size = 2.0 + rms * 4.0
-                ci = i % len(colors)
-                self._particle_data[p_idx] = [x, y, colors[ci][0], colors[ci][1], colors[ci][2], size, 1.0]
+                ci = i % 12
+                self._particle_data[p_idx] = [x, y, *self._note_color(ci, 0.7), size, 1.0]
                 p_idx += 1
 
         # --- Rendern ---
@@ -256,6 +282,7 @@ class SacredMandalaGPU(BaseGPUVisualizer):
         brightness = self.params.get("brightness", 1.0)
         self._line_prog["u_brightness"].value = brightness
         self._particle_prog["u_brightness"].value = brightness
+        self._particle_prog["u_glow_strength"].value = self.params["glow_strength"]
 
         # Linien-Width aus Parameter
         line_width_val = self.params.get("line_width", 0.003)
@@ -268,13 +295,13 @@ class SacredMandalaGPU(BaseGPUVisualizer):
                 arr = arr[:self._max_line_verts]
             self._line_prog["u_resolution"].value = (self.width, self.height)
             self._line_vbo.write(arr.tobytes())
-            self._line_vao.render(mode=moderngl.LINES)
+            self._line_vao.render(mode=moderngl.LINES, vertices=len(arr))
 
         # Partikel
         if p_idx > 0:
             self._particle_prog["u_resolution"].value = (self.width, self.height)
             self._particle_vbo.write(self._particle_data[:p_idx].tobytes())
-            self._particle_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=p_idx)
+            self._particle_vao.render(mode=moderngl.TRIANGLE_STRIP, vertices=4, instances=p_idx)
 
         self.ctx.line_width = 1.0
         self.ctx.disable(moderngl.BLEND)

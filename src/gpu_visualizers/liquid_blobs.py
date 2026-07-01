@@ -18,6 +18,12 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
     PARAMS = {
         'blob_count': (6, 3, 12, 1),
         'fluidity': (0.7, 0.1, 1.0, 0.1),
+        'blob_base_radius': (60.0, 20.0, 150.0, 5.0),
+        'radius_variation': (40.0, 0.0, 100.0, 5.0),
+        'connection_distance': (1.2, 0.5, 3.0, 0.1),
+        'ring_count': (3, 0, 8, 1),
+        'ring_base_radius': (100.0, 50.0, 300.0, 10.0),
+        'ring_spacing': (80.0, 20.0, 200.0, 5.0),
     }
 
     def _setup(self):
@@ -107,7 +113,8 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
             ],
         )
 
-        self._line_vbo = self.ctx.buffer(reserve=1000 * 6 * 4, dynamic=True)
+        self._max_line_verts = 2000
+        self._line_vbo = self.ctx.buffer(reserve=self._max_line_verts * 6 * 4, dynamic=True)
         self._line_vao = self.ctx.vertex_array(
             self._line_prog,
             [(self._line_vbo, "2f 3f 1f", "in_pos", "in_color", "in_alpha")],
@@ -121,17 +128,23 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
     def _init_blobs(self):
         """Initialisiere Blob-Positionen und Eigenschaften."""
         count = int(self.params["blob_count"])
+        base_radius = self.params["blob_base_radius"]
+        radius_variation = self.params["radius_variation"]
         self._blobs = []
         for i in range(count):
             self._blobs.append({
-                "base_radius": 60.0 + np.random.random() * 40.0,
-                "hue": i / count,
+                "base_radius": base_radius + np.random.random() * radius_variation,
                 "phase": np.random.random() * np.pi * 2.0,
                 "x": 0.0,
                 "y": 0.0,
                 "current_radius": 0.0,
                 "color": (0.6, 0.6, 0.6),
             })
+
+    def _shift_hue(self, rgb, shift):
+        """Verschiebt den Hue eines RGB-Tupels um shift (0.0-1.0)."""
+        h, s, v = self._rgb_to_hsv(*rgb)
+        return self._hsv_to_rgb((h + shift) % 1.0, s, v)
 
     def render(self, features: dict, time: float):
         """Rendert Blobs, Verbindungen, Beat-Ringe und Highlights."""
@@ -140,14 +153,8 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
         rms = f["rms"]
         onset = f["onset"]
         chroma = f["chroma"]
-        spectral = f["spectral_centroid"]
 
-        if chroma is not None and chroma.size > 0:
-            dominant = int(np.argmax(chroma))
-            base_hue = dominant / 12.0
-        else:
-            dominant = 0
-            base_hue = 0.5
+        base_color = self._chroma_to_color(chroma)
 
         fluidity = self.params["fluidity"]
         t = frame_idx * 0.02
@@ -163,10 +170,7 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
             blob["y"] = base_y + noise_y
             blob["current_radius"] = blob["base_radius"] * (0.8 + rms * 0.6)
 
-            hue = (base_hue + i * 0.15) % 1.0
-            sat = 0.25 + (chroma[(dominant + i) % 12] if chroma is not None else 0.0) * 0.1
-            val = 0.4 + rms * 0.3
-            blob["color"] = self._hsv_to_rgb(hue, sat, val)
+            blob["color"] = self._shift_hue(base_color, i * 0.15)
 
         # --- Instanz-Array fuellen ---
         instance_idx = 0
@@ -204,14 +208,15 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
 
         # --- Verbindungslinien ---
         line_verts = []
+        connection_distance = self.params["connection_distance"]
         for i, b1 in enumerate(self._blobs):
             for j, b2 in enumerate(self._blobs[i + 1:], i + 1):
                 dx = b1["x"] - b2["x"]
                 dy = b1["y"] - b2["y"]
                 dist = np.sqrt(dx * dx + dy * dy)
                 threshold = b1["current_radius"] + b2["current_radius"]
-                if dist < threshold * 1.2:
-                    strength = 1.0 - (dist / (threshold * 1.2))
+                if dist < threshold * connection_distance:
+                    strength = 1.0 - (dist / (threshold * connection_distance))
                     mixed = tuple((b1["color"][k] + b2["color"][k]) / 2.0 for k in range(3))
                     alpha = strength * 0.6
                     line_verts.append([b1["x"], b1["y"], *mixed, alpha])
@@ -220,17 +225,19 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
         # --- Beat-Ringe ---
         if onset > 0.4:
             cx, cy = self.width / 2.0, self.height / 2.0
-            for i in range(3):
-                radius = 100.0 + i * 80.0 + onset * 50.0
-                hue = (base_hue + i * 0.1) % 1.0
-                rgb = self._hsv_to_rgb(hue, 0.35, 0.7)
-                alpha = onset * 0.4 * (1.0 - i / 3.0)
+            ring_count = int(self.params["ring_count"])
+            ring_base = self.params["ring_base_radius"]
+            ring_spacing = self.params["ring_spacing"]
+            for i in range(ring_count):
+                radius = ring_base + i * ring_spacing + onset * 50.0
+                ring_color = self._shift_hue(base_color, i * 0.1)
+                alpha = onset * 0.4 * (1.0 - i / max(ring_count, 1))
                 segments = 48
                 for j in range(segments):
                     a1 = (j / segments) * np.pi * 2.0
                     a2 = ((j + 1) / segments) * np.pi * 2.0
-                    line_verts.append([cx + np.cos(a1) * radius, cy + np.sin(a1) * radius, *rgb, alpha])
-                    line_verts.append([cx + np.cos(a2) * radius, cy + np.sin(a2) * radius, *rgb, alpha])
+                    line_verts.append([cx + np.cos(a1) * radius, cy + np.sin(a1) * radius, *ring_color, alpha])
+                    line_verts.append([cx + np.cos(a2) * radius, cy + np.sin(a2) * radius, *ring_color, alpha])
 
         # --- Rendern ---
         self.ctx.enable(moderngl.BLEND)
@@ -240,12 +247,12 @@ class LiquidBlobsGPU(BaseGPUVisualizer):
         self._blob_prog["u_brightness"].value = brightness
         self._line_prog["u_brightness"].value = brightness
 
-        # Verbindungen + Ringe
+        # Verbindungen + Ringe (nur geschriebene Vertices rendern)
         if line_verts:
             arr = np.array(line_verts, dtype=np.float32)
             self._line_prog["u_resolution"].value = (self.width, self.height)
             self._line_vbo.write(arr.tobytes())
-            self._line_vao.render(mode=moderngl.LINES)
+            self._line_vao.render(mode=moderngl.LINES, vertices=len(line_verts))
 
         # Blobs
         if instance_idx > 0:

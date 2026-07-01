@@ -2,7 +2,7 @@
 GPU-beschleunigte Frequency Flower.
 
 Bluetenblaetter als Dreiecke, Stempel und Pollen als instanced Quads,
-wachsender Staengel als Line Strip.
+wachsender Staengel als Triangle Strip.
 """
 
 import numpy as np
@@ -18,11 +18,18 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
     PARAMS = {
         'num_petals': (8, 4, 16, 1),
         'layer_count': (3, 1, 6, 1),
+        'petal_width': (30.0, 10.0, 80.0, 1.0),
+        'rotation_speed': (1.0, 0.0, 3.0, 0.1),
+        'beat_rotation_boost': (0.08, 0.0, 0.5, 0.01),
+        'center_size': (25.0, 10.0, 60.0, 1.0),
+        'pollen_threshold': (0.3, 0.0, 1.0, 0.05),
+        'stem_growth': (0.4, 0.0, 1.0, 0.05),
+        'stem_bend': (20.0, 0.0, 60.0, 1.0),
     }
 
     def _setup(self):
         """Initialisiere Shader und VBOs."""
-        # --- Polygon-Shader (Bluetenblaetter, Staengel) ---
+        # --- Polygon-Shader (Bluetenblaetter, Staengel, Stempel) ---
         self._poly_prog = self.ctx.program(
             vertex_shader="""
             #version 330
@@ -52,7 +59,7 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
             """,
         )
 
-        # --- Partikel-Shader (Stempel, Pollen) ---
+        # --- Partikel-Shader (Stempel, Pollen, Highlights) ---
         self._particle_prog = self.ctx.program(
             vertex_shader="""
             #version 330
@@ -96,8 +103,8 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
         quad = np.array([[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]], dtype=np.float32)
         self._quad_vbo = self.ctx.buffer(quad.tobytes())
 
-        # Polygon-VBO (Bluetenblaetter + Staengel)
-        max_poly_verts = 5000
+        # Polygon-VBO (Bluetenblaetter + Staengel + Stempel)
+        max_poly_verts = 6000
         self._poly_vbo = self.ctx.buffer(reserve=max_poly_verts * 6 * 4, dynamic=True)
         self._poly_vao = self.ctx.vertex_array(
             self._poly_prog,
@@ -105,7 +112,7 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
         )
 
         # Partikel-VBO
-        max_particles = 100
+        max_particles = 200
         self._particle_data = np.zeros((max_particles, 7), dtype=np.float32)
         self._particle_vbo = self.ctx.buffer(reserve=max_particles * 7 * 4, dynamic=True)
         self._particle_vao = self.ctx.vertex_array(
@@ -120,7 +127,7 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
         self.base_petal_length = min(self.width, self.height) / 3.0
         self.rotation = 0.0
 
-    def _append_petal(self, verts, center, angle, length, width, color, alpha, rms):
+    def _append_petal(self, verts, center, angle, length, width, color, alpha):
         """Fuegt ein Bluetenblatt als Dreiecke hinzu (Fan vom Zentrum)."""
         tip_x = center[0] + np.cos(angle) * length
         tip_y = center[1] + np.sin(angle) * length
@@ -140,8 +147,6 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
         base2_x = center[0] + np.cos(angle + np.pi / 4.0) * base_width
         base2_y = center[1] + np.sin(angle + np.pi / 4.0) * base_width
 
-        outline = tuple(max(0.0, c - 0.15) for c in color)
-
         # 5 Dreiecke fuer das Bluetenblatt (Fan)
         triangles = [
             (center, (base1_x, base1_y), (side1_x, side1_y)),
@@ -155,8 +160,13 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
             verts.append([*b, *color, alpha])
             verts.append([*c, *color, alpha])
 
-        # Highlight in der Mitte (kleiner Kreis als Partikel)
+        # Highlight-Position in der Blattmitte
         return (center[0] + tip_x) / 2.0, (center[1] + tip_y) / 2.0
+
+    def _shift_hue(self, rgb, shift):
+        """Verschiebt den Hue eines RGB-Tupels um shift (0.0-1.0)."""
+        h, s, v = self._rgb_to_hsv(*rgb)
+        return self._hsv_to_rgb((h + shift) % 1.0, s, v)
 
     def render(self, features: dict, time: float):
         """Rendert Bluetenblaetter, Stempel, Pollen und Staengel."""
@@ -165,37 +175,30 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
         rms = f["rms"]
         onset = f["onset"]
         chroma = f["chroma"]
-        spectral = f["spectral_centroid"]
         progress = f.get("progress", time / features.get("duration", 1.0))
 
-        if chroma is not None and chroma.size > 0:
-            dominant = int(np.argmax(chroma))
-            base_hue = dominant / 12.0
-        else:
-            dominant = 0
-            base_hue = 0.5
+        base_color = self._chroma_to_color(chroma)
 
         num_petals = int(self.params["num_petals"])
         num_layers = int(self.params["layer_count"])
         cx, cy = self.center
 
-        # Farbpalette
+        # Farbpalette: Basisfarbe mit leichter Hue-Verschiebung pro Blatt
         petal_colors = []
         for i in range(num_petals):
-            hue = (base_hue + i / num_petals * 0.3) % 1.0
-            ci = (dominant + i) % 12
-            strength = chroma[ci] if chroma is not None else 0.5
-            sat = min(0.35, 0.25 + strength * 0.1)
-            val = min(0.7, 0.4 + rms * 0.3)
-            petal_colors.append(self._hsv_to_rgb(hue, sat, val))
+            shift = (i / max(num_petals, 1)) * 0.15
+            petal_colors.append(self._shift_hue(base_color, shift))
 
         # Rotation
-        self.rotation += 0.003 + rms * 0.02
+        rotation_speed = self.params["rotation_speed"]
+        beat_boost = self.params["beat_rotation_boost"]
+        self.rotation += 0.003 * rotation_speed + rms * 0.02 * rotation_speed
         if onset > 0.4:
-            self.rotation += 0.08
+            self.rotation += beat_boost
 
         poly_verts = []
         particle_idx = 0
+        petal_width_base = self.params["petal_width"]
 
         # --- Bluetenblaetter ---
         for layer in range(num_layers - 1, -1, -1):
@@ -204,19 +207,19 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
 
             for i in range(num_petals):
                 angle = (i / num_petals) * np.pi * 2.0 + layer_rot
-                ci = (dominant + i + layer * 2) % 12
-                strength = chroma[ci] if chroma is not None else 0.5
+                ci = (int(np.argmax(chroma)) + i + layer * 2) % 12 if chroma is not None and chroma.size > 0 else 0
+                strength = chroma[ci] if chroma is not None and chroma.size > 0 else 0.5
                 petal_length = self.base_petal_length * layer_scale * (0.6 + strength * 0.5 + rms * 0.3)
-                petal_width = 30.0 * layer_scale * (1.0 + rms * 0.5)
+                petal_width = petal_width_base * layer_scale * (1.0 + rms * 0.5)
 
-                base_color = petal_colors[(i + layer) % num_petals]
+                base_color_local = petal_colors[(i + layer) % num_petals]
                 if layer > 0:
-                    layer_color = tuple(c * (1.0 - layer * 0.15) for c in base_color)
+                    layer_color = tuple(c * (1.0 - layer * 0.15) for c in base_color_local)
                 else:
-                    layer_color = base_color
+                    layer_color = base_color_local
 
                 mid_x, mid_y = self._append_petal(
-                    poly_verts, self.center, angle, petal_length, petal_width, layer_color, 1.0, rms
+                    poly_verts, self.center, angle, petal_length, petal_width, layer_color, 1.0
                 )
 
                 # Highlight in der Mitte
@@ -230,15 +233,16 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
                     particle_idx += 1
 
         # --- Bluetenmitte (Stempel) ---
-        center_radius = 25.0 + rms * 30.0
-        center_hue = (base_hue + 0.5) % 1.0
-        center_color = self._hsv_to_rgb(center_hue, 0.35, 0.7)
+        center_size = self.params["center_size"]
+        center_radius = center_size + rms * 30.0
+        center_color = self._shift_hue(base_color, 0.5)
 
-        # Stempel als Kreis (Line Loop)
+        # Stempel als gefuellter Kreis (Triangle Fan)
         segments = 32
         for i in range(segments):
             a1 = (i / segments) * np.pi * 2.0
             a2 = ((i + 1) / segments) * np.pi * 2.0
+            poly_verts.append([cx, cy, *center_color, 1.0])
             poly_verts.append([cx + np.cos(a1) * center_radius, cy + np.sin(a1) * center_radius, *center_color, 1.0])
             poly_verts.append([cx + np.cos(a2) * center_radius, cy + np.sin(a2) * center_radius, *center_color, 1.0])
 
@@ -250,7 +254,7 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
             sx = cx + np.cos(a) * dist
             sy = cy + np.sin(a) * dist
             stamen_size = 5.0 + rms * 8.0
-            stamen_color = self._hsv_to_rgb((center_hue + i * 0.1) % 1.0, 0.35, 0.7)
+            stamen_color = self._shift_hue(center_color, i * 0.1)
             if particle_idx < len(self._particle_data):
                 self._particle_data[particle_idx] = [
                     sx, sy, stamen_color[0], stamen_color[1], stamen_color[2], stamen_size, 1.0
@@ -258,7 +262,8 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
                 particle_idx += 1
 
         # --- Pollen bei Beats ---
-        if onset > 0.3 or rms > 0.7:
+        pollen_threshold = self.params["pollen_threshold"]
+        if onset > pollen_threshold or rms > 0.7:
             np.random.seed(frame_idx // 5)
             num_pollen = int(10 + rms * 20)
             for i in range(num_pollen):
@@ -276,14 +281,15 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
                 particle_idx += 1
 
         # --- Staengel ---
-        stem_length = self.height * 0.4 * progress
+        stem_growth = self.params["stem_growth"]
+        stem_length = self.height * stem_growth * progress
         if stem_length >= 10.0:
             stem_top = cy + 20.0
             stem_bottom = stem_top + stem_length
             stem_x = cx
-            bend = np.sin(progress * 10.0) * 20.0
-            stem_hue = (base_hue + 0.3) % 1.0
-            stem_color = self._hsv_to_rgb(stem_hue, 0.35, 0.4)
+            stem_bend = self.params["stem_bend"]
+            bend = np.sin(progress * 10.0) * stem_bend
+            stem_color = self._shift_hue(base_color, 0.3)
             stem_width = 8.0
 
             points_left = []
@@ -317,7 +323,7 @@ class FrequencyFlowerGPU(BaseGPUVisualizer):
         self._poly_prog["u_brightness"].value = brightness
         self._particle_prog["u_brightness"].value = brightness
 
-        # Polygone (Bluetenblaetter + Staengel)
+        # Polygone (Bluetenblaetter + Staengel + Stempel)
         if poly_verts:
             arr = np.array(poly_verts, dtype=np.float32)
             data = arr.tobytes()

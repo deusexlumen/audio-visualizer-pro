@@ -20,6 +20,11 @@ class ChromaFieldGPU(BaseGPUVisualizer):
         'field_resolution': (100, 50, 200, 10),
         'connection_dist': (100, 50, 200, 10),
         'particle_size': (8, 3, 20, 1),
+        'ring_radius': (80, 40, 160, 5),
+        'ring_size': (8, 3, 24, 1),
+        'movement_radius': (30, 10, 80, 5),
+        'connection_alpha': (0.35, 0.05, 1.0, 0.05),
+        'glow_strength': (0.3, 0.0, 1.5, 0.05),
     }
 
     def _setup(self):
@@ -54,6 +59,7 @@ class ChromaFieldGPU(BaseGPUVisualizer):
             fragment_shader="""
             #version 330
             uniform float u_brightness;
+            uniform float u_glow_strength;
             in vec3 v_color;
             in float v_alpha;
             in vec2 v_local;
@@ -66,7 +72,7 @@ class ChromaFieldGPU(BaseGPUVisualizer):
                 float core = 1.0 - smoothstep(0.0, 0.5, dist);
                 float glow = exp(-dist * dist * 4.0);
 
-                vec3 final_color = v_color * (core + glow * 0.3) * u_brightness;
+                vec3 final_color = v_color * (core + glow * u_glow_strength) * u_brightness;
                 float alpha = (core * 0.9 + glow * 0.4) * v_alpha;
                 f_color = vec4(final_color, alpha);
             }
@@ -110,7 +116,8 @@ class ChromaFieldGPU(BaseGPUVisualizer):
         quad = np.array([[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]], dtype=np.float32)
         self._quad_vbo = self.ctx.buffer(quad.tobytes())
 
-        max_particles = 200
+        # Max Partikel: field_resolution max 200 + 12 Ring-Noten + Puffer
+        max_particles = 250
         self._max_particles = max_particles
         self._instance_data = np.zeros((max_particles, 7), dtype=np.float32)
         self._instance_vbo = self.ctx.buffer(reserve=max_particles * 7 * 4, dynamic=True)
@@ -124,7 +131,7 @@ class ChromaFieldGPU(BaseGPUVisualizer):
         )
 
         # Line-VBO (Verbindungen + Ring)
-        max_lines = 2000
+        max_lines = 3000
         self._line_vbo = self.ctx.buffer(reserve=max_lines * 6 * 4, dynamic=True)
         self._line_vao = self.ctx.vertex_array(
             self._line_prog,
@@ -155,6 +162,17 @@ class ChromaFieldGPU(BaseGPUVisualizer):
                 "speed": 0.5 + np.random.random() * 1.5,
             })
 
+    def _note_color(self, note_index: int, strength: float) -> tuple:
+        """Berechnet eine Farbe fuer eine Note und beruecksichtigt color_mode."""
+        mode = self.params.get('color_mode', 'chroma')
+        if mode == 'chroma':
+            return self._hsv_to_rgb(note_index / 12.0,
+                                    0.25 + strength * 0.15,
+                                    0.4 + strength * 0.3)
+        chroma = np.zeros(12, dtype=np.float32)
+        chroma[note_index % 12] = 0.6 + strength * 0.4
+        return self._chroma_to_color(chroma)
+
     def render(self, features: dict, time: float):
         """Rendert Partikel-Feld, Verbindungen und Chroma-Ring."""
         frame_idx = int(time * features.get("fps", 30))
@@ -162,10 +180,11 @@ class ChromaFieldGPU(BaseGPUVisualizer):
         rms = f["rms"]
         onset = f["onset"]
         chroma = f["chroma"]
-        spectral = f["spectral_centroid"]
 
         conn_dist = self.params["connection_dist"]
         base_size = self.params["particle_size"]
+        move_radius = self.params["movement_radius"]
+        conn_alpha_scale = self.params["connection_alpha"]
 
         # --- Partikel aktualisieren und Instanz-Array fuellen ---
         instance_idx = 0
@@ -174,18 +193,14 @@ class ChromaFieldGPU(BaseGPUVisualizer):
         for p in self._particles:
             note_strength = float(chroma[p["note"]]) if chroma is not None else 0.5
 
-            p["x"] = p["base_x"] + np.sin(t * p["speed"] + p["phase"]) * 30.0 * note_strength
-            p["y"] = p["base_y"] + np.cos(t * p["speed"] * 0.7 + p["phase"]) * 20.0 * note_strength
+            p["x"] = p["base_x"] + np.sin(t * p["speed"] + p["phase"]) * move_radius * note_strength
+            p["y"] = p["base_y"] + np.cos(t * p["speed"] * 0.7 + p["phase"]) * (move_radius * 0.67) * note_strength
 
             if onset > 0.3:
                 pulse = 1.0 + onset * 0.5
                 p["x"] += np.sin(frame_idx * 0.5) * 10.0 * pulse
 
-            # Farbe basierend auf Note
-            hue = p["note"] / 12.0
-            sat = 0.25 + note_strength * 0.1
-            val = 0.4 + note_strength * 0.3
-            rgb = self._hsv_to_rgb(hue, sat, val)
+            rgb = self._note_color(p["note"], note_strength)
 
             size = float(p["size"] * (0.8 + rms * 0.4) * base_size / 8.0)
             alpha = 0.5 + note_strength * 0.5
@@ -206,21 +221,22 @@ class ChromaFieldGPU(BaseGPUVisualizer):
                 dist = np.sqrt(dx * dx + dy * dy)
                 if dist < conn_dist:
                     note_strength = float(chroma[p1["note"]]) if chroma is not None else 0.5
-                    alpha = (1.0 - dist / conn_dist) * 0.35 * note_strength
-                    rgb = self._hsv_to_rgb(p1["note"] / 12.0, 0.2 + note_strength * 0.15, 0.5)
+                    alpha = (1.0 - dist / conn_dist) * conn_alpha_scale * note_strength
+                    rgb = self._note_color(p1["note"], note_strength)
                     line_verts.append([p1["x"], p1["y"], rgb[0], rgb[1], rgb[2], alpha])
                     line_verts.append([p2["x"], p2["y"], rgb[0], rgb[1], rgb[2], alpha])
 
         # --- Chroma-Ring in der Mitte ---
         cx, cy = self.width / 2.0, self.height / 2.0
-        ring_radius = 80.0 + rms * 40.0
+        ring_radius = self.params["ring_radius"] + rms * 40.0
+        ring_size = self.params["ring_size"]
         for note in range(12):
             angle = (note / 12.0) * np.pi * 2.0 - np.pi / 2.0
             note_strength = float(chroma[note]) if chroma is not None else 0.0
             x = cx + np.cos(angle) * ring_radius
             y = cy + np.sin(angle) * ring_radius
-            rgb = self._hsv_to_rgb(note / 12.0, 0.2 + note_strength * 0.15, 0.4 + note_strength * 0.3)
-            dot_size = 8.0 + note_strength * 12.0
+            rgb = self._note_color(note, note_strength)
+            dot_size = ring_size + note_strength * 12.0
             # Ring-Partikel als Instanzen hinzufuegen
             if instance_idx < self._max_particles:
                 self._instance_data[instance_idx] = [x, y, rgb[0], rgb[1], rgb[2], dot_size, 1.0]
@@ -232,6 +248,7 @@ class ChromaFieldGPU(BaseGPUVisualizer):
 
         brightness = self.params.get("brightness", 1.0)
         self._particle_prog["u_brightness"].value = brightness
+        self._particle_prog["u_glow_strength"].value = self.params["glow_strength"]
         self._line_prog["u_brightness"].value = brightness
 
         # Linien-Width aus Parameter
@@ -243,13 +260,13 @@ class ChromaFieldGPU(BaseGPUVisualizer):
             line_arr = np.array(line_verts, dtype=np.float32)
             self._line_prog["u_resolution"].value = (self.width, self.height)
             self._line_vbo.write(line_arr.tobytes())
-            self._line_vao.render(mode=moderngl.LINES)
+            self._line_vao.render(mode=moderngl.LINES, vertices=len(line_arr))
 
         # Partikel + Ring
         if instance_idx > 0:
             self._particle_prog["u_resolution"].value = (self.width, self.height)
             self._instance_vbo.write(self._instance_data[:instance_idx].tobytes())
-            self._particle_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_idx)
+            self._particle_vao.render(mode=moderngl.TRIANGLE_STRIP, vertices=4, instances=instance_idx)
 
         self.ctx.line_width = 1.0
         self.ctx.disable(moderngl.BLEND)

@@ -32,7 +32,14 @@ uniform float u_rms;
 uniform float u_line_thickness;
 uniform int u_vu_segments;
 uniform float u_response_speed;
-uniform float u_accent_hue;
+uniform vec3 u_accent_color;
+uniform vec3 u_background_color;
+uniform float u_brightness;
+uniform float u_wave_amp;
+uniform float u_line_brightness;
+uniform float u_accent_intensity;
+uniform float u_grain_amount;
+uniform float u_brightness_cap;
 
 out vec4 f_color;
 
@@ -53,14 +60,11 @@ float hash(vec2 p) {
 
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution;
-    float aspect = u_resolution.x / u_resolution.y;
 
-    // Sehr dunkler, fast schwarzer Hintergrund
-    vec3 bg = vec3(0.012, 0.012, 0.014);
+    vec3 bg = u_background_color;
     vec3 col = bg;
 
-    // Akzentfarbe als Hue (0.52 = soft cyan, 0.08 = warm amber)
-    vec3 accent = hsv2rgb(vec3(u_accent_hue, 0.55, 0.32));
+    vec3 accent = u_accent_color * u_brightness;
     vec3 dimAccent = accent * 0.35;
 
     // Sprach-Gate: Akzent nur bei vorhandener Sprache
@@ -71,17 +75,17 @@ void main() {
 
     // --- Minimale Wellenform-Linie in der Mitte ---
     float centerY = 0.5;
-    float wave = sin(uv.x * 8.0 + u_time * 1.2) * reactiveRms * 0.025;
-    wave += sin(uv.x * 16.0 - u_time * 0.8) * reactiveRms * 0.012;
+    float wave = sin(uv.x * 8.0 + u_time * 1.2) * reactiveRms * u_wave_amp;
+    wave += sin(uv.x * 16.0 - u_time * 0.8) * reactiveRms * (u_wave_amp * 0.5);
 
     float lineDist = abs(uv.y - (centerY + wave));
     float lineThick = u_line_thickness / u_resolution.y;
     float lineMask = 1.0 - smoothstep(0.0, lineThick, lineDist);
 
     // Farbe: dezentes Grau bei Stille, sanfter Akzent bei Sprache
-    vec3 lineCol = mix(vec3(0.08, 0.08, 0.09), accent, speech * 0.55);
-    float lineBright = lineMask * (0.05 + reactiveRms * 0.22);
-    lineBright = min(lineBright, 0.35); // Helligkeit gecappt
+    vec3 lineCol = mix(vec3(0.08, 0.08, 0.09), accent, speech * u_accent_intensity);
+    float lineBright = lineMask * u_line_brightness * (0.2 + reactiveRms * 1.1);
+    lineBright = min(lineBright, u_brightness_cap * 0.9);
     col += lineCol * lineBright;
 
     // --- Sehr feine Hilfslinien (25%, 50%, 75%) ---
@@ -120,7 +124,7 @@ void main() {
                         * smoothstep(1.0, 1.0 - gap, segFrac);
 
         float segBright = 0.08 + reactiveRms * 0.18;
-        segBright = min(segBright, 0.32); // Helligkeit gecappt
+        segBright = min(segBright, u_brightness_cap * 0.8);
 
         // Obere Segmente leuchten etwas staerker
         float segNorm = segIdx / float(u_vu_segments);
@@ -129,11 +133,11 @@ void main() {
         col += segCol * segActive * segBright;
     }
 
-    // --- Globales Helligkeits-Cap bei 0.4 ---
-    col = clamp(col, 0.0, 0.4);
+    // --- Globales Helligkeits-Cap ---
+    col = clamp(col, 0.0, u_brightness_cap);
 
-    // --- Film Grain (extrem subtil) ---
-    float grain = (hash(gl_FragCoord.xy + fract(u_time * 73.0) * 100.0) - 0.5) * 0.01;
+    // --- Film Grain (subtil) ---
+    float grain = (hash(gl_FragCoord.xy + fract(u_time * 73.0) * 100.0) - 0.5) * u_grain_amount;
     col += grain;
 
     f_color = vec4(col, 1.0);
@@ -153,8 +157,14 @@ class SpeechFocusGPU(BaseGPUVisualizer):
         'line_thickness': (2.0, 0.5, 6.0, 0.5),
         'vu_segments': (12, 4, 24, 1),
         'response_speed': (0.8, 0.2, 1.5, 0.1),
-        # Hue-Wert fuer Akzentfarbe: 0.52 = soft cyan, 0.08 = warm amber
-        'accent_color': (0.52, 0.0, 1.0, 0.01),
+        # Farb-Modus wird ueber color_mode / primary_color / secondary_color gesteuert
+        'wave_amp': (0.025, 0.0, 0.08, 0.005),
+        'line_brightness': (0.18, 0.05, 0.5, 0.01),
+        'accent_intensity': (0.55, 0.0, 1.0, 0.05),
+        'grain_amount': (0.01, 0.0, 0.05, 0.005),
+        'brightness_cap': (0.4, 0.1, 0.8, 0.05),
+        # Hintergrundfarbe als Hex-String (Tupel-Form noetig wegen PARAMS-Merge)
+        'background_color': ('#060607',),
     }
 
     def _setup(self):
@@ -192,6 +202,15 @@ class SpeechFocusGPU(BaseGPUVisualizer):
         f = self._get_feature_at_frame(features, frame_idx)
         rms = f["rms"]
         onset = f["onset"]
+        chroma = f["chroma"]
+
+        # Farben ueber den gemeinsamen color_mode erzeugen
+        accent_rgb = self._chroma_to_color(chroma)
+        bg_hex = self.params.get("background_color", "#060607")
+        if isinstance(bg_hex, str) and bg_hex.startswith("#"):
+            bg_rgb = self._hex_to_rgb(bg_hex)
+        else:
+            bg_rgb = (0.024, 0.024, 0.027)
 
         self.prog["u_resolution"].value = (self.width, self.height)
         self.prog["u_time"].value = time
@@ -199,6 +218,13 @@ class SpeechFocusGPU(BaseGPUVisualizer):
         self.prog["u_line_thickness"].value = float(self.params["line_thickness"])
         self.prog["u_vu_segments"].value = int(self.params["vu_segments"])
         self.prog["u_response_speed"].value = float(self.params["response_speed"])
-        self.prog["u_accent_hue"].value = float(self.params["accent_color"])
+        self.prog["u_accent_color"].value = accent_rgb
+        self.prog["u_background_color"].value = bg_rgb
+        self.prog["u_brightness"].value = float(self.params.get("brightness", 1.0))
+        self.prog["u_wave_amp"].value = float(self.params["wave_amp"])
+        self.prog["u_line_brightness"].value = float(self.params["line_brightness"])
+        self.prog["u_accent_intensity"].value = float(self.params["accent_intensity"])
+        self.prog["u_grain_amount"].value = float(self.params["grain_amount"])
+        self.prog["u_brightness_cap"].value = float(self.params["brightness_cap"])
 
         self.vao.render(mode=moderngl.TRIANGLE_STRIP)
