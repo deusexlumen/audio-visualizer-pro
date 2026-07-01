@@ -5,6 +5,7 @@ Diese Tests pruefen den kompletten Flow von Audio-Analyse bis Video-Export.
 """
 
 import os
+import subprocess
 import tempfile
 import wave
 import struct
@@ -13,6 +14,7 @@ import pytest
 
 from main import cli
 from click.testing import CliRunner
+from src.intro_renderer import render_with_intro
 
 
 def create_test_wav(path: str, duration: float = 2.0, sample_rate: int = 44100):
@@ -161,3 +163,46 @@ class TestEndToEnd:
         finally:
             if os.path.exists(output_path):
                 os.unlink(output_path)
+
+    @pytest.mark.timeout(180)
+    def test_render_with_intro_creates_video(self, test_audio):
+        """Render + Intro vorne dran setzen sollte ein valides MP4 erzeugen."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            intro_path = os.path.join(tmpdir, "intro.mp4")
+            main_path = os.path.join(tmpdir, "main.mp4")
+            final_path = os.path.join(tmpdir, "final.mp4")
+
+            # Haupt-Video in separatem Prozess rendern, damit der GPU-Kontext
+            # zwischen den E2E-Tests nicht haengen bleibt.
+            result = subprocess.run([
+                'python', '-m', 'main',
+                'render', test_audio,
+                '--visual', 'spectrum_bars',
+                '--output', main_path,
+                '--preview',
+                '--preview-duration', '1.0',
+                '--resolution', '640x360',
+                '--fps', '30',
+            ], capture_output=True, text=True)
+            assert result.returncode == 0, f"Main-Render fehlgeschlagen: {result.stdout}\n{result.stderr}"
+            assert os.path.exists(main_path)
+
+            # Intro-Video ohne Ton erzeugen
+            subprocess.run([
+                'ffmpeg', '-y',
+                '-f', 'lavfi', '-i', 'testsrc=duration=1:size=640x360:rate=30',
+                '-pix_fmt', 'yuv420p',
+                intro_path,
+            ], check=True, capture_output=True)
+            assert os.path.exists(intro_path)
+
+            # Intro vor das Hauptvideo setzen
+            render_with_intro(intro_path, main_path, final_path, fade_duration=0.3)
+
+            assert os.path.exists(final_path)
+            assert os.path.getsize(final_path) > 1024
+
+            # Dauer sollte ca. Intro + Hauptvideo minus Fade sein (> 1.5s)
+            from src.intro_renderer import get_media_info
+            info = get_media_info(final_path)
+            assert info["duration"] >= 1.5
