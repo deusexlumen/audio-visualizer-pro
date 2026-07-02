@@ -33,6 +33,13 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         'size_scale': (1.0, 0.2, 3.0, 0.1),
     }
 
+    PARAMS_GROUPS = {
+        "Partikel": ["particle_count", "size_scale", "life_decay"],
+        "Bewegung": ["speed_scale", "center_force", "friction", "explosion_threshold"],
+        "Erscheinungsbild": ["glow_size", "glow_strength", "depth_enabled"],
+        "Trail": ["trail_length"],
+    }
+
     def _setup(self):
         """Initialisiere Shader, VBOs und Partikel-System."""
         self._prog = self.ctx.program(

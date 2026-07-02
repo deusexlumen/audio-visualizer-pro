@@ -82,6 +82,35 @@ class TestEndToEnd:
         finally:
             if os.path.exists(target):
                 os.unlink(target)
+
+    def test_create_visualizer_generates_and_smoke_tests(self, runner):
+        """create-visualizer sollte Datei erstellen, registrieren und smoke-testen."""
+        import sys
+        from src.gpu_visualizers import refresh_registry
+
+        test_name = "test_e2e_wizard_visualizer"
+        target = f"src/gpu_visualizers/{test_name}.py"
+
+        try:
+            result = runner.invoke(cli, [
+                'create-visualizer', test_name,
+                '--type', 'shader',
+                '--target-dir', 'src/gpu_visualizers',
+            ])
+            assert result.exit_code == 0, f"Output: {result.output}"
+            assert os.path.exists(target)
+            assert "Auto-Registrierung erfolgreich" in result.output
+            assert "Smoke-Test bestanden" in result.output
+
+            # Der neue Visualizer sollte in der Registry sein
+            refresh_registry()
+            from src.gpu_visualizers import list_visualizers
+            assert test_name in list_visualizers()
+        finally:
+            if os.path.exists(target):
+                os.unlink(target)
+            sys.modules.pop(f"src.gpu_visualizers.{test_name}", None)
+            refresh_registry()
     
     def test_analyze_shows_features(self, runner, test_audio):
         """analyze sollte Audio-Features anzeigen."""

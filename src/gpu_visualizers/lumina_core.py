@@ -39,6 +39,15 @@ class LuminaCoreGPU(BaseGPUVisualizer):
         'bg_brightness': (0.5, 0.0, 2.0, 0.05),
     }
 
+    PARAMS_GROUPS = {
+        "Core": ["core_intensity", "core_base_radius", "pulse_intensity"],
+        "Ringe": ["ring_count", "ring_base_radius", "ring_spacing", "ring_width", "rotation_speed"],
+        "Noise": ["noise_scale", "noise_amount"],
+        "Glow & Licht": ["glow_strength", "specular_power"],
+        "Effekte": ["chromatic_aberration"],
+        "Hintergrund": ["bg_brightness"],
+    }
+
     def _setup(self):
         self._prog = self.ctx.program(
             vertex_shader="""

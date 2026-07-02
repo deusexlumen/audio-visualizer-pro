@@ -29,6 +29,13 @@ class NeonOscilloscopeGPU(BaseGPUVisualizer):
         'wave_amplitude': (0.25, 0.05, 0.5, 0.05),
     }
 
+    PARAMS_GROUPS = {
+        "Welle": ["line_thickness", "num_points", "wave_amplitude", "glow_radius"],
+        "Trail": ["trail_length"],
+        "Grid": ["grid_enabled", "grid_spacing"],
+        "Overlay": ["border_enabled", "scan_line_enabled"],
+    }
+
     def _setup(self):
         """Initialisiere Shader, VBOs und Waveform-History."""
         # --- Ribbon Shader (Wellenform als dickes, leuchtendes Band) ---

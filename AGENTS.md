@@ -130,8 +130,13 @@ python main.py render song.mp3 --config config/podcast_interview.json
 # GUI starten
 python gui.py
 
-# Neues GPU-Visualizer-Template erstellen
+# Neues GPU-Visualizer-Template erstellen (Boilerplate)
 python main.py create-template mein_visualizer
+
+# Neues GPU-Visualizer-Template mit reichhaltigem Startpunkt erstellen
+python main.py create-visualizer mein_visualizer --type shader
+python main.py create-visualizer mein_visualizer --type geometry
+python main.py create-visualizer mein_visualizer --type particles
 
 # Beispiel-Config erstellen
 python main.py create-config --output meine_config.json
@@ -366,9 +371,12 @@ dummy_features = AudioFeatures(
 
 ### Neuen GPU-Visualizer hinzufügen
 
-1. `python main.py create-template mein_visualizer` ausführen
+1. `python main.py create-visualizer mein_visualizer --type shader` ausführen
+   (Alternativ: `create-template` für ein minimales Boilerplate)
 2. `src/gpu_visualizers/mein_visualizer.py` implementieren
-3. In `src/gpu_visualizers/__init__.py` in `VISUALIZER_MAP` registrieren
+3. Auto-Discovery übernimmt die Registrierung automatisch beim nächsten Import.
+   Manuelle Einträge in `src/gpu_visualizers/__init__.py` bleiben für
+   Rückwärts-Kompatibilität erhalten.
 4. In `test_visuals.py` automatisch getestet (sofern in Registry)
 
 ### Neue Config-Preset erstellen

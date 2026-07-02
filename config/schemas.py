@@ -82,6 +82,8 @@ class QuoteOverlayConfigSchema(BaseModel):
     box_radius: int = Field(default=16, ge=0, le=100)
     box_margin_bottom: int = Field(default=100, ge=0, le=500)
     max_width_ratio: float = Field(default=0.75, ge=0.1, le=1.0)
+    font_path: Optional[str] = None
+    buffer_lookahead: float = Field(default=2.0, ge=0.0, le=10.0)
 
     @field_validator("font_color", "box_color", "text_shadow_color", "accent_line_color", mode="before")
     @classmethod

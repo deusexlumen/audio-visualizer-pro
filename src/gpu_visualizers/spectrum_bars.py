@@ -58,6 +58,12 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
         'color_spread': (0.02, 0.0, 0.1, 0.005),
     }
 
+    PARAMS_GROUPS = {
+        "Balken": ["bar_count", "spacing", "base_height", "height_scale", "height_boost"],
+        "Farbe": ["color_shift", "color_spread"],
+        "Welle": ["wave_count"],
+    }
+
     def _setup(self):
         """Initialisiert Shader, VBO und VAO fuer die Balken."""
         self._init_geometry()

@@ -17,10 +17,15 @@ class DummyFeatures:
         self.rms = np.array([0.1, 0.2, 0.3])
         self.onset = np.array([0.0, 0.5, 0.0])
         self.spectral_centroid = np.array([0.2, 0.3])
+        self.spectral_rolloff = np.array([0.3, 0.4])
         self.zero_crossing_rate = np.array([0.01, 0.02])
         self.transient = np.array([0.0, 0.1])
         self.voice_clarity = np.array([0.4, 0.5])
         self.voice_band = np.array([0.3, 0.4])
+        self.chroma = np.zeros((12, 3))
+        self.mfcc = np.zeros((13, 3))
+        self.tempogram = np.zeros((384, 3))
+        self.beat_frames = np.array([0, 2])
         self.mode = "speech"
         self.tempo = 120.0
         self.key = None
@@ -199,3 +204,56 @@ def test_get_optimize_request_contains_brightness_and_noisiness(qtbot, state):
     assert "brightness" in req["audio_features"]
     assert "noisiness" in req["audio_features"]
     assert req["audio_features"]["brightness"] > 0
+
+
+def test_apply_optimize_result_maps_quotes_to_state(qtbot, state):
+    panel = KIPanel(state, gemini=None)
+    qtbot.addWidget(panel)
+
+    panel._apply_optimize_result({
+        "quotes": {
+            "font_size": 60,
+            "box_color": "#222222",
+            "font_color": "#EEEEEE",
+            "position": "center",
+            "display_duration": 10.0,
+            "auto_scale_font": True,
+            "text_shadow_enabled": True,
+            "box_gradient": True,
+            "accent_line": True,
+            "accent_line_color": "#FFAA00",
+            "box_padding": 40,
+            "box_radius": 20,
+            "box_margin_bottom": 120,
+            "max_width_ratio": 0.7,
+            "fade_duration": 0.8,
+            "line_spacing": 12,
+            "max_font_size": 80,
+            "max_chars_per_line": 35,
+        }
+    })
+
+    qc = state.quote_config
+    assert qc.font_size == 60
+    assert qc.position == "center"
+    assert qc.display_duration == 10.0
+    assert qc.box_color == (34, 34, 34, 255)
+    assert qc.font_color == (238, 238, 238, 255)
+    assert qc.accent_line_color == (255, 170, 0, 255)
+
+
+def test_apply_optimize_result_ignores_invalid_quotes(qtbot, state):
+    panel = KIPanel(state, gemini=None)
+    qtbot.addWidget(panel)
+
+    original_font_size = state.quote_config.font_size
+    panel._apply_optimize_result({
+        "quotes": {
+            "font_size": -999,  # ungueltig (unter min)
+            "position": "invalid_position",
+        }
+    })
+
+    # Pydantic-Validierung setzt ungueltige Werte auf Defaults zurueck
+    assert state.quote_config.font_size == original_font_size
+    assert state.quote_config.position == "bottom"

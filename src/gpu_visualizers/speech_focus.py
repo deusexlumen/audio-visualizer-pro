@@ -163,8 +163,16 @@ class SpeechFocusGPU(BaseGPUVisualizer):
         'accent_intensity': (0.55, 0.0, 1.0, 0.05),
         'grain_amount': (0.01, 0.0, 0.05, 0.005),
         'brightness_cap': (0.4, 0.1, 0.8, 0.05),
-        # Hintergrundfarbe als Hex-String (Tupel-Form noetig wegen PARAMS-Merge)
-        'background_color': ('#060607',),
+    }
+
+    # Hintergrundfarbe als Hex-String; nicht in PARAMS, da diese nur numerische
+    # (default, min, max, step)-Tupel enthalten duerfen.
+    DEFAULT_BACKGROUND_COLOR = '#060607'
+
+    PARAMS_GROUPS = {
+        "Welle": ["line_thickness", "wave_amp", "line_brightness"],
+        "VU-Meter": ["vu_segments", "response_speed", "accent_intensity"],
+        "Effekte": ["grain_amount", "brightness_cap"],
     }
 
     def _setup(self):
@@ -206,7 +214,7 @@ class SpeechFocusGPU(BaseGPUVisualizer):
 
         # Farben ueber den gemeinsamen color_mode erzeugen
         accent_rgb = self._chroma_to_color(chroma)
-        bg_hex = self.params.get("background_color", "#060607")
+        bg_hex = getattr(self, "DEFAULT_BACKGROUND_COLOR", "#060607")
         if isinstance(bg_hex, str) and bg_hex.startswith("#"):
             bg_rgb = self._hex_to_rgb(bg_hex)
         else:

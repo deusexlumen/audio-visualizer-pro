@@ -11,6 +11,8 @@ from PyQt6.QtWidgets import (
 
 from src.ai_matcher import SmartMatcher
 from src.gpu_visualizers import get_visualizer
+from src.quote_overlay import QuoteOverlayConfig
+from config.schemas import QuoteOverlayConfigSchema
 
 
 class KIPanel(QWidget):
@@ -210,6 +212,72 @@ class KIPanel(QWidget):
                 f"Secondary: {colors.get('secondary', '-')}  "
                 f"BG: {colors.get('background', '-')}"
             )
+
+        quotes = result.get("quotes")
+        if quotes is not None:
+            self._apply_quotes_to_state(quotes)
+
+    def _apply_quotes_to_state(self, quotes_data: dict):
+        """Wendet optimierte Quote-Einstellungen auf den State an.
+
+        Validiert das Eingabe-Dictionary gegen das QuoteOverlayConfig-Schema
+        und überträgt die Werte in die QuoteOverlayConfig-Dataclass.
+        """
+        if not isinstance(quotes_data, dict):
+            return
+
+        try:
+            validated = QuoteOverlayConfigSchema(**quotes_data).model_dump()
+        except Exception as e:
+            print(f"[KIPanel] Quote-Config-Validierung fehlgeschlagen: {e}")
+            return
+
+        def _as_tuple(value):
+            if isinstance(value, (list, tuple)):
+                return tuple(value)
+            return value
+
+        current = self.state.quote_config
+        config_kwargs = {
+            "enabled": validated.get("enabled", current.enabled),
+            "font_size": validated.get("font_size", current.font_size),
+            "font_color": _as_tuple(validated.get("font_color", current.font_color)),
+            "box_color": _as_tuple(validated.get("box_color", current.box_color)),
+            "box_alpha": validated.get("box_alpha", current.box_alpha),
+            "box_padding": validated.get("box_padding", current.box_padding),
+            "box_radius": validated.get("box_radius", current.box_radius),
+            "box_margin_bottom": validated.get("box_margin_bottom", current.box_margin_bottom),
+            "max_width_ratio": validated.get("max_width_ratio", current.max_width_ratio),
+            "fade_duration": validated.get("fade_duration", current.fade_duration),
+            "shadow_color": _as_tuple(validated.get("text_shadow_color", current.shadow_color)),
+            "shadow_offset": _as_tuple(validated.get("text_shadow_offset", current.shadow_offset)),
+            "line_spacing": validated.get("line_spacing", current.line_spacing),
+            "max_chars_per_line": validated.get("max_chars_per_line", current.max_chars_per_line),
+            "display_duration": validated.get("display_duration", current.display_duration),
+            "position": validated.get("position", current.position),
+            "font_path": validated.get("font_path", current.font_path),
+            "text_align": validated.get("text_align", current.text_align),
+            "auto_scale_font": validated.get("auto_scale_font", current.auto_scale_font),
+            "min_font_size": validated.get("min_font_size", current.min_font_size),
+            "max_font_size": validated.get("max_font_size", current.max_font_size),
+            "text_shadow_enabled": validated.get("text_shadow_enabled", current.text_shadow_enabled),
+            "text_shadow_color": _as_tuple(validated.get("text_shadow_color", current.text_shadow_color)),
+            "text_shadow_offset": _as_tuple(validated.get("text_shadow_offset", current.text_shadow_offset)),
+            "text_shadow_blur": validated.get("text_shadow_blur", current.text_shadow_blur),
+            "box_gradient": validated.get("box_gradient", current.box_gradient),
+            "accent_line": validated.get("accent_line", current.accent_line),
+            "accent_line_color": _as_tuple(validated.get("accent_line_color", current.accent_line_color)),
+            "accent_line_height": validated.get("accent_line_height", current.accent_line_height),
+            "spatial_compensation": validated.get("spatial_compensation", current.spatial_compensation),
+            "compensation_blur": validated.get("compensation_blur", current.compensation_blur),
+            "compensation_darken": validated.get("compensation_darken", current.compensation_darken),
+            "latency_offset": validated.get("latency_offset", current.latency_offset),
+            "buffer_lookahead": validated.get("buffer_lookahead", current.buffer_lookahead),
+            "offset_x": validated.get("offset_x", current.offset_x),
+            "offset_y": validated.get("offset_y", current.offset_y),
+            "scale": validated.get("scale", current.scale),
+        }
+        self.state.quote_config = QuoteOverlayConfig(**config_kwargs)
 
     def get_optimize_request(self) -> dict:
         """Liefert die Daten, die der AIOptimizeWorker braucht."""

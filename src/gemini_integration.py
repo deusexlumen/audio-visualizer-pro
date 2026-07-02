@@ -16,6 +16,8 @@ from typing import List, Optional
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 from .quote_cache import save_upload_id, load_upload_id, save_transcript, load_transcript
 from .types import Quote
 
@@ -23,6 +25,78 @@ try:
     from google import genai
 except ImportError:
     genai = None
+
+
+# =============================================================================
+# SEMANTIC PARAMETER DESCRIPTIONS
+# =============================================================================
+# Mapping von Parameter-Namen zu menschenlesbaren Beschreibungen.
+# Wird im Prompt verwendet, damit Gemini die Bedeutung jedes Parameters
+# versteht und keine unkontrollierten Werte raet.
+
+# =============================================================================
+# PARAMETER CATEGORIES FOR DETERMINISTIC FALLBACK
+# =============================================================================
+# Kategorisierung von Parametern fuer den Fallback-Algorithmus. Statt auf
+# string-basierte Heuristiken zu setzen, ordnen wir jeden bekannten Parameter
+# einer semantischen Kategorie zu und berechnen seinen Wert aus den
+# Audio-Features.
+
+PARAM_CATEGORIES = {
+    # Intensitaet / Staerke / Helligkeit
+    "intensity": {
+        "pulse_intensity", "core_intensity", "bass_intensity", "glow_strength",
+        "swell_intensity", "wave_intensity", "beat_flash", "strobe_intensity",
+        "sparkle_intensity", "accent_intensity", "glow_size", "line_brightness",
+        "spotlight_strength", "ray_strength", "noise_intensity", "vignette_intensity",
+        "vignette_strength", "scanline_intensity", "brightness_cap", "bg_brightness",
+    },
+    # Geschwindigkeit / Animation / Zeit
+    "speed": {
+        "flow_speed", "rotation_speed", "animation_speed", "breathe_speed",
+        "shockwave_speed", "trail_time_offset", "trail_decay", "glow_layers",
+    },
+    # Anzahl / Dichte
+    "count": {
+        "bar_count", "particle_count", "ring_count", "line_count", "vu_segments",
+        "num_petals", "layer_count", "blob_count", "circle_count", "glow_radius",
+        "trail_length", "num_points", "wave_complexity", "wave_frequency",
+    },
+    # Groesse / Abstand / Skalierung
+    "size": {
+        "bar_width", "bar_spacing", "ring_spacing", "ring_width", "base_radius",
+        "core_base_radius", "ring_base_radius", "line_width", "temple_scale",
+        "wave_amplitude", "bar_height", "height_scale", "base_height", "height_boost",
+        "line_spacing", "particle_spread", "wave_count", "color_spread",
+        "field_resolution", "connection_dist", "particle_size", "ring_spacing",
+    },
+    # Farbe / Farbverschiebung
+    "color": {
+        "color_shift", "color_saturation", "gold_tint", "color_mode",
+    },
+    # Reaktivitaet / Glättung / Fluss
+    "reactivity": {
+        "smoothing", "fluidity", "response_speed", "dynamics_response",
+        "breathe_intensity", "explosion_threshold", "strobe_threshold",
+        "contrast_gamma", "noise_amount", "grain_amount",
+    },
+    # Position / universelle Transform
+    "transform": {
+        "viz_offset_x", "viz_offset_y", "viz_scale", "offset_x", "offset_y", "scale",
+    },
+    # Spezielle String-/Hex-Parameter (werden beibehalten oder gemaess Modus gesetzt)
+    "special": {
+        "background_color", "text_size",
+    },
+}
+
+
+def _get_param_category(name: str) -> str:
+    """Gibt die Kategorie eines Parameters zurueck."""
+    for category, members in PARAM_CATEGORIES.items():
+        if name in members:
+            return category
+    return "other"
 
 
 # =============================================================================
@@ -47,21 +121,35 @@ SEMANTIC_PARAM_DESCRIPTIONS = {
     "glow_radius": "Radius des Glows in Pixeln. 5 = eng, 20 = weicher Uebergang, 50 = riesiger Lichtschein. Bei hoher Aufloesung (1440p+) eher groesser.",
     "trail_length": "Laenge der Bewegungsspur. 5 = kurzer Schwung, 20 = langer Schweif, 50 = extrem lang gezogen. Bei schnellen Tempi (>130 BPM) kuerzer halten (10-15).",
     "trail_decay": "Abklinggeschwindigkeit der Spur. 0.1 = verschwindet sofort, 0.5 = moderate Nachleuchtzeit, 0.95 = sehr lange sichtbar. Bei hektischer Musik niedriger, bei ruhiger hoeher.",
+    "base_radius": "Basis-Radius des Kerns. 0.02 = winzig, 0.1 = normal, 0.3 = sehr gross.",
+    "ring_count": "Anzahl konzentrischer Ringe. 1 = minimalistisch, 3 = ausgewogen, 8 = komplex.",
+    "ring_spacing": "Abstand zwischen Ringen. 0.02 = dicht, 0.08 = normal, 0.15 = weit.",
+    "ring_width": "Dicke jedes Rings. 0.005 = duenn, 0.015 = normal, 0.05 = dick.",
+    "bg_brightness": "Helligkeit des Hintergrunds. 0.0 = schwarz, 0.15 = subtil, 0.5 = hell.",
 
     # Spectrum Bars
     "bar_count": "Anzahl der Frequenz-Balken. 20 = grob, 64 = fein aufgeloest, 128 = sehr detailliert. Mehr Balken = mehr CPU-Last. Bei Speech eher 20-32, bei Musik 48-64.",
     "smoothing": "Glaettung der Balken-Bewegung. 0.0 = direkte Reaktion (zackig), 0.3 = sanft, 0.8 = sehr traeg. Bei Sprache hoehere Werte (0.4-0.6), bei EDM niedriger (0.1-0.3).",
     "bar_width": "Breite jedes Balkens relativ zum Abstand. 0.5 = duenne Linien mit Luftzwickel, 0.8 = fast beruehrend, 1.0 = solid block. Aesthetische Praeferenz.",
     "bar_spacing": "Abstand zwischen Balken in Pixeln. 0 = kein Abstand, 1 = 1px Luecke, 5 = breiter Zwischenraum.",
+    "height_scale": "Hoehen-Skalierung der Balken. 0.2 = sehr klein, 1.0 = normal, 3.0 = riesig. An RMS anpassen.",
+    "base_height": "Mindesthoehe der Balken. 0.0 = keine, 0.1 = kleiner Sockel, 0.5 = grosser Sockel.",
+    "height_boost": "Zusaetzlicher Hoehen-Boost durch Energie. 0.0 = aus, 1.0 = voll.",
+    "wave_count": "Anzahl der Wellen-Modulation ueber die Balken. 0.0 = keine, 2.0 = sehr wellig.",
+    "color_spread": "Farbverschiebung zwischen benachbarten Balken. 0.0 = gleichfarbig, 0.1 = regenbogen-artig.",
+    "color_shift": "Globaler Hue-Offset. 0.0 = Standard, 1.0 = voller Farbkreis.",
 
     # Chroma Field
     "field_resolution": "Aufloesung des Chromafelds. 50 = grob/pixelig, 100 = mittel, 200 = sehr fein. Hoehere Werte = mehr GPU-Last. Bei 4K unbedingt >= 100.",
     "color_saturation": "Saettigung der Farben. 0.0 = Graustufen, 0.5 = gedaempft, 1.0 = knallig bunt. Bei Podcast 0.3-0.5, bei EDM 0.8-1.0.",
+    "connection_dist": "Maximale Distanz fuer Partikel-Verbindungen. 50 = eng, 150 = normal, 300 = weit.",
+    "particle_size": "Groesse der Partikel im Feld. 2 = klein, 8 = normal, 20 = gross.",
 
     # Particle Swarm
     "particle_count": "Anzahl der Partikel. 50 = sparsam, 150 = dicht, 500 = extrem voll. Bei langsamer Musik mehr Partikel (ruhigere Bewegung), bei schneller weniger (uebersichtlicher).",
     "explosion_threshold": "Schwelle fuer Partikel-Explosionen. 0.2 = bei leichten Beats, 0.5 = nur bei starken Beats, 0.8 = fast nie. Bei sehr dynamischer Musik niedriger, bei flachem Verlauf hoeher.",
     "fluidity": "Fluessigkeit der Partikel-Bewegung. 0.1 = steif/geometrisch, 0.5 = organisch, 1.0 = vollkommen chaotisch/fließend. Bei Chill/Ambient hoeher, bei Techno niedriger.",
+    "glow_size": "Groesse des Partikel-Glows. 1 = punktuell, 3 = weich, 10 = riesig.",
 
     # Typographic
     "text_size": "Schriftgroesse in Pixeln. 24 = klein/untertitel-artig, 48 = lesbar, 72 = dominant/gross. Auf 1080p 36-48, auf 4K 56-72.",
@@ -70,6 +158,7 @@ SEMANTIC_PARAM_DESCRIPTIONS = {
     # Neon Oscilloscope
     "line_thickness": "Liniendicke in Pixeln. 1 = duenn/fragil, 4 = markant, 10 = dick/massiv. Bei hoher Aufloesung (>1080p) dicker.",
     "num_points": "Aufloesung der Wellenform. 100 = grob, 200 = fein, 500 = sehr detailliert. Hoehere Werte = mehr GPU-Last.",
+    "glow_radius": "Weite des Glows um die Linie. 4 = schmal, 16 = neon-artig, 30 = sehr weich.",
 
     # Sacred Mandala
     "rotation_speed": "Drehgeschwindigkeit. 0.001 = fast stehend, 0.005 = langsame Meditation, 0.02 = schnell hypnotisch. Bei Chill 0.002-0.005, bei Trance 0.01-0.02.",
@@ -78,6 +167,7 @@ SEMANTIC_PARAM_DESCRIPTIONS = {
 
     # Liquid Blobs
     "blob_count": "Anzahl der Blobs. 3 = minimalistisch, 6 = ausgewogen, 12 = voll. Bei kleinem Screen 3-4, bei grossem 6-8.",
+    "fluidity": "Fluessigkeit der Blob-Bewegung. 0.1 = steif, 0.5 = organisch, 1.0 = sehr fließend.",
 
     # Neon Wave Circle
     "circle_count": "Anzahl der konzentrischen Kreise. 3 = reduziert, 5 = ausgewogen, 10 = dicht. Bei schnellem Tempo weniger Kreise (klarer), bei langsamem mehr.",
@@ -90,11 +180,120 @@ SEMANTIC_PARAM_DESCRIPTIONS = {
     "flow_speed": "Geschwindigkeit der Wellenbewegung. 0.1 = fast stehend, 0.5 = moderate Fluss, 1.0 = extrem hektisch. Bei Speech 0.2-0.4, bei Musik 0.5-0.8.",
     "wave_depth": "Tiefe/Amplitude der Wellen. 0.2 = flache Wellen, 0.6 = ausgepraegt, 1.0 = extreme Auslenkung. Bei leiser Stimme 0.4-0.6, bei lautem Schreien 0.8-1.0.",
     "breathe_intensity": "Atmungs-Effekt. 0.1 = kaum sichtbar, 0.35 = deutliche Ein- und Ausatmung, 0.8 = hyperventilierend. Bei Meditation 0.3-0.5, bei Action 0.1-0.2.",
+    "breathe_speed": "Atmungs-Tempo. 0.1 = sehr langsam, 0.6 = normal, 2.0 = schnell.",
     "line_count": "Anzahl der Wellenlinien. 3 = reduziert, 5 = ausgewogen, 10 = dicht. Mehr Linien bei grosser Aufloesung, weniger bei kleiner.",
+    "line_spacing": "Vertikaler Abstand der Wellenlinien. 0.2 = eng, 0.6 = normal, 1.5 = weit.",
     "glow_strength": "Leuchtstaerke der Linien. 0.2 = dezent, 0.5 = sichtbarer Neon-Effekt, 1.0 = extrem hell. Bei dunklem Hintergrund hoeher, bei hellem niedriger.",
+    "glow_size": "Weite des Glows um die Wellenlinien. 0.01 = schmal, 0.08 = normal, 0.3 = sehr weich.",
     "line_width": "Liniendicke. 0.001 = Haarfein, 0.004 = markant, 0.01 = dick. Bei 4K unbedingt >= 0.003.",
     "trail_decay": "Nachleuchten der Linien. 0.5 = schnell verblassend, 0.75 = moderate Spur, 0.95 = sehr langsam. Bei schneller Rede niedriger, bei langsamer Monolog hoeher.",
+    "trail_time_offset": "Zeitlicher Abstand der Trail-Echos. 0.01 = fast gleichzeitig, 0.1 = deutlich versetzt.",
+    "scanline_intensity": "Staerke des Scanline-Effekts. 0.0 = aus, 0.05 = subtil, 0.3 = stark.",
+    "vignette_intensity": "Staerke der Vignette. 0.0 = aus, 0.6 = normal, 1.5 = sehr dunkle Raender.",
     "brightness": "Gesamthelligkeit. 0.5 = dunkel, 1.0 = normal, 1.5 = ueberhell. Bei Podcast 1.0-1.2, bei Musik 0.8-1.1.",
+
+    # Speech Focus
+    "vu_segments": "Anzahl der VU-Meter-Segmente. 4 = grob, 12 = normal, 24 = fein.",
+    "response_speed": "Reaktionsgeschwindigkeit auf Sprache. 0.2 = sehr traeg, 0.8 = schnell, 1.5 = hyper-reaktiv.",
+    "wave_amp": "Amplitude der Wellenform. 0.0 = flach, 0.025 = subtil, 0.08 = stark.",
+    "line_brightness": "Helligkeit der Wellenform. 0.05 = dezent, 0.18 = normal, 0.5 = hell.",
+    "accent_intensity": "Staerke der Akzent-Farbe bei Sprache. 0.0 = aus, 0.55 = normal, 1.0 = sehr stark.",
+    "grain_amount": "Film-Grain-Menge. 0.0 = sauber, 0.01 = subtil, 0.05 = deutlich.",
+    "brightness_cap": "Maximale Helligkeit. 0.1 = sehr dunkel, 0.4 = normal, 0.8 = hell.",
+    "background_color": "Hintergrundfarbe als Hex-String. Im Speech-Modus sehr dunkel halten (#060607).",
+
+    # Bass Temple
+    "strobe_threshold": "Schwelle fuer Stroboskop-Blitze. 0.0 = immer, 0.55 = normale Beats, 1.0 = nie.",
+    "shockwave_speed": "Geschwindigkeit der Shockwave-Ringe. 0.5 = langsam, 2.5 = normal, 6.0 = schnell.",
+    "temple_scale": "Skalierung der Tempel-Form. 0.5 = klein, 1.0 = normal, 2.0 = gross.",
+    "contrast_gamma": "Gamma-Kontrast. 0.5 = sehr hell, 0.88 = normal, 1.5 = sehr dunkel.",
+    "noise_intensity": "Staerke des Hintergrund-Rauschens. 0.0 = aus, 0.2 = subtil, 1.0 = stark.",
+
+    # Lumina Core
+    "chromatic_aberration": "Staerke der chromatischen Aberration bei Beats. 0.0 = aus, 0.003 = subtil, 0.02 = stark.",
+    "core_base_radius": "Basis-Radius des Kerns. 0.05 = klein, 0.15 = normal, 0.4 = gross.",
+    "ring_base_radius": "Basis-Radius des ersten Rings. 0.1 = nah, 0.25 = normal, 0.5 = weit.",
+    "noise_scale": "Skalierung des Noise-Details. 0.5 = grob, 2.0 = normal, 5.0 = sehr fein.",
+    "noise_amount": "Staerke der Noise-Displacement. 0.0 = glatt, 0.03 = subtil, 0.1 = stark.",
+    "specular_power": "Glanzlicht-Schaerfe. 4 = matt, 32 = normal, 128 = sehr spiegelnd.",
+
+    # Spectrum Genesis
+    "bar_height": "Maximale Balkenhoehe. 0.1 = niedrig, 0.35 = normal, 0.7 = sehr hoch.",
+    "wave_frequency": "Frequenz der Wellenform. 1 = sehr langsam, 10 = normal, 40 = sehr schnell.",
+    "wave_complexity": "Anzahl der Wellen-Komponenten. 1 = einfach, 3 = normal, 6 = komplex.",
+
+    # Orchestral Swell
+    "gold_tint": "Gold-Anteil in der Farbgebung. 0.0 = neutral, 0.5 = warm, 1.0 = sehr golden.",
+    "dynamics_response": "Reaktion auf Dynamikwechsel. 0.5 = gedaempft, 1.2 = normal, 2.5 = sehr stark.",
+    "particle_spread": "Ausbreitung der Partikel. 0.0 = zentriert, 1.0 = normal, 4.0 = sehr weit.",
+}
+
+
+# =============================================================================
+# RESPONSE SCHEMA FOR DETERMINISTIC JSON OUTPUT
+# =============================================================================
+# Wird an Gemini uebergeben, damit die Antwort exakt diesem Schema folgt.
+# Reduziert Halluzinationen und erzwingt gueltige Wertebereiche.
+
+OPTIMIZE_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "params": {
+            "type": "object",
+            "description": "Optimierte Visualizer-Parameter. Werte muessen innerhalb der angegebenen min/max-Grenzen liegen.",
+            "additionalProperties": {
+                "anyOf": [
+                    {"type": "number"},
+                    {"type": "string"},
+                    {"type": "boolean"},
+                ]
+            }
+        },
+        "colors": {
+            "type": "object",
+            "properties": {
+                "primary": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+                "secondary": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+                "background": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
+            },
+            "required": ["primary", "secondary", "background"],
+            "additionalProperties": False,
+        },
+        "postprocess": {
+            "type": "object",
+            "properties": {
+                "contrast": {"type": "number"},
+                "saturation": {"type": "number"},
+                "brightness": {"type": "number"},
+                "warmth": {"type": "number"},
+                "film_grain": {"type": "number"},
+            },
+            "additionalProperties": False,
+        },
+        "background": {
+            "type": "object",
+            "properties": {
+                "opacity": {"type": "number"},
+                "blur": {"type": "number"},
+                "vignette": {"type": "number"},
+            },
+            "additionalProperties": False,
+        },
+        "quotes": {
+            "type": "object",
+            "description": "Quote-Overlay-Einstellungen.",
+            "additionalProperties": {
+                "anyOf": [
+                    {"type": "number"},
+                    {"type": "string"},
+                    {"type": "boolean"},
+                    {"type": "array", "items": {"type": "integer"}},
+                ]
+            }
+        },
+    },
+    "required": ["params", "colors", "postprocess", "background", "quotes"],
+    "additionalProperties": False,
 }
 
 
@@ -803,49 +1002,102 @@ class GeminiIntegration:
         Returns:
             Dictionary mit ALLEN optimierten Einstellungen
         """
-        # Fallback: deterministische Parameter-Berechnung
+        # Fallback: kategorienbasierte deterministische Parameter-Berechnung
         def _fallback_params():
-            """Berechnet Parameter deterministisch aus Audio-Features."""
+            """Berechnet Parameter deterministisch aus Audio-Features.
+
+            Verwendet PARAM_CATEGORIES statt string-basierter Heuristiken, um
+            jeden Parameter anhand seiner semantischen Bedeutung zuzuordnen.
+            """
             tempo = audio_features.get('tempo', 120)
             mode = audio_features.get('mode', 'music')
-            rms_mean = audio_features.get('rms_mean', 0.5)
-            rms_std = audio_features.get('rms_std', 0.1)
-            onset_mean = audio_features.get('onset_mean', 0.3)
-            
+            rms_mean = np.clip(audio_features.get('rms_mean', 0.5), 0.0, 1.0)
+            rms_std = np.clip(audio_features.get('rms_std', 0.1), 0.0, 1.0)
+            onset_mean = np.clip(audio_features.get('onset_mean', 0.3), 0.0, 1.0)
+            dynamic_range = np.clip(audio_features.get('dynamic_range', 0.3), 0.0, 1.0)
+            brightness = np.clip(audio_features.get('brightness', 0.5), 0.0, 1.0)
+            voice_clarity = np.clip(audio_features.get('voice_clarity_mean', 0.0), 0.0, 1.0)
+
+            # Normalisierte Steuergrössen
+            speed_factor = np.clip(tempo / 180.0, 0.0, 1.0)
+            energy_factor = rms_mean
+            dynamics_factor = min(1.0, rms_std * 2 + dynamic_range * 0.5)
+            rhythm_factor = min(1.0, onset_mean * 3)
+            speech_factor = 1.0 if mode == 'speech' else 0.0
+
             result = {}
-            if param_specs:
-                for name, (default, min_val, max_val, step) in param_specs.items():
-                    if 'intensity' in name or 'strength' in name or 'scale' in name or 'impact' in name:
-                        # Dynamik-basiert: hohe RMS-Std = hohe Intensitaet
-                        val = min_val + (max_val - min_val) * min(1.0, rms_mean + rms_std * 2)
-                    elif 'speed' in name or 'rotation' in name or 'animation' in name:
-                        # Tempo-basiert
-                        val = min_val + (max_val - min_val) * min(1.0, tempo / 180.0)
-                    elif 'count' in name or 'particles' in name or 'bars' in name or 'rings' in name:
-                        # Energie-basiert
-                        val = min_val + (max_val - min_val) * rms_mean
-                    elif 'smooth' in name or 'flow' in name or 'breathe' in name:
-                        # Ruhig bei Speech
-                        if mode == 'speech':
-                            val = min_val + (max_val - min_val) * 0.3
-                        else:
-                            val = min_val + (max_val - min_val) * 0.7
+            if not param_specs:
+                return current_params.copy()
+
+            for name, (default, min_val, max_val, step) in param_specs.items():
+                # String-/Pseudo-Parameter ohne numerische Bounds beibehalten
+                if min_val is None or max_val is None or step is None:
+                    if isinstance(default, str):
+                        result[name] = default
+                    continue
+
+                category = _get_param_category(name)
+
+                if category == "intensity":
+                    # Dynamik + Energie steuern Intensitaet
+                    val = min_val + (max_val - min_val) * (
+                        0.3 * energy_factor + 0.4 * dynamics_factor + 0.3 * rhythm_factor
+                    )
+                elif category == "speed":
+                    # Tempo + Rhythmik steuern Geschwindigkeit
+                    val = min_val + (max_val - min_val) * (
+                        0.5 * speed_factor + 0.3 * rhythm_factor + 0.2 * energy_factor
+                    )
+                    # Speech-Modus: langsamer
+                    if mode == 'speech':
+                        val = min_val + (val - min_val) * 0.5
+                elif category == "count":
+                    # Energie + Groesse des Screens/Details
+                    val = min_val + (max_val - min_val) * (
+                        0.4 * energy_factor + 0.3 * dynamics_factor + 0.3 * brightness
+                    )
+                    # Speech: weniger Elemente
+                    if mode == 'speech':
+                        val = min_val + (val - min_val) * 0.6
+                elif category == "size":
+                    # Ausgewogen nach Energie und Geschwindigkeit
+                    val = min_val + (max_val - min_val) * (
+                        0.4 * energy_factor + 0.3 * (1.0 - speed_factor) + 0.3 * brightness
+                    )
+                elif category == "color":
+                    # Farbparameter leicht an Energie und Stimmung anpassen
+                    val = min_val + (max_val - min_val) * (
+                        0.5 + 0.3 * energy_factor - 0.2 * speech_factor
+                    )
+                elif category == "reactivity":
+                    # Speech braucht weiche Reaktion; Musik direktere
+                    if mode == 'speech':
+                        val = min_val + (max_val - min_val) * (0.3 + 0.2 * voice_clarity)
                     else:
-                        val = default
-                    
-                    # Auf Step runden
-                    if isinstance(step, int):
-                        val = round(val / step) * step
-                        val = int(val)
-                    else:
-                        val = round(val / step) * step
-                    
-                    result[name] = max(min_val, min(max_val, val))
-            else:
-                result = current_params.copy()
-            
+                        val = min_val + (max_val - min_val) * (0.5 + 0.4 * dynamics_factor)
+                elif category == "transform":
+                    # Transformations-Parameter nur minimal anpassen
+                    val = default
+                elif category == "special":
+                    # Spezielle Parameter (z.B. Hex-Farben) beibehalten
+                    val = default
+                else:
+                    # Unbekannte Parameter: moderat energieabhaengig
+                    val = min_val + (max_val - min_val) * (
+                        0.4 + 0.3 * energy_factor + 0.3 * (1.0 - speech_factor)
+                    )
+
+                # Auf Step runden
+                if isinstance(step, int):
+                    val = round(val / step) * step
+                    val = int(val)
+                else:
+                    val = round(val / step) * step
+
+                result[name] = max(min_val, min(max_val, val))
+
             return result
-        
+
         def _fallback_colors():
             mode = audio_features.get('mode', 'music')
             tempo = audio_features.get('tempo', 120)
@@ -944,162 +1196,46 @@ SMARTMATCHER-EMPFEHLUNG
 - Vorgeschlagene Farben: Primary={recommendation.get('colors', {}).get('primary', '-')}, Secondary={recommendation.get('colors', {}).get('secondary', '-')}, Background={recommendation.get('colors', {}).get('background', '-')}
 """
 
-            prompt = f"""Du bist ein professioneller Motion-Graphics-Designer und Color-Grading-Experte.
+            system_instruction = (
+                "Du bist ein Motion-Graphics-Experte. Optimiere Visualizer-Parameter, "
+                "Farben, Post-Process und Quote-Einstellungen fuer ein Audio-Video. "
+                "Antworte ausschliesslich mit einem JSON-Objekt. Halte dich an min/max-Grenzen."
+            )
 
-Deine Aufgabe: Optimiere die Visualisierungs-Einstellungen fuer ein Audio-Video basierend auf einer detaillierten Audio-Analyse.
-
-================================================================================
-AUDIO-ANALYSE
-================================================================================
-- Dauer: {audio_features.get('duration', 0):.1f}s
-- Tempo: {tempo:.0f} BPM
-- Modus: {mode}
-- RMS (Lautstaerke): mean={rms_mean:.2f}, std={rms_std:.2f}
-- Onset (Beat-Staerke): mean={onset_mean:.2f}, std={onset_std:.2f}
-- Transienten (Kick/Snare-Praesenz): {transient_mean:.2f}
-- Voice-Clarity (Sprach-Anteil): {voice_clarity_mean:.2f}
-- Spektrale Helligkeit: {brightness:.2f}
-- Rausch-Anteil: {noisiness:.2f}
+            prompt = f"""AUDIO: {audio_features.get('duration', 0):.1f}s, {tempo:.0f} BPM, Modus={mode}
+RMS mean={rms_mean:.2f}/std={rms_std:.2f}, Onset mean={onset_mean:.2f}/std={onset_std:.2f}, Transient={transient_mean:.2f}, Voice={voice_clarity_mean:.2f}, Brightness={brightness:.2f}, Noise={noisiness:.2f}
 {rec_text}
-================================================================================
 VISUALIZER: {visualizer_type}
-================================================================================
-AKTUELLE PARAMETER (diese sind dein Ausgangspunkt):
-{json.dumps(GeminiIntegration._sanitize_for_json(current_params), indent=2)}
+AKTUELLE PARAMETER: {json.dumps(GeminiIntegration._sanitize_for_json(current_params), indent=2)}
+AKTUELLE FARBEN: {json.dumps(GeminiIntegration._sanitize_for_json(colors), indent=2)}
 
-AKTUELLE FARBEN:
-{json.dumps(GeminiIntegration._sanitize_for_json(colors), indent=2)}
-
-================================================================================
-PARAMETER-SPEZIFIKATIONEN
-================================================================================
-Jeder Parameter hat einen STANDARDWERT, einen erlaubten BEREICH und eine BEDEUTUNG.
-Du MUSST die neuen Werte INNERHALB der min/max-Grenzen liefern.
-Werte ausserhalb des Bereichs fuehren zu Fehlern.
-
+PARAMETER-SPEZIFIKATIONEN (Standard, [min..max], Schritt, Bedeutung):
 {param_info}
 
-================================================================================
-RELATIVE ANPASSUNG (WICHTIG)
-================================================================================
-Passe die Werte RELATIV zu den aktuellen Standardwerten an. Nicht von Null raten.
+REGELN:
+- Passe Werte relativ zum Standardwert an (leicht ±10-20%, moderat ±30-50%, stark ±60-100%).
+- Speech: sanfte, langsame Werte, dezente Farben, grosse lesbare Schrift.
+- Music + Tempo > 110: aggressiver, kontrastreich, mehr Partikel/Balken.
+- Music + Tempo <= 110: fliessend, organisch, warm.
+- Post-Process: Speech (contrast 1.05, saturation 0.8, warmth 0.1, grain 0.05), Energy (1.2/1.3/0/0.05), Chill (1.05/0.9/0.2/0.1).
+- Farben: Podcast (#667EEA/#764BA2/#1A1A2E), Energy (#FF0055/#00CCFF/#0A0A0A), Chill (#4ECDC4/#96CEB4/#1A1A3E).
+- Quotes: Podcast (font_size 52-64, bottom), Musik (40-48, center).
 
-- LEICHTE Anpassung:  +/- 10-20% vom Standardwert  (bei geringen Veraenderungen)
-- MODERATE Anpassung: +/- 30-50% vom Standardwert  (bei deutlichen Unterschieden)
-- STARKE Anpassung:   +/- 60-100% vom Standardwert (bei extremen Audio-Eigenschaften)
-
-Beispiel: Standardwert=0.5, Bereich=[0.0, 1.0], Schritt=0.05
-  - Leicht (+20%)  -> 0.60
-  - Moderat (+50%) -> 0.75
-  - Stark (+100%)  -> 1.00
-
-Wenn ein Parameter keinen Sinn fuer den aktuellen Modus macht (z.B. "particle_count" bei "speech"),
-passe ihn nur LEICHT an oder belasse ihn beim Standardwert.
-
-================================================================================
-REGELN NACH AUDIO-TYP
-================================================================================
-Parameter-Regeln:
-- Intensitaet/Speed/Scale: RMS-Std > 0.15 = DYNAMISCHES Audio -> leicht bis moderat hoeher
-- Tempo > 130 BPM: schnellere Animationen, evtl. mehr Partikel, staerkere Effekte
-- Modus == "speech": sanfte, langsame Werte, wenig Partikel, dezente Farben
-- Modus == "music" + Tempo > 110: moderat aggressiv, kontrastreich
-- Modus == "music" + Tempo <= 110: fliessend, organisch, warm
-- Voice-Clarity > 0.5: Podcast-Modus -> reduzierte Bewegung, lesbare Texte
-
-Farb-Regeln:
-- Musik/EDM: Klassisches Orange/Teal (#FF6B35 / #00CCFF) oder Neon (#FF00AA / #39FF14)
-- Podcast: Gedämpft, professionell (#667EEA / #764BA2 / #1A1A2E)
-- Chill/Ambient: Pastell-Tuerkis/Sand (#4ECDC4 / #96CEB4 / #1A1A3E)
-- Aggressiv: Sattes Rot/Cyan (#FF0055 / #00CCFF)
-
-Post-Process-Regeln:
-- Speech/News:    contrast 1.05, saturation 0.8,  warmth 0.1, film_grain 0.05
-- Musik/Energy:   contrast 1.2,  saturation 1.3,  warmth 0.0, film_grain 0.05
-- Chill:          contrast 1.05, saturation 0.9,  warmth 0.2, film_grain 0.1
-- Cinematic:      contrast 1.15, saturation 1.05, warmth 0.25, film_grain 0.15
-- Vintage:        contrast 0.9,  saturation 0.75, warmth 0.4, film_grain 0.35
-
-Quote-Regeln:
-- Podcast/News: grosse Schrift (52-64px), Position bottom, Text-Schatten, Box-Gradient, Accent-Linie
-- Musik/Energy: mittlere Schrift (40-48px), Position center, Accent-Linie in warmem Gold
-- Ruhig:        sehr grosse Schrift (56-72px), Position center, nur Fade
-
-================================================================================
-BEISPIELE (Few-Shot)
-================================================================================
-Beispiel 1 – Ruhender Podcast (voice_flow):
-Audio: 90 BPM, mode=speech, RMS mean=0.20, Voice-Clarity=0.55
-{{
-  "params": {{
-    "flow_speed": 0.25, "wave_depth": 0.45, "breathe_intensity": 0.35,
-    "line_count": 4, "glow_strength": 0.5, "line_width": 0.004,
-    "trail_length": 2, "trail_decay": 0.75, "brightness": 1.0
-  }},
-  "colors": {{"primary": "#667EEA", "secondary": "#764BA2", "background": "#1A1A2E"}},
-  "postprocess": {{"contrast": 1.05, "saturation": 0.8, "brightness": 0.0, "warmth": 0.1, "film_grain": 0.05}},
-  "background": {{"opacity": 0.3, "blur": 0.0, "vignette": 0.0}},
-  "quotes": {{
-    "font_size": 58, "box_color": "#1a1a2e", "font_color": "#FFFFFF",
-    "position": "bottom", "display_duration": 8.0, "auto_scale_font": true,
-    "text_shadow_enabled": true, "box_gradient": true, "accent_line": true,
-    "accent_line_color": "#FFC864", "box_padding": 36,
-    "box_radius": 20, "box_margin_bottom": 100, "max_width_ratio": 0.7,
-    "fade_duration": 0.8, "line_spacing": 1.5, "max_font_size": 72,
-    "max_chars_per_line": 40
-  }}
-}}
-
-Beispiel 2 – Energische Musik (spectrum_bars):
-Audio: 140 BPM, mode=music, RMS mean=0.65, Onset mean=0.40
-{{
-  "params": {{
-    "bar_count": 64, "height_scale": 1.3, "spacing": 0.25, "color_shift": 0.05
-  }},
-  "colors": {{"primary": "#FF0055", "secondary": "#00CCFF", "background": "#0A0A0A"}},
-  "postprocess": {{"contrast": 1.25, "saturation": 1.35, "brightness": -0.03, "warmth": 0.0, "film_grain": 0.05}},
-  "background": {{"opacity": 0.25, "blur": 0.0, "vignette": 0.15}},
-  "quotes": {{}}
-}}
-
-================================================================================
-AUSGABEFORMAT (STRIKTES JSON)
-================================================================================
-Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown-Code-Block.
-
-{{
-  "params": {{...}},
-  "colors": {{"primary": "#...", "secondary": "#...", "background": "#..."}},
-  "postprocess": {{"contrast": 1.0, "saturation": 1.0, "brightness": 0.0, "warmth": 0.0, "film_grain": 0.0}},
-  "background": {{"opacity": 0.3, "blur": 0.0, "vignette": 0.0}},
-  "quotes": {{
-    "font_size": 52, "box_color": "#1a1a2e", "font_color": "#FFFFFF",
-    "position": "bottom", "display_duration": 8.0, "auto_scale_font": true,
-    "text_shadow_enabled": true, "box_gradient": true, "accent_line": true,
-    "accent_line_color": "#FFC864", "box_padding": 32,
-    "box_radius": 16, "box_margin_bottom": 100, "max_width_ratio": 0.75,
-    "fade_duration": 0.6, "line_spacing": 1.35, "max_font_size": 72,
-    "max_chars_per_line": 40
-  }}
-}}
-
-WICHTIGE HINWEISE:
-1. Jeder Wert in "params" MUSS innerhalb des jeweiligen min/max-Bereichs liegen.
-2. Float-Werte MUSSEN auf die angegebene step-Schrittweite gerundet werden.
-3. Bei "colors" verwende gueltige Hex-Codes (#RRGGBB).
-4. Bei "postprocess" muessen contrast >= 0.3, saturation >= 0.0 und grain <= 1.0 sein.
-5. Der User-Prompt hat Prioritaet ueber alle automatischen Regeln.
+Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
 """
-            
+
             if user_prompt:
-                prompt += f"\nZusaetzlicher User-Wunsch: {user_prompt}\n"
-            
+                prompt += f"\nUser-Wunsch (Prioritaet): {user_prompt}\n"
+
             response = self._call_gemini_with_retry(
                 lambda: self.client.models.generate_content(
                     model=self.model,
                     contents=[prompt],
                     config={
+                        "system_instruction": system_instruction,
                         "response_mime_type": "application/json",
+                        "response_schema": OPTIMIZE_RESPONSE_SCHEMA,
+                        "temperature": 0.2,
                     }
                 )
             )

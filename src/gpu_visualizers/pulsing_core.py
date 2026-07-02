@@ -98,6 +98,12 @@ class PulsingCoreGPU(BaseGPUVisualizer):
         'bg_brightness': (0.15, 0.0, 0.5, 0.01),
     }
 
+    PARAMS_GROUPS = {
+        "Puls": ["pulse_intensity", "base_radius"],
+        "Ringe": ["ring_count", "ring_spacing", "ring_width"],
+        "Erscheinungsbild": ["glow_radius", "bg_brightness"],
+    }
+
     def _setup(self):
         """Initialisiert Shader, VBO und VAO fuer den Fullscreen-Quad."""
         self.prog = self.ctx.program(

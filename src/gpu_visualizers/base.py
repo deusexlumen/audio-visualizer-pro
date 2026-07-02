@@ -99,7 +99,7 @@ float sdSegment(vec2 p, vec2 a, vec2 b) {
 """
 
 LYGIA_COLOR_GLSL = """
-vec3 chromaColor(vec3 chroma, float sat, float val) {
+vec3 chromaColor(float chroma[12], float sat, float val) {
     float angles[12];
     angles[0] = 0.0; angles[1] = 0.5236; angles[2] = 1.0472;
     angles[3] = 1.5708; angles[4] = 2.0944; angles[5] = 2.6180;

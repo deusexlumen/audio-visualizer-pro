@@ -342,6 +342,91 @@ class {''.join(part.capitalize() for part in name.split('_'))}Visualizer(BaseGPU
     click.echo(f"KI-Agent: Implementiere den Fragment-Shader!")
 
 
+@cli.command('create-visualizer')
+@click.argument('name')
+@click.option('--type', '-t', 'viz_type', default='shader',
+              type=click.Choice(['shader', 'geometry', 'particles']),
+              help='Template-Typ fuer den neuen Visualizer')
+@click.option('--test/--no-test', default=True,
+              help='Smoke-Test nach Erstellung durchfuehren (1 Frame rendern)')
+@click.option('--target-dir', default='src/gpu_visualizers', type=click.Path())
+def create_visualizer(name, viz_type, test, target_dir):
+    """Erstellt ein neues GPU-Visualizer-Template mit reichhaltigem Startpunkt.
+
+    Der Visualizer wird automatisch in der Registry registriert (Auto-Discovery)
+    und optional direkt mit einem Smoke-Test ueberprueft.
+    """
+    from src.visualizer_wizard import VisualizerWizard
+
+    target = Path(target_dir)
+    target.mkdir(parents=True, exist_ok=True)
+
+    wizard = VisualizerWizard(name, viz_type=viz_type)
+    file_path = wizard.write(target)
+    click.echo(f"Visualizer erstellt: {file_path}")
+
+    # Auto-Discovery aktualisieren, damit der neue Visualizer sofort verfuegbar ist.
+    from src.gpu_visualizers import refresh_registry
+    refresh_registry()
+
+    # Pruefen, ob der Visualizer in der Registry auftaucht.
+    from src.gpu_visualizers import list_visualizers
+    available = list_visualizers()
+    if wizard.module_name not in available:
+        raise click.ClickException(
+            f"Visualizer '{wizard.module_name}' wurde nicht in der Registry gefunden. "
+            f"Verfuegbar: {available}"
+        )
+    click.echo(f"Auto-Registrierung erfolgreich: {wizard.module_name}")
+
+    if test:
+        click.echo("Fuehre Smoke-Test durch...")
+        _smoke_test_visualizer(wizard.module_name)
+        click.echo("Smoke-Test bestanden.")
+
+
+def _smoke_test_visualizer(name: str):
+    """Rendert einen Frame mit Dummy-Features zur Validierung eines Visualizers."""
+    import numpy as np
+    import moderngl
+
+    from src.gpu_visualizers import get_visualizer, validate_visualizer_class
+
+    cls = get_visualizer(name)
+    errors = validate_visualizer_class(cls)
+    if errors:
+        raise click.ClickException("Validierung fehlgeschlagen:\n" + "\n".join(errors))
+
+    ctx = moderngl.create_standalone_context()
+    try:
+        texture = ctx.texture((640, 480), 3)
+        fbo = ctx.framebuffer(color_attachments=[texture])
+        viz = cls(ctx, 640, 480)
+
+        dummy_features = {
+            "rms": np.random.rand(30).astype(np.float32),
+            "onset": np.random.rand(30).astype(np.float32),
+            "beat_intensity": np.random.rand(30).astype(np.float32),
+            "spectral_centroid": np.random.rand(30).astype(np.float32),
+            "chroma": np.random.rand(12, 30).astype(np.float32),
+            "transient": np.random.rand(30).astype(np.float32),
+            "voice_clarity": np.random.rand(30).astype(np.float32),
+            "fps": 30,
+            "frame_count": 30,
+            "mode": "music",
+            "tempo": 120.0,
+        }
+
+        fbo.use()
+        ctx.clear(0.0, 0.0, 0.0)
+        viz.render(dummy_features, 0.5)
+        pixels = fbo.read(components=3)
+        if len(pixels) != 640 * 480 * 3:
+            raise click.ClickException("Falsche Pixel-Anzahl im gerenderten Frame")
+    finally:
+        ctx.release()
+
+
 @cli.command()
 @click.argument('audio_file', type=click.Path(exists=True))
 @click.option('--fps', default=60, type=int, help='Frames pro Sekunde fuer die Analyse')

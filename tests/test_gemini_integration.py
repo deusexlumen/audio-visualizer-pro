@@ -5,6 +5,7 @@ Alle Tests nutzen Mocks – keine echten API-Calls!
 """
 
 import os
+import json
 import tempfile
 import pytest
 from unittest.mock import Mock, patch
@@ -331,3 +332,106 @@ class TestGeminiIntegration:
             assert result["postprocess"]["saturation"] == 0.3
             assert result["postprocess"]["brightness"] == 0.0
             assert result["background"]["opacity"] == 1.0
+
+    def test_optimize_all_settings_uses_response_schema_and_temperature(self):
+        """Der API-Call soll response_schema und temperature=0.2 verwenden."""
+        with patch('src.gemini_integration.genai') as mock_genai:
+            from src.gemini_integration import (
+                GeminiIntegration, OPTIMIZE_RESPONSE_SCHEMA
+            )
+
+            mock_client = Mock()
+            mock_response = Mock()
+            mock_response.text = json.dumps({
+                "params": {"pulse_intensity": 0.6},
+                "colors": {"primary": "#FF0055", "secondary": "#00CCFF", "background": "#0A0A0A"},
+                "postprocess": {"contrast": 1.0, "saturation": 1.0, "brightness": 0.0,
+                                "warmth": 0.0, "film_grain": 0.0},
+                "background": {"opacity": 0.3, "blur": 0.0, "vignette": 0.0},
+                "quotes": {},
+            })
+            mock_client.models.generate_content.return_value = mock_response
+            mock_genai.Client.return_value = mock_client
+
+            gemini = GeminiIntegration(api_key="test-key")
+            result = gemini.optimize_all_settings(
+                visualizer_type="pulsing_core",
+                current_params={"pulse_intensity": 0.5},
+                audio_features={"tempo": 120, "mode": "music", "rms_mean": 0.5},
+                colors={"primary": "#FF0055", "secondary": "#00CCFF", "background": "#0A0A0A"},
+                param_specs={"pulse_intensity": (0.5, 0.0, 1.0, 0.05)},
+            )
+
+            mock_client.models.generate_content.assert_called_once()
+            call_kwargs = mock_client.models.generate_content.call_args.kwargs
+            config = call_kwargs.get("config", {})
+            assert config.get("temperature") == 0.2
+            assert config.get("response_mime_type") == "application/json"
+            assert config.get("response_schema") is OPTIMIZE_RESPONSE_SCHEMA
+            assert "system_instruction" in config
+            assert result["params"]["pulse_intensity"] == pytest.approx(0.6, abs=0.001)
+
+    def test_optimize_all_settings_category_fallback(self):
+        """Fallback-Algorithmus soll kategorienbasierte Werte liefern."""
+        with patch('src.gemini_integration.genai') as mock_genai:
+            from src.gemini_integration import GeminiIntegration
+
+            mock_client = Mock()
+            mock_client.models.generate_content.side_effect = Exception("API error")
+            mock_genai.Client.return_value = mock_client
+
+            gemini = GeminiIntegration(api_key="test-key")
+            # default.json umgehen, damit der interne Fallback getestet wird
+            gemini._load_default_config = Mock(return_value={})
+
+            audio_features = {
+                "tempo": 140,
+                "mode": "music",
+                "rms_mean": 0.7,
+                "rms_std": 0.15,
+                "onset_mean": 0.4,
+                "dynamic_range": 0.5,
+                "brightness": 0.6,
+                "voice_clarity_mean": 0.1,
+            }
+            param_specs = {
+                "pulse_intensity": (0.5, 0.0, 1.0, 0.05),  # intensity
+                "bar_count": (40, 10, 100, 5),              # count
+                "flow_speed": (0.5, 0.1, 1.0, 0.05),        # speed
+                "smoothing": (0.3, 0.0, 0.8, 0.05),         # reactivity
+            }
+
+            result = gemini.optimize_all_settings(
+                visualizer_type="spectrum_bars",
+                current_params={},
+                audio_features=audio_features,
+                colors={"primary": "#FF0055", "secondary": "#00CCFF", "background": "#0A0A0A"},
+                param_specs=param_specs,
+            )
+
+            # Intensity sollte bei hoher Energie steigen
+            assert result["params"]["pulse_intensity"] > 0.5
+            # Count sollte bei hoher Energie steigen
+            assert result["params"]["bar_count"] >= 40
+            # Speed sollte bei hohem Tempo steigen
+            assert result["params"]["flow_speed"] > 0.5
+            # Werte muessen in den gueltigen Bereichen liegen
+            assert 0.0 <= result["params"]["pulse_intensity"] <= 1.0
+            assert 10 <= result["params"]["bar_count"] <= 100
+            assert 0.1 <= result["params"]["flow_speed"] <= 1.0
+            assert 0.0 <= result["params"]["smoothing"] <= 0.8
+
+    def test_param_categorization_covers_known_params(self):
+        """Bekannte Parameter muessen einer Kategorie zugeordnet sein."""
+        with patch('src.gemini_integration.genai'):
+            from src.gemini_integration import _get_param_category
+
+            assert _get_param_category("pulse_intensity") == "intensity"
+            assert _get_param_category("bar_count") == "count"
+            assert _get_param_category("flow_speed") == "speed"
+            assert _get_param_category("bar_width") == "size"
+            assert _get_param_category("color_shift") == "color"
+            assert _get_param_category("smoothing") == "reactivity"
+            assert _get_param_category("viz_offset_x") == "transform"
+            assert _get_param_category("background_color") == "special"
+            assert _get_param_category("unknown_param") == "other"

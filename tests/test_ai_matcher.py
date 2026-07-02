@@ -115,8 +115,42 @@ class TestSmartMatcher:
             tempo=100.0,
         )
         result = matcher.match(features)
-        
-        assert result.visualizer in ['neon_wave_circle', 'pulsing_core']
+
+        # Kontinuierliche Scores koennen auch frequency_flower kurz vorne liegen
+        assert result.visualizer in ['neon_wave_circle', 'pulsing_core', 'frequency_flower']
+
+    def test_rank_visualizers_returns_top_three(self):
+        matcher = SmartMatcher()
+        features = create_dummy_features(mode="music", rms_mean=0.7, onset_density=0.25, tempo=140.0)
+        top3 = matcher.rank_visualizers(features)
+
+        assert len(top3) == 3
+        assert all(isinstance(name, str) and isinstance(score, float) for name, score in top3)
+        assert top3[0][1] >= top3[1][1] >= top3[2][1]
+        # Musik mit hoher Energie sollte einen Musik-Visualizer an erster Stelle haben
+        assert top3[0][0] in matcher.MUSIC_VISUALS
+
+    def test_recommendation_includes_top_candidates(self):
+        matcher = SmartMatcher()
+        features = create_dummy_features(mode="speech", rms_mean=0.2, onset_density=0.02, tempo=80.0)
+        result = matcher.match(features)
+
+        assert len(result.top_candidates) == 3
+        assert result.top_candidates[0][0] == result.visualizer
+
+    def test_extract_features_includes_new_features(self):
+        matcher = SmartMatcher()
+        features = create_dummy_features(rms_mean=0.5, onset_density=0.1)
+
+        extracted = matcher._extract_features(features)
+
+        assert 'spectral_rolloff_mean' in extracted
+        assert 'beat_count' in extracted
+        assert 'beat_density' in extracted
+        assert 'tempogram_mean' in extracted
+        assert 'tempogram_std' in extracted
+        assert 'mfcc_mean' in extracted
+        assert 'mfcc_std' in extracted
     
     def test_key_colors_are_valid_hex(self):
         matcher = SmartMatcher()

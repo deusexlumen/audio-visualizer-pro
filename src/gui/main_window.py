@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QPushButton, QStatusBar, QLabel, QMessageBox, QTabWidget,
+    QScrollArea,
 )
 
 from src.gui.assets_panel import AssetsPanel
@@ -77,9 +78,9 @@ class MainWindow(QMainWindow):
         self.ki_panel = KIPanel(self.state, gemini=self.gemini)
         self.quotes_panel = QuotesPanel(self.state, gemini=self.gemini)
 
-        self.right_tabs.addTab(self.params_panel, "Params")
-        self.right_tabs.addTab(self.ki_panel, "KI")
-        self.right_tabs.addTab(self.quotes_panel, "Quotes")
+        self.right_tabs.addTab(self._make_scrollable(self.params_panel), "Params")
+        self.right_tabs.addTab(self._make_scrollable(self.ki_panel), "KI")
+        self.right_tabs.addTab(self._make_scrollable(self.quotes_panel), "Quotes")
         splitter.addWidget(self.right_tabs)
 
         splitter.setSizes([260, 620, 320])
@@ -109,6 +110,16 @@ class MainWindow(QMainWindow):
 
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
+
+    @staticmethod
+    def _make_scrollable(widget: QWidget) -> QScrollArea:
+        """Hilfsmethode: Widget in scrollbaren Bereich verpacken."""
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setWidget(widget)
+        return scroll
 
     def _setup_signals(self):
         self.assets_panel.analyze_requested.connect(self._start_analysis)

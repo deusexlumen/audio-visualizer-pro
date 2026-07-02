@@ -98,5 +98,121 @@ def test_get_feature_at_frame(gl_context, dummy_features):
     assert 0 <= f['onset'] <= 1
 
 
+def test_auto_discovery_keeps_manual_registry():
+    """Auto-Discovery darf die manuelle Registry nicht ueberschreiben."""
+    from src.gpu_visualizers import _MANUAL_VISUALIZER_MAP, VISUALIZER_MAP
+
+    for name in _MANUAL_VISUALIZER_MAP:
+        assert name in VISUALIZER_MAP, f"Manueller Eintrag '{name}' fehlt in gemischter Registry"
+        assert VISUALIZER_MAP[name] is _MANUAL_VISUALIZER_MAP[name]
+
+
+def test_validate_visualizer_class_passes_for_builtin():
+    """Validator sollte alle eingebauten Visualizer als valide einstufen."""
+    from src.gpu_visualizers import validate_visualizer_class, list_visualizers
+
+    for name in list_visualizers():
+        cls = get_visualizer(name)
+        errors = validate_visualizer_class(cls)
+        assert errors == [], f"Visualizer '{name}' ist nicht valide: {errors}"
+
+
+def test_validate_visualizer_class_catches_bad_params():
+    """Validator sollte fehlerhafte PARAMS erkennen."""
+    from src.gpu_visualizers import validate_visualizer_class
+    from src.gpu_visualizers.base import BaseGPUVisualizer
+
+    class BadParamsVisualizer(BaseGPUVisualizer):
+        PARAMS = {
+            "good": (1.0, 0.0, 2.0, 0.1),
+            "bad_tuple": (1.0, 0.0, 2.0),  # zu kurz
+            "bad_type": ("a", 0, 1, 0.1),  # default nicht numerisch
+        }
+
+        def _setup(self):
+            pass
+
+        def render(self, features: dict, time: float):
+            pass
+
+    errors = validate_visualizer_class(BadParamsVisualizer)
+    assert any("bad_tuple" in e for e in errors)
+    assert any("bad_type" in e for e in errors)
+
+
+def test_validate_visualizer_class_catches_missing_render():
+    """Validator sollte fehlende render()-Methode erkennen."""
+    from src.gpu_visualizers import validate_visualizer_class
+    from src.gpu_visualizers.base import BaseGPUVisualizer
+
+    class NoRenderVisualizer(BaseGPUVisualizer):
+        PARAMS = {"intensity": (1.0, 0.0, 2.0, 0.1)}
+
+        def _setup(self):
+            pass
+
+        # render() absichtlich nicht implementiert
+
+    errors = validate_visualizer_class(NoRenderVisualizer)
+    assert any("render()" in e for e in errors)
+
+
+def test_wizard_templates_render(gl_context, fbo, dummy_features):
+    """Generierte Wizard-Templates muessen einen Frame rendern koennen."""
+    import sys
+    import tempfile
+    import shutil
+    from pathlib import Path
+    from src.visualizer_wizard import VisualizerWizard
+    from src.gpu_visualizers import refresh_registry, get_visualizer
+
+    tmpdir = tempfile.mkdtemp()
+    original_path = Path("src/gpu_visualizers")
+    generated = []
+
+    try:
+        for viz_type in VisualizerWizard.list_types():
+            wizard = VisualizerWizard(f"test_wizard_{viz_type}", viz_type=viz_type)
+            target = wizard.write(original_path)
+            generated.append((wizard.module_name, target))
+
+        refresh_registry()
+
+        for module_name, _ in generated:
+            cls = get_visualizer(module_name)
+            viz = cls(gl_context, 640, 480)
+            fbo.use()
+            gl_context.clear(0.0, 0.0, 0.0)
+            viz.render(dummy_features, 0.5)
+            pixels = fbo.read(components=3)
+            assert len(pixels) == 640 * 480 * 3, f"{module_name}: Falsche Pixel-Anzahl"
+    finally:
+        # Dateien und Import-Cache aufraeumen
+        for module_name, target in generated:
+            if target.exists():
+                target.unlink()
+            sys.modules.pop(f"src.gpu_visualizers.{module_name}", None)
+        refresh_registry()
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_add_create_visualizer_button():
+    """GUI-Hilfsfunktion sollte einen QPushButton in das Layout einfuegen."""
+    from PyQt6.QtWidgets import QApplication, QVBoxLayout, QWidget, QPushButton
+    from src.gui.state import AppState
+    from src.visualizer_wizard import add_create_visualizer_button
+
+    app = QApplication.instance() or QApplication([])
+    parent = QWidget()
+    layout = QVBoxLayout(parent)
+    state = AppState()
+
+    btn = add_create_visualizer_button(layout, state, parent_window=parent)
+
+    assert isinstance(btn, QPushButton)
+    assert btn.text() == "Neuen Visualizer erstellen..."
+    assert layout.indexOf(btn) >= 0
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
