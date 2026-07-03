@@ -15,6 +15,7 @@ class AppState(QObject):
         "primary_color", "secondary_color", "background_color",
         "background_path", "bg_blur", "bg_vignette", "bg_opacity",
         "pp_contrast", "pp_saturation", "pp_brightness", "pp_warmth", "pp_grain",
+        "pp_exposure", "pp_bloom", "pp_bloom_threshold", "pp_vignette", "pp_chromatic",
         "preview_time_percent", "preview_fps", "preview_width", "preview_height",
         "resolution", "render_fps", "codec", "quality", "gpu_encode", "output_dir",
         "intro_enabled", "intro_path", "intro_fade_duration",
@@ -57,6 +58,11 @@ class AppState(QObject):
         self.pp_brightness: float = 0.0
         self.pp_warmth: float = 0.0
         self.pp_grain: float = 0.0
+        self.pp_exposure: float = 1.0
+        self.pp_bloom: float = 0.6
+        self.pp_bloom_threshold: float = 1.0
+        self.pp_vignette: float = 0.0
+        self.pp_chromatic: float = 0.0
 
         self.preview_time_percent: float = 0.3
         self.preview_fps: int = 30
@@ -109,6 +115,11 @@ class AppState(QObject):
             "brightness": self.pp_brightness,
             "warmth": self.pp_warmth,
             "film_grain": self.pp_grain,
+            "exposure": self.pp_exposure,
+            "bloom_intensity": self.pp_bloom,
+            "bloom_threshold": self.pp_bloom_threshold,
+            "vignette": self.pp_vignette,
+            "chromatic_aberration": self.pp_chromatic,
         }
 
     def get_params(self) -> dict:
@@ -153,6 +164,11 @@ class AppState(QObject):
             "pp_brightness": self.pp_brightness,
             "pp_warmth": self.pp_warmth,
             "pp_grain": self.pp_grain,
+            "pp_exposure": self.pp_exposure,
+            "pp_bloom": self.pp_bloom,
+            "pp_bloom_threshold": self.pp_bloom_threshold,
+            "pp_vignette": self.pp_vignette,
+            "pp_chromatic": self.pp_chromatic,
             "preview_time_percent": self.preview_time_percent,
             "preview_fps": self.preview_fps,
             "resolution": list(self.resolution),

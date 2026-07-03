@@ -58,16 +58,21 @@ class QuotesPanel(QWidget):
         self.list_quotes.setMaximumHeight(180)
         list_layout.addWidget(self.list_quotes)
 
+        from src.gui.icons import get_icon
+
         list_btn_row = QHBoxLayout()
-        self.btn_add = QPushButton("➕ Hinzufügen")
+        self.btn_add = QPushButton(" Hinzufügen")
+        self.btn_add.setIcon(get_icon("plus"))
         self.btn_add.clicked.connect(self._on_add)
         list_btn_row.addWidget(self.btn_add)
 
-        self.btn_remove = QPushButton("🗑 Entfernen")
+        self.btn_remove = QPushButton(" Entfernen")
+        self.btn_remove.setIcon(get_icon("trash"))
         self.btn_remove.clicked.connect(self._on_remove)
         list_btn_row.addWidget(self.btn_remove)
 
-        self.btn_edit = QPushButton("✏️ Bearbeiten")
+        self.btn_edit = QPushButton(" Bearbeiten")
+        self.btn_edit.setIcon(get_icon("edit"))
         self.btn_edit.clicked.connect(self._on_edit)
         list_btn_row.addWidget(self.btn_edit)
         list_layout.addLayout(list_btn_row)

@@ -9,12 +9,13 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QPushButton, QStatusBar, QLabel, QMessageBox, QTabWidget,
-    QScrollArea,
+    QPushButton, QLabel, QMessageBox, QTabWidget,
+    QScrollArea, QProgressBar,
 )
 
 from src.app_logging import get_logger
 from src.gui.assets_panel import AssetsPanel
+from src.gui.icons import get_icon, get_app_icon
 from src.gui.ki_panel import KIPanel
 from src.gui.params_panel import ParamsPanel
 from src.gui.preview_widget import PreviewWidget
@@ -30,6 +31,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Audio Visualizer Pro")
+        self.setWindowIcon(get_app_icon())
         self.setMinimumSize(1200, 750)
 
         self.state = AppState()
@@ -83,38 +85,55 @@ class MainWindow(QMainWindow):
         self.ki_panel = KIPanel(self.state, gemini=self.gemini, gemini_error=self.gemini_error)
         self.quotes_panel = QuotesPanel(self.state, gemini=self.gemini)
 
-        self.right_tabs.addTab(self._make_scrollable(self.params_panel), "Params")
+        self.right_tabs.addTab(self._make_scrollable(self.params_panel), "Parameter")
         self.right_tabs.addTab(self._make_scrollable(self.ki_panel), "KI")
-        self.right_tabs.addTab(self._make_scrollable(self.quotes_panel), "Quotes")
+        self.right_tabs.addTab(self._make_scrollable(self.quotes_panel), "Zitate")
         splitter.addWidget(self.right_tabs)
 
         splitter.setSizes([260, 620, 320])
-        layout.addWidget(splitter)
+        layout.addWidget(splitter, stretch=1)
 
-        # Bottom Bar
+        # Untere Statusleiste: Statustext + Fortschritt + Aktions-Buttons
         bottom = QHBoxLayout()
         bottom.setContentsMargins(12, 8, 12, 8)
+        bottom.setSpacing(10)
         self.status_label = QLabel("Bereit.")
         bottom.addWidget(self.status_label)
 
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFixedWidth(220)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.hide()
+        bottom.addWidget(self.progress_bar)
+
         bottom.addStretch()
 
-        self.btn_preview = QPushButton("🔄 Preview")
-        self.btn_preview.setToolTip("Preview manuell neu rendern")
+        self.btn_preview = QPushButton(" Vorschau")
+        self.btn_preview.setIcon(get_icon("refresh"))
+        self.btn_preview.setToolTip("Vorschau manuell neu rendern")
         self.btn_preview.setFixedWidth(120)
         bottom.addWidget(self.btn_preview)
 
-        self.btn_render = QPushButton("▶ Render")
+        self.btn_cancel = QPushButton(" Abbrechen")
+        self.btn_cancel.setIcon(get_icon("stop", Theme.ERROR))
+        self.btn_cancel.setObjectName("danger")
+        self.btn_cancel.setToolTip("Laufendes Rendering abbrechen")
+        self.btn_cancel.setFixedWidth(120)
+        self.btn_cancel.hide()
+        bottom.addWidget(self.btn_cancel)
+
+        self.btn_render = QPushButton(" Rendern")
+        self.btn_render.setIcon(get_icon("play", Theme.BACKGROUND))
         self.btn_render.setObjectName("primary")
+        self.btn_render.setToolTip("Video in voller Aufloesung rendern")
         self.btn_render.setFixedWidth(120)
         bottom.addWidget(self.btn_render)
 
         bottom_widget = QWidget()
         bottom_widget.setLayout(bottom)
         layout.addWidget(bottom_widget)
-
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
 
     @staticmethod
     def _make_scrollable(widget: QWidget) -> QScrollArea:
@@ -133,6 +152,7 @@ class MainWindow(QMainWindow):
         self.ki_panel.optimize_requested.connect(self._start_ai_optimize)
         self.quotes_panel.btn_extract.clicked.connect(self._start_quote_extract)
         self.btn_render.clicked.connect(self._on_render_clicked)
+        self.btn_cancel.clicked.connect(self._on_cancel_clicked)
         self.btn_preview.clicked.connect(self._start_preview)
 
         self._preview_timer = QTimer(self)
@@ -144,6 +164,7 @@ class MainWindow(QMainWindow):
             "visualizer_type", "viz_params", "viz_offset_x", "viz_offset_y", "viz_scale",
             "bg_blur", "bg_vignette", "bg_opacity",
             "pp_contrast", "pp_saturation", "pp_brightness", "pp_warmth", "pp_grain",
+            "pp_exposure", "pp_bloom", "pp_bloom_threshold", "pp_vignette", "pp_chromatic",
             "background_path", "preview_time_percent",
             "quotes", "quotes_enabled", "quote_config", "ki_suggested_colors",
             "color_mode", "base_hue", "color_saturation", "brightness",
@@ -218,6 +239,7 @@ class MainWindow(QMainWindow):
         self._preview_worker.preview_ready.connect(self._on_preview_ready)
         self._preview_worker.preview_error.connect(self._on_preview_error)
         self._preview_worker.finished.connect(lambda: self._cleanup_worker("_preview_worker"))
+        self.preview_widget.set_busy(True)
         self._preview_worker.start()
 
     def _start_ai_optimize(self):
@@ -267,14 +289,16 @@ class MainWindow(QMainWindow):
     def _on_preview_ready(self, img):
         if self.sender() is not self._preview_worker:
             return
+        self.preview_widget.set_busy(False)
         self.preview_widget.set_image(img)
-        self._set_status("Preview aktualisiert.", "ok")
+        self._set_status("Vorschau aktualisiert.", "ok")
 
     def _on_preview_error(self, msg: str):
         if self.sender() is not self._preview_worker:
             return
-        self._set_status(f"Preview-Fehler: {msg}", "error")
-        logger.error(f"[GUI] Preview-Fehler: {msg}")
+        self.preview_widget.set_busy(False)
+        self._set_status(f"Vorschau-Fehler: {msg}", "error")
+        logger.error(f"[GUI] Vorschau-Fehler: {msg}")
         QMessageBox.warning(
             self,
             "Vorschau fehlgeschlagen",
@@ -282,16 +306,28 @@ class MainWindow(QMainWindow):
             f"Details stehen in logs/app.log.",
         )
 
+    def _set_render_ui(self, running: bool):
+        """Schaltet die Aktions-Buttons und den Fortschrittsbalken um."""
+        self.btn_render.setEnabled(not running)
+        self.btn_cancel.setVisible(running)
+        self.progress_bar.setVisible(running)
+        if not running:
+            self.progress_bar.setValue(0)
+
+    def _on_cancel_clicked(self):
+        if self._render_worker and self._render_worker.isRunning():
+            self._render_worker.cancel()
+            self._set_status("Rendering wird abgebrochen...", "warn")
+        if self._intro_worker and self._intro_worker.isRunning():
+            self._intro_worker.cancel()
+            self._set_render_ui(False)
+            self._set_status("Intro abgebrochen.", "warn")
+
     def _on_render_clicked(self):
         from src.gui.workers import RenderWorker
 
-        if self._render_worker and self._render_worker.isRunning():
-            self._render_worker.cancel()
-            return
-        if self._intro_worker and self._intro_worker.isRunning():
-            self._intro_worker.cancel()
-            self.btn_render.setText("▶ Render")
-            self._set_status("Intro abgebrochen.", "warn")
+        if (self._render_worker and self._render_worker.isRunning()) or \
+                (self._intro_worker and self._intro_worker.isRunning()):
             return
 
         if not self.state.audio_path or not Path(self.state.audio_path).exists():
@@ -332,7 +368,7 @@ class MainWindow(QMainWindow):
             "viz_scale": self.state.viz_scale,
         }
 
-        self.btn_render.setText("⏳ Render...")
+        self._set_render_ui(True)
         self._set_status("Starte Rendering...", "warn")
 
         self._render_worker = RenderWorker(config, parent=self)
@@ -346,7 +382,8 @@ class MainWindow(QMainWindow):
         if self.sender() is not self._render_worker:
             return
         pct = int(progress * 100)
-        self._set_status(f"Rendering... {pct}%", "warn")
+        self.progress_bar.setValue(pct)
+        self._set_status(f"Rendere Video... {pct}%", "warn")
 
     def _on_render_finished(self, output_path: str):
         if self.sender() is not self._render_worker:
@@ -377,7 +414,7 @@ class MainWindow(QMainWindow):
         self._intro_worker.intro_finished.connect(self._on_intro_finished)
         self._intro_worker.intro_error.connect(self._on_intro_error)
         self._intro_worker.finished.connect(lambda: self._cleanup_worker("_intro_worker"))
-        self.btn_render.setText("⏳ Intro...")
+        self.progress_bar.setValue(0)
         self._set_status("Füge Intro hinzu...", "warn")
         self._intro_worker.start()
 
@@ -385,7 +422,8 @@ class MainWindow(QMainWindow):
         if self.sender() is not self._intro_worker:
             return
         pct = int(progress * 100)
-        self._set_status(f"Intro... {pct}%", "warn")
+        self.progress_bar.setValue(pct)
+        self._set_status(f"Füge Intro hinzu... {pct}%", "warn")
 
     def _on_intro_finished(self, tmp_path: str):
         if self.sender() is not self._intro_worker:
@@ -397,7 +435,7 @@ class MainWindow(QMainWindow):
             os.replace(tmp_path, main_path)
         except Exception as e:
             self._set_status(f"Intro-Fehler: {e}", "error")
-            self.btn_render.setText("▶ Render")
+            self._set_render_ui(False)
             QMessageBox.critical(self, "Intro-Fehler", f"Konnte Intro-Datei nicht übernehmen:\n{e}")
             return
         self._finish_render(main_path)
@@ -405,7 +443,7 @@ class MainWindow(QMainWindow):
     def _on_intro_error(self, msg: str):
         if self.sender() is not self._intro_worker:
             return
-        self.btn_render.setText("▶ Render")
+        self._set_render_ui(False)
         self._set_status(f"Intro-Fehler: {msg}", "error")
         QMessageBox.critical(self, "Intro-Fehler", msg)
         tmp_path = getattr(self._intro_worker, "output_path", None)
@@ -416,14 +454,30 @@ class MainWindow(QMainWindow):
                 pass
 
     def _finish_render(self, output_path: str):
-        self.btn_render.setText("▶ Render")
+        self._set_render_ui(False)
         self._set_status(f"Fertig: {output_path}", "ok")
-        QMessageBox.information(self, "Render fertig", f"Video gespeichert:\n{output_path}")
+
+        box = QMessageBox(self)
+        box.setWindowTitle("Rendering abgeschlossen")
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setText(f"Das Video wurde gespeichert:\n{output_path}")
+        open_btn = box.addButton("Ordner öffnen", QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Ok)
+        box.exec()
+        if box.clickedButton() is open_btn:
+            self._open_output_folder(output_path)
+
+    def _open_output_folder(self, output_path: str):
+        """Oeffnet den Ausgabeordner im Datei-Explorer."""
+        from PyQt6.QtGui import QDesktopServices
+        from PyQt6.QtCore import QUrl
+        folder = str(Path(output_path).resolve().parent)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
     def _on_render_error(self, msg: str):
         if self.sender() is not self._render_worker:
             return
-        self.btn_render.setText("▶ Render")
+        self._set_render_ui(False)
         self._set_status(f"Render-Fehler: {msg}", "error")
         QMessageBox.critical(self, "Render-Fehler", msg)
 

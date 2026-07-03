@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.gui.state import AppState
+from src.gui.styles import Theme
 from src.gpu_visualizers import list_visualizers, get_visualizer
 from src.visualizer_wizard import add_create_visualizer_button
 
@@ -45,57 +46,61 @@ class ParamsPanel(QWidget):
 
         layout.addWidget(viz_box)
 
-        # Offset / Scale
-        transform_box = QGroupBox("Transform")
+        # Offset / Skalierung
+        transform_box = QGroupBox("Position && Groesse")
         transform_layout = QGridLayout(transform_box)
         self.slider_offset_x, self.lbl_offset_x = self._make_labeled_slider(-100, 100, 0)
         self.slider_offset_y, self.lbl_offset_y = self._make_labeled_slider(-100, 100, 0)
         self.slider_scale, self.lbl_scale = self._make_labeled_slider(50, 200, 100)
 
-        transform_layout.addWidget(QLabel("Offset X"), 0, 0)
+        transform_layout.addWidget(QLabel("Versatz X"), 0, 0)
         transform_layout.addWidget(self.slider_offset_x, 0, 1)
         transform_layout.addWidget(self.lbl_offset_x, 0, 2)
-        transform_layout.addWidget(QLabel("Offset Y"), 1, 0)
+        transform_layout.addWidget(QLabel("Versatz Y"), 1, 0)
         transform_layout.addWidget(self.slider_offset_y, 1, 1)
         transform_layout.addWidget(self.lbl_offset_y, 1, 2)
-        transform_layout.addWidget(QLabel("Scale"), 2, 0)
+        transform_layout.addWidget(QLabel("Groesse"), 2, 0)
         transform_layout.addWidget(self.slider_scale, 2, 1)
         transform_layout.addWidget(self.lbl_scale, 2, 2)
         layout.addWidget(transform_box)
 
         # Farb-Einstellungen
-        color_box = QGroupBox("Color")
+        color_box = QGroupBox("Farben")
         color_layout = QGridLayout(color_box)
 
-        color_layout.addWidget(QLabel("Color Mode"), 0, 0)
+        color_layout.addWidget(QLabel("Farbmodus"), 0, 0)
         self.combo_color_mode = QComboBox()
         self.combo_color_mode.addItems(["chroma", "fixed", "monochrome", "warm", "cool"])
         self.combo_color_mode.setCurrentText(self.state.color_mode)
+        self.combo_color_mode.setToolTip(
+            "chroma = Farben folgen der Tonart, fixed = feste Farbe, "
+            "monochrome = Graustufen, warm/cool = Farbstimmung"
+        )
         self.combo_color_mode.currentTextChanged.connect(self._on_color_mode_changed)
         color_layout.addWidget(self.combo_color_mode, 0, 1)
 
         self.btn_primary_color, self.lbl_primary_color = self._create_color_picker(
-            "Primary", self.state.primary_color
+            "primary", "Primaerfarbe", self.state.primary_color
         )
-        color_layout.addWidget(QLabel("Primary"), 1, 0)
+        color_layout.addWidget(QLabel("Primaerfarbe"), 1, 0)
         color_layout.addWidget(self.btn_primary_color, 1, 1)
         color_layout.addWidget(self.lbl_primary_color, 1, 2)
 
         self.btn_secondary_color, self.lbl_secondary_color = self._create_color_picker(
-            "Secondary", self.state.secondary_color
+            "secondary", "Sekundaerfarbe", self.state.secondary_color
         )
-        color_layout.addWidget(QLabel("Secondary"), 2, 0)
+        color_layout.addWidget(QLabel("Sekundaerfarbe"), 2, 0)
         color_layout.addWidget(self.btn_secondary_color, 2, 1)
         color_layout.addWidget(self.lbl_secondary_color, 2, 2)
 
         self.btn_background_color, self.lbl_background_color = self._create_color_picker(
-            "Background", self.state.background_color
+            "background", "Hintergrundfarbe", self.state.background_color
         )
-        color_layout.addWidget(QLabel("Background"), 3, 0)
+        color_layout.addWidget(QLabel("Hintergrund"), 3, 0)
         color_layout.addWidget(self.btn_background_color, 3, 1)
         color_layout.addWidget(self.lbl_background_color, 3, 2)
 
-        color_layout.addWidget(QLabel("Saturation"), 4, 0)
+        color_layout.addWidget(QLabel("Saettigung"), 4, 0)
         self.slider_color_saturation, self.lbl_color_saturation = self._make_labeled_slider(
             0, 100, int(self.state.color_saturation * 100)
         )
@@ -103,7 +108,7 @@ class ParamsPanel(QWidget):
         color_layout.addWidget(self.slider_color_saturation, 4, 1)
         color_layout.addWidget(self.lbl_color_saturation, 4, 2)
 
-        color_layout.addWidget(QLabel("Brightness"), 5, 0)
+        color_layout.addWidget(QLabel("Helligkeit"), 5, 0)
         self.slider_viz_brightness, self.lbl_viz_brightness = self._make_labeled_slider(
             50, 200, int(self.state.viz_brightness * 100)
         )
@@ -114,34 +119,51 @@ class ParamsPanel(QWidget):
         layout.addWidget(color_box)
 
         # Visualizer-spezifische Parameter
-        self.viz_params_box = QGroupBox("Visualizer Params")
+        self.viz_params_box = QGroupBox("Visualizer-Parameter")
         self.viz_params_layout = QGridLayout(self.viz_params_box)
         layout.addWidget(self.viz_params_box)
 
-        # Post-Process
-        pp_box = QGroupBox("Post-Process")
+        # Post-Process (Look & Effekte)
+        pp_box = QGroupBox("Nachbearbeitung")
         pp_layout = QGridLayout(pp_box)
+        self.slider_exposure, self.lbl_exposure = self._make_labeled_slider(10, 400, 100)
         self.slider_contrast, self.lbl_contrast = self._make_labeled_slider(0, 300, 100)
         self.slider_saturation, self.lbl_saturation = self._make_labeled_slider(0, 300, 100)
         self.slider_brightness, self.lbl_brightness = self._make_labeled_slider(-100, 100, 0)
         self.slider_warmth, self.lbl_warmth = self._make_labeled_slider(-100, 100, 0)
+        self.slider_bloom, self.lbl_bloom = self._make_labeled_slider(0, 200, 60)
+        self.slider_bloom_threshold, self.lbl_bloom_threshold = self._make_labeled_slider(0, 300, 100)
+        self.slider_vignette_pp, self.lbl_vignette_pp = self._make_labeled_slider(0, 100, 0)
+        self.slider_chromatic, self.lbl_chromatic = self._make_labeled_slider(0, 500, 0)
         self.slider_grain, self.lbl_grain = self._make_labeled_slider(0, 100, 0)
 
-        pp_layout.addWidget(QLabel("Contrast"), 0, 0)
-        pp_layout.addWidget(self.slider_contrast, 0, 1)
-        pp_layout.addWidget(self.lbl_contrast, 0, 2)
-        pp_layout.addWidget(QLabel("Saturation"), 1, 0)
-        pp_layout.addWidget(self.slider_saturation, 1, 1)
-        pp_layout.addWidget(self.lbl_saturation, 1, 2)
-        pp_layout.addWidget(QLabel("Brightness"), 2, 0)
-        pp_layout.addWidget(self.slider_brightness, 2, 1)
-        pp_layout.addWidget(self.lbl_brightness, 2, 2)
-        pp_layout.addWidget(QLabel("Warmth"), 3, 0)
-        pp_layout.addWidget(self.slider_warmth, 3, 1)
-        pp_layout.addWidget(self.lbl_warmth, 3, 2)
-        pp_layout.addWidget(QLabel("Grain"), 4, 0)
-        pp_layout.addWidget(self.slider_grain, 4, 1)
-        pp_layout.addWidget(self.lbl_grain, 4, 2)
+        self.slider_exposure.setToolTip("Belichtung der HDR-Szene vor dem Tonemapping.")
+        self.slider_bloom.setToolTip("Staerke des Leucht-Effekts um helle Bereiche.")
+        self.slider_bloom_threshold.setToolTip(
+            "Ab welcher Helligkeit Bloom einsetzt (niedriger = mehr leuchtet)."
+        )
+        self.slider_vignette_pp.setToolTip("Abdunklung der Bildraender auf dem Gesamtbild.")
+        self.slider_chromatic.setToolTip(
+            "Chromatische Aberration: RGB-Farbsaeume zum Bildrand hin (Retro-/Linsen-Look)."
+        )
+        self.slider_grain.setToolTip("Filmkorn: animiertes, luminanzabhaengiges Rauschen.")
+
+        _pp_rows = [
+            ("Belichtung", self.slider_exposure, self.lbl_exposure),
+            ("Kontrast", self.slider_contrast, self.lbl_contrast),
+            ("Saettigung", self.slider_saturation, self.lbl_saturation),
+            ("Helligkeit", self.slider_brightness, self.lbl_brightness),
+            ("Waerme", self.slider_warmth, self.lbl_warmth),
+            ("Bloom", self.slider_bloom, self.lbl_bloom),
+            ("Bloom-Schwelle", self.slider_bloom_threshold, self.lbl_bloom_threshold),
+            ("Vignette", self.slider_vignette_pp, self.lbl_vignette_pp),
+            ("Farbsaeume", self.slider_chromatic, self.lbl_chromatic),
+            ("Filmkorn", self.slider_grain, self.lbl_grain),
+        ]
+        for pp_row, (pp_name, pp_slider, pp_label) in enumerate(_pp_rows):
+            pp_layout.addWidget(QLabel(pp_name), pp_row, 0)
+            pp_layout.addWidget(pp_slider, pp_row, 1)
+            pp_layout.addWidget(pp_label, pp_row, 2)
         layout.addWidget(pp_box)
 
         # Intro-Einstellungen
@@ -183,7 +205,7 @@ class ParamsPanel(QWidget):
         export_box = QGroupBox("Export")
         export_layout = QGridLayout(export_box)
 
-        export_layout.addWidget(QLabel("Resolution"), 0, 0)
+        export_layout.addWidget(QLabel("Aufloesung"), 0, 0)
         self.combo_resolution = QComboBox()
         self.combo_resolution.addItems(["1920x1080", "1280x720", "854x480", "3840x2160"])
         self.combo_resolution.setCurrentText(f"{self.state.resolution[0]}x{self.state.resolution[1]}")
@@ -191,7 +213,7 @@ class ParamsPanel(QWidget):
         self.combo_resolution.currentTextChanged.connect(self._on_resolution_changed)
         export_layout.addWidget(self.combo_resolution, 0, 1)
 
-        export_layout.addWidget(QLabel("Render FPS"), 1, 0)
+        export_layout.addWidget(QLabel("Bildrate (FPS)"), 1, 0)
         fps_layout = QHBoxLayout()
         self.slider_render_fps = self._make_slider(24, 60, self.state.render_fps)
         self.slider_render_fps.setToolTip("Framerate des finalen Videos.")
@@ -212,7 +234,7 @@ class ParamsPanel(QWidget):
         self.combo_codec.currentTextChanged.connect(self._on_codec_changed)
         export_layout.addWidget(self.combo_codec, 2, 1)
 
-        export_layout.addWidget(QLabel("Quality"), 3, 0)
+        export_layout.addWidget(QLabel("Qualitaet"), 3, 0)
         self.combo_quality = QComboBox()
         self.combo_quality.addItems(["Low", "Medium", "High", "Lossless"])
         self.combo_quality.setCurrentText(self._quality_display(self.state.quality))
@@ -222,7 +244,7 @@ class ParamsPanel(QWidget):
         self.combo_quality.currentTextChanged.connect(self._on_quality_changed)
         export_layout.addWidget(self.combo_quality, 3, 1)
 
-        export_layout.addWidget(QLabel("GPU Encode"), 4, 0)
+        export_layout.addWidget(QLabel("GPU-Encoding"), 4, 0)
         self.chk_gpu_encode = QCheckBox()
         self.chk_gpu_encode.setChecked(self.state.gpu_encode)
         self.chk_gpu_encode.setToolTip(
@@ -243,6 +265,13 @@ class ParamsPanel(QWidget):
         self.slider_brightness.valueChanged.connect(lambda v: self._set("pp_brightness", v / 100.0))
         self.slider_warmth.valueChanged.connect(lambda v: self._set("pp_warmth", v / 100.0))
         self.slider_grain.valueChanged.connect(lambda v: self._set("pp_grain", v / 100.0))
+        self.slider_exposure.valueChanged.connect(lambda v: self._set("pp_exposure", v / 100.0))
+        self.slider_bloom.valueChanged.connect(lambda v: self._set("pp_bloom", v / 100.0))
+        self.slider_bloom_threshold.valueChanged.connect(
+            lambda v: self._set("pp_bloom_threshold", v / 100.0)
+        )
+        self.slider_vignette_pp.valueChanged.connect(lambda v: self._set("pp_vignette", v / 100.0))
+        self.slider_chromatic.valueChanged.connect(lambda v: self._set("pp_chromatic", v / 100.0))
 
         # Label-Updates fuer Transform/Post-Process Slider
         self.slider_offset_x.valueChanged.connect(lambda v: self.lbl_offset_x.setText(str(v)))
@@ -253,6 +282,21 @@ class ParamsPanel(QWidget):
         self.slider_brightness.valueChanged.connect(lambda v: self.lbl_brightness.setText(str(v)))
         self.slider_warmth.valueChanged.connect(lambda v: self.lbl_warmth.setText(str(v)))
         self.slider_grain.valueChanged.connect(lambda v: self.lbl_grain.setText(str(v)))
+        self.slider_exposure.valueChanged.connect(
+            lambda v: self.lbl_exposure.setText(f"{v / 100.0:.2f}x")
+        )
+        self.slider_bloom.valueChanged.connect(
+            lambda v: self.lbl_bloom.setText(f"{v / 100.0:.2f}")
+        )
+        self.slider_bloom_threshold.valueChanged.connect(
+            lambda v: self.lbl_bloom_threshold.setText(f"{v / 100.0:.2f}")
+        )
+        self.slider_vignette_pp.valueChanged.connect(
+            lambda v: self.lbl_vignette_pp.setText(f"{v}%")
+        )
+        self.slider_chromatic.valueChanged.connect(
+            lambda v: self.lbl_chromatic.setText(f"{v / 100.0:.1f}")
+        )
         self.slider_color_saturation.valueChanged.connect(
             lambda v: self.lbl_color_saturation.setText(f"{v}%")
         )
@@ -296,6 +340,11 @@ class ParamsPanel(QWidget):
         self.lbl_brightness.setText(str(self.slider_brightness.value()))
         self.lbl_warmth.setText(str(self.slider_warmth.value()))
         self.lbl_grain.setText(str(self.slider_grain.value()))
+        self.lbl_exposure.setText(f"{self.slider_exposure.value() / 100.0:.2f}x")
+        self.lbl_bloom.setText(f"{self.slider_bloom.value() / 100.0:.2f}")
+        self.lbl_bloom_threshold.setText(f"{self.slider_bloom_threshold.value() / 100.0:.2f}")
+        self.lbl_vignette_pp.setText(f"{self.slider_vignette_pp.value()}%")
+        self.lbl_chromatic.setText(f"{self.slider_chromatic.value() / 100.0:.1f}")
 
     def _on_state_changed(self, key: str):
         """Reagiert auf Aenderungen im AppState (Zwei-Wege-Bindung)."""
@@ -340,6 +389,16 @@ class ParamsPanel(QWidget):
                 self.slider_warmth.setValue(int(self.state.pp_warmth * 100))
             elif key == "pp_grain":
                 self.slider_grain.setValue(int(self.state.pp_grain * 100))
+            elif key == "pp_exposure":
+                self.slider_exposure.setValue(int(self.state.pp_exposure * 100))
+            elif key == "pp_bloom":
+                self.slider_bloom.setValue(int(self.state.pp_bloom * 100))
+            elif key == "pp_bloom_threshold":
+                self.slider_bloom_threshold.setValue(int(self.state.pp_bloom_threshold * 100))
+            elif key == "pp_vignette":
+                self.slider_vignette_pp.setValue(int(self.state.pp_vignette * 100))
+            elif key == "pp_chromatic":
+                self.slider_chromatic.setValue(int(self.state.pp_chromatic * 100))
             elif key == "resolution":
                 self.combo_resolution.setCurrentText(
                     f"{self.state.resolution[0]}x{self.state.resolution[1]}"
@@ -492,24 +551,32 @@ class ParamsPanel(QWidget):
         # state.set() setzt das Attribut und emittiert genau einmal
         self.state.set(key, value)
 
-    def _create_color_picker(self, label: str, initial_hex: str):
+    def _create_color_picker(self, key: str, label: str, initial_hex: str):
+        """Erzeugt einen Farb-Button.
+
+        Args:
+            key: State-Schluessel ohne '_color'-Suffix (z.B. 'primary').
+            label: Anzeigename fuer Tooltip/Dialog (z.B. 'Primaerfarbe').
+        """
         btn = QPushButton()
         btn.setFixedSize(32, 20)
-        btn.setToolTip(f"{label}-Farbe auswaehlen")
+        btn.setToolTip(f"{label} auswaehlen")
         lbl = QLabel(initial_hex)
         lbl.setMinimumWidth(60)
         self._update_color_button(btn, initial_hex)
-        btn.clicked.connect(lambda: self._on_color_picked(label.lower(), btn, lbl))
+        btn.clicked.connect(lambda: self._on_color_picked(key, label, btn, lbl))
         return btn, lbl
 
     def _update_color_button(self, btn: QPushButton, hex_color: str):
-        btn.setStyleSheet(f"background-color: {hex_color}; border: 1px solid #555;")
+        btn.setStyleSheet(
+            f"background-color: {hex_color}; border: 1px solid {Theme.rgb(Theme.BORDER)};"
+        )
 
-    def _on_color_picked(self, key: str, btn: QPushButton, lbl: QLabel):
+    def _on_color_picked(self, key: str, label: str, btn: QPushButton, lbl: QLabel):
         if self._updating:
             return
         current = QColor(getattr(self.state, f"{key}_color", "#FFFFFF"))
-        color = QColorDialog.getColor(current, self, f"{key.capitalize()}-Farbe waehlen")
+        color = QColorDialog.getColor(current, self, f"{label} waehlen")
         if not color.isValid():
             return
         hex_color = color.name().upper()
@@ -645,7 +712,9 @@ class ParamsPanel(QWidget):
         for group_name, members in grouped:
             # Gruppen-Header
             header = QLabel(group_name)
-            header.setStyleSheet("font-weight: bold; color: #cccccc; padding-top: 4px;")
+            header.setStyleSheet(
+                f"font-weight: bold; color: {Theme.rgb(Theme.TEXT_PRIMARY)}; padding-top: 4px;"
+            )
             self.viz_params_layout.addWidget(header, row, 0, 1, 2)
             row += 1
 
@@ -683,7 +752,9 @@ class ParamsPanel(QWidget):
             if row > 0:
                 line = QFrame()
                 line.setFrameShape(QFrame.Shape.HLine)
-                line.setStyleSheet("color: #444444; margin-top: 2px; margin-bottom: 2px;")
+                line.setStyleSheet(
+                    f"color: {Theme.rgb(Theme.BORDER)}; margin-top: 2px; margin-bottom: 2px;"
+                )
                 self.viz_params_layout.addWidget(line, row, 0, 1, 2)
                 row += 1
 

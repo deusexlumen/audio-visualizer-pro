@@ -30,7 +30,10 @@ class TimelineWidget(QWidget):
 
         for pct in [0, 25, 50, 75, 100]:
             btn = QPushButton(f"{pct}%")
-            btn.setFixedWidth(40)
+            btn.setToolTip(f"Vorschau-Zeitpunkt auf {pct}% setzen")
+            # Kompaktes Padding, damit der Text nicht abgeschnitten wird
+            btn.setStyleSheet("padding: 4px 6px;")
+            btn.setMinimumWidth(44)
             btn.clicked.connect(lambda checked, p=pct: self.set_percent(p / 100.0))
             bottom.addWidget(btn)
 

@@ -11,9 +11,9 @@ def test_main_window_has_three_tabs(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
     assert window.right_tabs.count() == 3
-    assert window.right_tabs.tabText(0) == "Params"
+    assert window.right_tabs.tabText(0) == "Parameter"
     assert window.right_tabs.tabText(1) == "KI"
-    assert window.right_tabs.tabText(2) == "Quotes"
+    assert window.right_tabs.tabText(2) == "Zitate"
 
 
 def test_render_button_shows_error_without_audio(qtbot):
@@ -73,7 +73,10 @@ def test_render_button_starts_render_worker(qtbot, tmp_path, dummy_audio_feature
     assert config["background_color"] == window.state.background_color
 
     mock_worker.start.assert_called_once()
-    assert window.btn_render.text() == "⏳ Render..."
+    # Waehrend des Renderings: Render-Button gesperrt, Abbrechen/Fortschritt sichtbar
+    assert not window.btn_render.isEnabled()
+    assert window.btn_cancel.isVisibleTo(window)
+    assert window.progress_bar.isVisibleTo(window)
     assert window._render_worker is mock_worker
 
 
