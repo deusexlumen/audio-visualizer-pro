@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QScrollArea,
 )
 
+from src.app_logging import get_logger
 from src.gui.assets_panel import AssetsPanel
 from src.gui.ki_panel import KIPanel
 from src.gui.params_panel import ParamsPanel
@@ -21,6 +22,8 @@ from src.gui.quotes_panel import QuotesPanel
 from src.gui.state import AppState
 from src.gui.styles import build_app_stylesheet, Theme
 from src.gui.timeline_widget import TimelineWidget
+
+logger = get_logger(__name__)
 
 
 class MainWindow(QMainWindow):
@@ -31,11 +34,13 @@ class MainWindow(QMainWindow):
 
         self.state = AppState()
         self.gemini = None
+        self.gemini_error = None
         try:
             from src.gemini_integration import GeminiIntegration
             self.gemini = GeminiIntegration()
         except Exception as e:
-            print(f"[GUI] Gemini nicht verfügbar: {e}")
+            self.gemini_error = str(e)
+            logger.warning(f"[GUI] Gemini nicht verfügbar: {e}")
 
         self._preview_worker: PreviewWorker | None = None
         self._analyze_worker: AnalyzeWorker | None = None
@@ -75,7 +80,7 @@ class MainWindow(QMainWindow):
 
         self.right_tabs = QTabWidget()
         self.params_panel = ParamsPanel(self.state)
-        self.ki_panel = KIPanel(self.state, gemini=self.gemini)
+        self.ki_panel = KIPanel(self.state, gemini=self.gemini, gemini_error=self.gemini_error)
         self.quotes_panel = QuotesPanel(self.state, gemini=self.gemini)
 
         self.right_tabs.addTab(self._make_scrollable(self.params_panel), "Params")
@@ -269,6 +274,13 @@ class MainWindow(QMainWindow):
         if self.sender() is not self._preview_worker:
             return
         self._set_status(f"Preview-Fehler: {msg}", "error")
+        logger.error(f"[GUI] Preview-Fehler: {msg}")
+        QMessageBox.warning(
+            self,
+            "Vorschau fehlgeschlagen",
+            f"Die Vorschau konnte nicht erstellt werden:\n\n{msg}\n\n"
+            f"Details stehen in logs/app.log.",
+        )
 
     def _on_render_clicked(self):
         from src.gui.workers import RenderWorker

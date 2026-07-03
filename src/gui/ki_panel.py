@@ -10,18 +10,22 @@ from PyQt6.QtWidgets import (
 )
 
 from src.ai_matcher import SmartMatcher
+from src.app_logging import get_logger
 from src.gpu_visualizers import get_visualizer
 from src.quote_overlay import QuoteOverlayConfig
 from config.schemas import QuoteOverlayConfigSchema
+
+logger = get_logger(__name__)
 
 
 class KIPanel(QWidget):
     optimize_requested = pyqtSignal()
 
-    def __init__(self, state, gemini=None, parent=None):
+    def __init__(self, state, gemini=None, parent=None, gemini_error=None):
         super().__init__(parent)
         self.state = state
         self.gemini = gemini
+        self.gemini_error = gemini_error
         self._matcher = SmartMatcher()
         self._last_recommendation = None
 
@@ -80,7 +84,10 @@ class KIPanel(QWidget):
         has_gemini = self.gemini is not None
         self.btn_optimize.setEnabled(has_features and has_gemini and not self.state.ki_optimizing)
         if not has_gemini:
-            self.lbl_status.setText("KI nicht verfuegbar. Pruefe API-Key in .env (GEMINI_API_KEY).")
+            reason = f"\nGrund: {self.gemini_error}" if self.gemini_error else ""
+            self.lbl_status.setText(
+                f"KI nicht verfuegbar. Pruefe API-Key in .env (GEMINI_API_KEY).{reason}"
+            )
 
     def _on_optimize(self):
         """Startet die kombinierte SmartMatcher + Gemini Optimierung."""
@@ -229,7 +236,7 @@ class KIPanel(QWidget):
         try:
             validated = QuoteOverlayConfigSchema(**quotes_data).model_dump()
         except Exception as e:
-            print(f"[KIPanel] Quote-Config-Validierung fehlgeschlagen: {e}")
+            logger.warning(f"[KIPanel] Quote-Config-Validierung fehlgeschlagen: {e}")
             return
 
         def _as_tuple(value):

@@ -83,7 +83,8 @@ class TestEndToEnd:
             if os.path.exists(target):
                 os.unlink(target)
 
-    def test_create_visualizer_generates_and_smoke_tests(self, runner):
+    @pytest.mark.gpu
+    def test_create_visualizer_generates_and_smoke_tests(self, runner, require_gpu):
         """create-visualizer sollte Datei erstellen, registrieren und smoke-testen."""
         import sys
         from src.gpu_visualizers import refresh_registry
@@ -123,7 +124,8 @@ class TestEndToEnd:
         assert "Voice Clarity:" in result.output
     
     @pytest.mark.timeout(120)
-    def test_render_preview_creates_video(self, runner, test_audio):
+    @pytest.mark.gpu
+    def test_render_preview_creates_video(self, runner, test_audio, require_gpu):
         """Preview-Rendering sollte ein valides MP4 erstellen."""
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as f:
             output_path = f.name
@@ -148,7 +150,8 @@ class TestEndToEnd:
             if os.path.exists(output_path):
                 os.unlink(output_path)
     
-    def test_render_with_params(self, runner, test_audio):
+    @pytest.mark.gpu
+    def test_render_with_params(self, runner, test_audio, require_gpu):
         """Rendering mit custom Parametern sollte funktionieren."""
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as f:
             output_path = f.name
@@ -172,7 +175,8 @@ class TestEndToEnd:
             if os.path.exists(output_path):
                 os.unlink(output_path)
     
-    def test_render_invalid_visualizer_fallback(self, runner, test_audio):
+    @pytest.mark.gpu
+    def test_render_invalid_visualizer_fallback(self, runner, test_audio, require_gpu):
         """Ungueltiger Visualizer sollte sinnvoll behandelt werden."""
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as f:
             output_path = f.name
@@ -194,7 +198,8 @@ class TestEndToEnd:
                 os.unlink(output_path)
 
     @pytest.mark.timeout(180)
-    def test_render_with_intro_creates_video(self, test_audio):
+    @pytest.mark.gpu
+    def test_render_with_intro_creates_video(self, test_audio, require_gpu):
         """Render + Intro vorne dran setzen sollte ein valides MP4 erzeugen."""
         with tempfile.TemporaryDirectory() as tmpdir:
             intro_path = os.path.join(tmpdir, "intro.mp4")

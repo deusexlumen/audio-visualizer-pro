@@ -489,7 +489,7 @@ class ParamsPanel(QWidget):
     def _set(self, key: str, value):
         if self._updating:
             return
-        setattr(self.state, key, value)
+        # state.set() setzt das Attribut und emittiert genau einmal
         self.state.set(key, value)
 
     def _create_color_picker(self, label: str, initial_hex: str):

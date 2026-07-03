@@ -14,7 +14,10 @@ import pkgutil
 import re
 from pathlib import Path
 
+from ..app_logging import get_logger
 from .base import BaseGPUVisualizer
+
+logger = get_logger(__name__)
 
 # Classic Visualizer (bestehende 10)
 from .spectrum_bars import SpectrumBarsGPU
@@ -94,8 +97,14 @@ def _discover_visualizers():
         module_name = module_path.rsplit(".", 1)[-1]
         try:
             module = importlib.import_module(module_path)
-        except Exception:
-            # Defekte oder nicht ladbare Module werden uebersprungen.
+        except Exception as e:
+            # Defekte oder nicht ladbare Module werden uebersprungen —
+            # aber sichtbar geloggt, damit ein kaputter Visualizer nicht
+            # kommentarlos aus der Auswahl verschwindet.
+            logger.warning(
+                f"[Visualizer] Modul '{module_name}' konnte nicht geladen werden "
+                f"und wird uebersprungen: {e}"
+            )
             continue
 
         candidates = []

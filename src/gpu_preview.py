@@ -12,6 +12,9 @@ import numpy as np
 from PIL import Image
 
 from .analyzer import AudioAnalyzer
+from .app_logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _hex_to_rgb(hex_color: str) -> tuple:
@@ -107,7 +110,7 @@ def render_gpu_preview(
                         background_image, background_blur
                     )
             except Exception as e:
-                print(f'[GPU Preview] Konnte Hintergrundbild nicht laden: {e}')
+                logger.warning(f'[GPU Preview] Konnte Hintergrundbild nicht laden: {e}')
                 bg_texture = None
 
         # Beat-Intensity vektorisiert berechnen (fuer Visualizer die es brauchen)
@@ -212,8 +215,8 @@ def render_gpu_preview(
         return img
 
     except Exception as e:
-        print(f"[GPU Preview] Fehler: {e}")
-        traceback.print_exc()
+        logger.error(f"[GPU Preview] Fehler: {e}")
+        logger.debug(traceback.format_exc())
         return None
     finally:
         if bg_texture is not None:

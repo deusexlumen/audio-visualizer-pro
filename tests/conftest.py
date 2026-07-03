@@ -10,6 +10,37 @@ import pytest
 
 from src.types import AudioFeatures, Quote
 
+# Ergebnis des GPU-Checks wird gecached, damit nicht jeder Test
+# einen eigenen OpenGL-Kontext erzeugen muss.
+_GPU_AVAILABLE = None
+
+
+def gpu_available() -> bool:
+    """Prueft einmalig, ob ein OpenGL-Kontext erzeugt werden kann."""
+    global _GPU_AVAILABLE
+    if _GPU_AVAILABLE is None:
+        try:
+            import moderngl
+            ctx = moderngl.create_standalone_context()
+            ctx.release()
+            _GPU_AVAILABLE = True
+        except Exception:
+            _GPU_AVAILABLE = False
+    return _GPU_AVAILABLE
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "gpu: Test benoetigt eine echte GPU mit OpenGL 3.3+"
+    )
+
+
+@pytest.fixture
+def require_gpu():
+    """Ueberspringt den Test, wenn keine GPU/OpenGL verfuegbar ist (z.B. headless CI)."""
+    if not gpu_available():
+        pytest.skip("Keine GPU/OpenGL verfuegbar")
+
 
 @pytest.fixture
 def dummy_audio_features() -> AudioFeatures:

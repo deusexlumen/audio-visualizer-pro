@@ -17,8 +17,19 @@ import subprocess
 from pathlib import Path
 
 from config.schemas import load_and_validate_config
+from src.app_logging import setup_logging
 from src.types import Quote
 from src.quote_overlay import QuoteOverlayConfig
+
+setup_logging()
+
+
+def _freundlicher_fehler(e: Exception, kontext: str) -> click.ClickException:
+    """Wandelt eine technische Exception in eine verstaendliche CLI-Fehlermeldung um."""
+    return click.ClickException(
+        f"{kontext} fehlgeschlagen: {e}\n"
+        f"Weitere Details stehen in logs/app.log."
+    )
 
 
 def _check_ffmpeg():
@@ -204,38 +215,46 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
     if preview:
         click.echo(f"[GPU] Preview-Modus: {preview_duration}s")
     
-    renderer = GPUBatchRenderer(width=width, height=height, fps=fps)
-    renderer.render(
-        audio_path=audio_file,
-        visualizer_type=visual,
-        output_path=output,
-        params=params if params else None,
-        preview_mode=preview,
-        preview_duration=preview_duration,
-        background_image=background_image,
-        background_blur=background_blur,
-        background_vignette=background_vignette,
-        background_opacity=background_opacity,
-        background_color=background_color,
-        codec=codec,
-        quality=quality,
-        postprocess=cfg_postprocess,
-        quotes=cfg_quotes,
-        quote_config=quote_config,
-    )
-    
+    try:
+        renderer = GPUBatchRenderer(width=width, height=height, fps=fps)
+        renderer.render(
+            audio_path=audio_file,
+            visualizer_type=visual,
+            output_path=output,
+            params=params if params else None,
+            preview_mode=preview,
+            preview_duration=preview_duration,
+            background_image=background_image,
+            background_blur=background_blur,
+            background_vignette=background_vignette,
+            background_opacity=background_opacity,
+            background_color=background_color,
+            codec=codec,
+            quality=quality,
+            postprocess=cfg_postprocess,
+            quotes=cfg_quotes,
+            quote_config=quote_config,
+        )
+    except click.ClickException:
+        raise
+    except Exception as e:
+        raise _freundlicher_fehler(e, "Rendering")
+
     click.echo(f"[GPU] Fertig! Output: {output}")
 
     if intro:
         from src.intro_renderer import render_with_intro
         intro_output = str(Path(output).parent / f"{Path(output).stem}_mit_intro{Path(output).suffix}")
         click.echo(f"[Intro] Setze Intro vor: {intro_output}")
-        render_with_intro(
-            intro_path=intro,
-            main_video_path=output,
-            output_path=intro_output,
-            fade_duration=intro_fade,
-        )
+        try:
+            render_with_intro(
+                intro_path=intro,
+                main_video_path=output,
+                output_path=intro_output,
+                fade_duration=intro_fade,
+            )
+        except Exception as e:
+            raise _freundlicher_fehler(e, "Intro-Erstellung")
         click.echo(f"[Intro] Fertig! Output: {intro_output}")
 
 
@@ -390,6 +409,7 @@ def _smoke_test_visualizer(name: str):
     import numpy as np
     import moderngl
 
+    from src.gpu_renderer import create_gl_context
     from src.gpu_visualizers import get_visualizer, validate_visualizer_class
 
     cls = get_visualizer(name)
@@ -397,7 +417,7 @@ def _smoke_test_visualizer(name: str):
     if errors:
         raise click.ClickException("Validierung fehlgeschlagen:\n" + "\n".join(errors))
 
-    ctx = moderngl.create_standalone_context()
+    ctx = create_gl_context()
     try:
         texture = ctx.texture((640, 480), 3)
         fbo = ctx.framebuffer(color_attachments=[texture])
@@ -433,10 +453,13 @@ def _smoke_test_visualizer(name: str):
 def analyze(audio_file, fps):
     """Analysiert eine Audio-Datei und zeigt Features an."""
     from src.analyzer import AudioAnalyzer
-    
+
     analyzer = AudioAnalyzer()
-    features = analyzer.analyze(audio_file, fps=fps)
-    
+    try:
+        features = analyzer.analyze(audio_file, fps=fps)
+    except Exception as e:
+        raise _freundlicher_fehler(e, "Audio-Analyse")
+
     click.echo("\n=== Audio-Analyse Ergebnisse ===")
     click.echo(f"Dauer: {features.duration:.2f}s")
     click.echo(f"Sample Rate: {features.sample_rate}Hz")
@@ -524,8 +547,11 @@ def render_multi(audio_file, visual, resolutions, output_prefix, fps, preview, c
     
     # Audio einmal analysieren
     analyzer = AudioAnalyzer()
-    features = analyzer.analyze(audio_file, fps=fps)
-    
+    try:
+        features = analyzer.analyze(audio_file, fps=fps)
+    except Exception as e:
+        raise _freundlicher_fehler(e, "Audio-Analyse")
+
     click.echo(f"[Multi] Audio analysiert: {features.duration:.1f}s @ {features.tempo:.0f} BPM")
     click.echo(f"[Multi] Rendere {visual} in mehreren Aufloesungen...")
     
@@ -541,17 +567,20 @@ def render_multi(audio_file, visual, resolutions, output_prefix, fps, preview, c
         output_path = f"{output_prefix}_{width}x{height}.mp4"
         click.echo(f"  Rendering {width}x{height} -> {output_path}")
         
-        renderer = GPUBatchRenderer(width=width, height=height, fps=fps)
-        renderer.render(
-            audio_path=audio_file,
-            visualizer_type=visual,
-            output_path=output_path,
-            features=features,
-            preview_mode=preview,
-            preview_duration=5.0,
-            codec=codec,
-            quality=quality,
-        )
+        try:
+            renderer = GPUBatchRenderer(width=width, height=height, fps=fps)
+            renderer.render(
+                audio_path=audio_file,
+                visualizer_type=visual,
+                output_path=output_path,
+                features=features,
+                preview_mode=preview,
+                preview_duration=5.0,
+                codec=codec,
+                quality=quality,
+            )
+        except Exception as e:
+            raise _freundlicher_fehler(e, f"Rendering ({width}x{height})")
         click.echo(f"  Fertig: {output_path}")
     
     click.echo("[Multi] Alle Aufloesungen fertig!")
@@ -671,7 +700,7 @@ def batch(batch_file):
     
     if renderer is not None:
         try:
-            renderer.__del__()
+            renderer.release()
         except Exception:
             pass
     

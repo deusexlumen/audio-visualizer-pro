@@ -19,7 +19,10 @@ import tempfile
 import os
 from pathlib import Path
 from typing import Optional, Callable
+from .app_logging import get_logger
 from .types import AudioFeatures
+
+logger = get_logger(__name__)
 
 _SLOW_FORMATS = {'.mp3', '.m4a', '.aac', '.ogg', '.wma', '.opus'}
 
@@ -52,8 +55,12 @@ class AudioAnalyzer:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
-    def _get_cache_path(self, audio_path: str, fps: int) -> Path:
-        """Cache-Key basiert auf Datei-Inhalt (MD5) + fps — nicht auf mtime."""
+    # Bei Format-Aenderungen an den gecachten Features hochzaehlen —
+    # invalidiert alle bestehenden Caches.
+    CACHE_VERSION = 8
+
+    def _get_cache_path(self, audio_path: str, fps: int, ema_alpha: float = 0.15) -> Path:
+        """Cache-Key basiert auf Datei-Inhalt (MD5) + fps + ema_alpha — nicht auf mtime."""
         path = Path(audio_path)
         file_stat = path.stat()
         hasher = hashlib.md5()
@@ -73,12 +80,12 @@ class AudioAnalyzer:
                     hasher.update(f.read())  # Letzte 1MB
         except Exception:
             pass
-        hasher.update(f"_{fps}_v7".encode())
+        hasher.update(f"_{fps}_{ema_alpha}_v{self.CACHE_VERSION}".encode())
         return self.cache_dir / f"{hasher.hexdigest()}.npz"
     
     def _progress(self, msg: str, step: int, total: int, callback: Optional[Callable] = None):
         pct = int((step / total) * 100)
-        print(f"[Analyzer] {msg} ({step}/{total})")
+        logger.info(f"[Analyzer] {msg} ({step}/{total})")
         if callback:
             callback(msg, step, total)
     
@@ -91,7 +98,7 @@ class AudioAnalyzer:
         Args:
             ema_alpha: Glättungsfaktor (0.0 = keine Glättung, 1.0 = maximale Glättung)
         """
-        cache_path = self._get_cache_path(audio_path, fps)
+        cache_path = self._get_cache_path(audio_path, fps, ema_alpha)
         
         if not force_reanalyze and cache_path.exists():
             self._progress("Lade aus Cache...", 1, 1, progress_callback)

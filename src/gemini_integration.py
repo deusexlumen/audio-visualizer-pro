@@ -18,8 +18,11 @@ from pathlib import Path
 
 import numpy as np
 
+from .app_logging import get_logger
 from .quote_cache import save_upload_id, load_upload_id, save_transcript, load_transcript
 from .types import Quote
+
+logger = get_logger(__name__)
 
 try:
     from google import genai
@@ -388,13 +391,13 @@ class GeminiIntegration:
 
                 if attempt < max_retries:
                     wait_time = base_delay * (2 ** (attempt - 1))  # 2s, 4s, 8s, 16s
-                    print(
+                    logger.warning(
                         f"[Gemini] Retry {attempt}/{max_retries} nach Fehler: {e}. "
                         f"Warte {wait_time}s..."
                     )
                     time.sleep(wait_time)
                 else:
-                    print(f"[Gemini] Alle {max_retries} Versuche fehlgeschlagen: {e}")
+                    logger.error(f"[Gemini] Alle {max_retries} Versuche fehlgeschlagen: {e}")
 
         raise RuntimeError(
             f"Gemini API nach {max_retries} Versuchen nicht erreichbar. "
@@ -416,7 +419,7 @@ class GeminiIntegration:
                 "quotes": {},
             }
         except Exception as e:
-            print(f"[Gemini] Konnte default.json nicht laden: {e}")
+            logger.warning(f"[Gemini] Konnte default.json nicht laden: {e}")
             return {}
 
     def shutdown(self):
@@ -481,12 +484,12 @@ class GeminiIntegration:
                 if state_name == "ACTIVE":
                     if progress_callback:
                         progress_callback("Gecachte Upload-ID verwendet")
-                    print(f"[Gemini] Verwende gecachte Upload-ID: {cached_id}")
+                    logger.info(f"[Gemini] Verwende gecachte Upload-ID: {cached_id}")
                     return cached_file
                 else:
-                    print(f"[Gemini] Gecachte Upload-ID nicht mehr ACTIVE ({state_name}), neu hochladen...")
+                    logger.info(f"[Gemini] Gecachte Upload-ID nicht mehr ACTIVE ({state_name}), neu hochladen...")
             except Exception as e:
-                print(f"[Gemini] Gecachte Upload-ID ungueltig: {e}")
+                logger.warning(f"[Gemini] Gecachte Upload-ID ungueltig: {e}")
         
         # Wenn Datei > 5MB, vorher komprimieren
         upload_path = str(audio_path)
@@ -501,12 +504,12 @@ class GeminiIntegration:
                 compressed_size = os.path.getsize(temp_compressed.name) / (1024 * 1024)
                 if progress_callback:
                     progress_callback(f"Audio komprimiert: {compressed_size:.1f}MB")
-                print(f"[Gemini] Audio komprimiert: {original_size:.1f}MB -> {compressed_size:.1f}MB")
+                logger.info(f"[Gemini] Audio komprimiert: {original_size:.1f}MB -> {compressed_size:.1f}MB")
                 upload_path = temp_compressed.name
             else:
                 if progress_callback:
                     progress_callback("Komprimierung fehlgeschlagen, verwende Original")
-                print(f"[Gemini] Komprimierung fehlgeschlagen, verwende Original ({original_size:.1f}MB)")
+                logger.warning(f"[Gemini] Komprimierung fehlgeschlagen, verwende Original ({original_size:.1f}MB)")
         
         if progress_callback:
             progress_callback("Zu Gemini hochladen...")
@@ -528,7 +531,7 @@ class GeminiIntegration:
                     state_name = getattr(uploaded_file.state, 'name', str(uploaded_file.state))
                     if progress_callback:
                         progress_callback(f"Verarbeitung... ({waited}s)")
-                    print(f"[Gemini] Datei-Status: {state_name} ({waited}s)")
+                    logger.info(f"[Gemini] Datei-Status: {state_name} ({waited}s)")
                 
                 state_name = getattr(uploaded_file.state, 'name', str(uploaded_file.state))
                 if state_name != "ACTIVE":
@@ -546,14 +549,14 @@ class GeminiIntegration:
                 return uploaded_file
             except Exception as e:
                 last_error = e
-                print(f"[Gemini] Upload Versuch {attempt}/{max_retries} fehlgeschlagen: {e}")
+                logger.warning(f"[Gemini] Upload Versuch {attempt}/{max_retries} fehlgeschlagen: {e}")
                 if progress_callback:
                     progress_callback(f"Upload Versuch {attempt}/{max_retries} fehlgeschlagen")
                 if attempt < max_retries:
                     import random
                     base_wait = 2 * (2 ** (attempt - 1))  # Exponential: 2s, 4s, 8s
                     wait = base_wait + random.uniform(0, 1.0)  # + Jitter bis 1s
-                    print(f"[Gemini] Warte {wait:.1f}s vor naechstem Versuch...")
+                    logger.info(f"[Gemini] Warte {wait:.1f}s vor naechstem Versuch...")
                     time.sleep(wait)
         
         # Cleanup temp file bei Fehler
@@ -580,7 +583,7 @@ class GeminiIntegration:
             # Transkript-Cache prüfen
             cached = load_transcript(str(audio_path))
             if cached:
-                print("[Gemini] Gecachtes Transkript verwendet.")
+                logger.info("[Gemini] Gecachtes Transkript verwendet.")
                 return cached
 
             uploaded_file = self._upload_audio_with_retry(str(audio_path))
@@ -698,7 +701,7 @@ class GeminiIntegration:
 
             quotes_data = self._parse_json_response(response.text)
             if not isinstance(quotes_data, list):
-                print(f"[Gemini] Zitat-Antwort war kein Array (Typ: {type(quotes_data).__name__}), verwende leere Liste")
+                logger.warning(f"[Gemini] Zitat-Antwort war kein Array (Typ: {type(quotes_data).__name__}), verwende leere Liste")
                 quotes_data = []
 
             quotes = []
@@ -714,7 +717,7 @@ class GeminiIntegration:
                     end_t = float(q.get("end_time", 0.0))
                     conf = float(q.get("confidence", 0.5))
                 except (ValueError, TypeError):
-                    print(f"[Gemini] Ungültige Zeitstempel fuer Zitat '{text[:30]}...', überspringe.")
+                    logger.warning(f"[Gemini] Ungültige Zeitstempel fuer Zitat '{text[:30]}...', überspringe.")
                     continue
                 # Endzeit darf nicht vor Startzeit liegen
                 if end_t < start_t:
@@ -815,11 +818,11 @@ class GeminiIntegration:
             # Validiere und filtere nur bekannte Parameter
             if isinstance(optimized, dict):
                 return {k: v for k, v in optimized.items() if k in current_params}
-            print(f"[Gemini] Parameter-Antwort ungueltig (Typ: {type(optimized).__name__}), verwende aktuelle Parameter")
+            logger.warning(f"[Gemini] Parameter-Antwort ungueltig (Typ: {type(optimized).__name__}), verwende aktuelle Parameter")
             return current_params
 
         except Exception as e:
-            print(f"[Gemini] Parameter-Optimierung fehlgeschlagen: {e}")
+            logger.warning(f"[Gemini] Parameter-Optimierung fehlgeschlagen: {e}")
             return current_params
 
     @staticmethod
@@ -1243,7 +1246,7 @@ Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
             optimized = self._parse_json_response(response.text)
 
             if not isinstance(optimized, dict):
-                print(f"[Gemini] KI-Antwort war kein Dictionary (Typ: {type(optimized).__name__}), verwende Fallback")
+                logger.warning(f"[Gemini] KI-Antwort war kein Dictionary (Typ: {type(optimized).__name__}), verwende Fallback")
                 cfg_fallback = self._load_default_config()
                 if cfg_fallback:
                     return {
@@ -1258,7 +1261,7 @@ Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
             return self._validate_optimized_result(optimized, current_params, colors, param_specs)
             
         except Exception as e:
-            print(f"[Gemini] All-Settings-Optimierung fehlgeschlagen: {e}, verwende Fallback")
+            logger.warning(f"[Gemini] All-Settings-Optimierung fehlgeschlagen: {e}, verwende Fallback")
             # Versuche default.json zu laden und mit internem Fallback zu mergen
             cfg_fallback = self._load_default_config()
             if cfg_fallback:
@@ -1332,7 +1335,7 @@ Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
             return response.text.strip().strip('"').strip("'")
 
         except Exception as e:
-            print(f"[Gemini] Bild-Prompt-Generierung fehlgeschlagen: {e}")
+            logger.warning(f"[Gemini] Bild-Prompt-Generierung fehlgeschlagen: {e}")
             return "abstract ambient background with soft gradients and atmospheric lighting, cinematic color grading, minimal composition, 8k quality"
 
     @staticmethod
@@ -1344,7 +1347,7 @@ Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
         unterscheiden kann.
         """
         if not text or not text.strip():
-            print("[Gemini] API-Antwort war leer")
+            logger.warning("[Gemini] API-Antwort war leer")
             return None
 
         text = text.strip()
@@ -1383,5 +1386,5 @@ Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
         except json.JSONDecodeError:
             pass
 
-        print(f"[Gemini] JSON-Parsing fehlgeschlagen. Antwort (erste 200 Zeichen): {text[:200]!r}")
+        logger.warning(f"[Gemini] JSON-Parsing fehlgeschlagen. Antwort (erste 200 Zeichen): {text[:200]!r}")
         return None

@@ -17,8 +17,11 @@ import numpy as np
 import moderngl
 from typing import Optional, List
 
+from .app_logging import get_logger
 from .gpu_text_renderer import SDFFontAtlas, GPUTextRenderer
 from .gemini_integration import Quote
+
+logger = get_logger(__name__)
 
 
 class GPUQuoteRenderer:
@@ -316,8 +319,8 @@ class GPUQuoteRenderer:
         except Exception as e:
             # Quote-Renderer-Fehler duerfen niemals den ganzen Render killen
             import traceback
-            print(f"[GPUQuoteRenderer] Fehler beim Rendern von Quote: {e}")
-            traceback.print_exc()
+            logger.error(f"[GPUQuoteRenderer] Fehler beim Rendern von Quote: {e}")
+            logger.debug(traceback.format_exc())
             return
 
     def _wrap_text(self, text: str, config, max_chars: int = None) -> List[str]:

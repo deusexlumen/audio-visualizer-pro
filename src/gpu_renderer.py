@@ -17,10 +17,13 @@ import moderngl
 import numpy as np
 
 from .analyzer import AudioAnalyzer
+from .app_logging import get_logger
 from .types import AudioFeatures, Quote
 from .gpu_visualizers import get_visualizer
 from .gpu_text_renderer import SDFFontAtlas, GPUTextRenderer
 from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
+
+logger = get_logger(__name__)
 
 # Video-Erweiterungen für automatische Erkennung im Hintergrund
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.gif'}
@@ -34,6 +37,29 @@ def _hex_to_rgb(hex_color: str) -> tuple:
         int(hex_color[2:4], 16) / 255.0,
         int(hex_color[4:6], 16) / 255.0,
     )
+
+
+class GPUNichtVerfuegbarError(RuntimeError):
+    """Wird geworfen, wenn kein OpenGL-Kontext erzeugt werden kann (keine GPU/Treiber)."""
+
+
+def create_gl_context() -> "moderngl.Context":
+    """Erzeugt einen standalone OpenGL-Kontext mit verstaendlicher Fehlermeldung.
+
+    Kapselt moderngl.create_standalone_context(), damit Nutzer ohne
+    kompatible GPU/Treiber keine kryptische glcontext-Exception sehen.
+    """
+    try:
+        return moderngl.create_standalone_context()
+    except Exception as e:
+        raise GPUNichtVerfuegbarError(
+            "Keine kompatible GPU gefunden. Audio Visualizer Pro benoetigt "
+            "OpenGL 3.3 oder neuer.\n"
+            "Moegliche Ursachen:\n"
+            "  - Grafiktreiber veraltet oder nicht installiert\n"
+            "  - Remote-Desktop/VM ohne GPU-Beschleunigung\n"
+            f"Technische Details: {e}"
+        ) from e
 
 
 class GPUBatchRenderer:
@@ -50,7 +76,7 @@ class GPUBatchRenderer:
         self.fps = fps
 
         # Standalone OpenGL-Context erzeugen (Windows: default, Linux: ggf. egl)
-        self.ctx = moderngl.create_standalone_context()
+        self.ctx = create_gl_context()
 
         # Offscreen-Framebuffer fuer das Rendering (RGBA fuer Alpha-Kanal-Erhalt)
         self.fbo = self.ctx.framebuffer(
@@ -156,20 +182,20 @@ class GPUBatchRenderer:
         elif features.chroma.ndim > 1:
             frame_count = min(frame_count, features.chroma.shape[0])
 
-        print(
+        logger.info(
             f"[GPU] Rendere {frame_count} Frames @ {self.fps}fps "
             f"({frame_count / self.fps:.1f}s)"
         )
-        print(f"[GPU] Visualizer: {visualizer_type}")
-        print(f"[GPU] Aufloesung: {self.width}x{self.height}")
+        logger.info(f"[GPU] Visualizer: {visualizer_type}")
+        logger.info(f"[GPU] Aufloesung: {self.width}x{self.height}")
         if gpu_encode:
-            print("[GPU] GPU-Encoding aktiviert (NVENC/AMF/QSV)")
+            logger.info("[GPU] GPU-Encoding aktiviert (NVENC/AMF/QSV)")
 
         # Quotes optional zu Beats synchronisieren
         if sync_quotes_to_beats and quotes and len(features.beat_frames) > 0:
             from .beat_sync import sync_quotes_to_beats as sync_fn
             quotes = sync_fn(quotes, features.beat_frames, self.fps)
-            print(f"[GPU] {len(quotes)} Quotes auf Beats synchronisiert")
+            logger.info(f"[GPU] {len(quotes)} Quotes auf Beats synchronisiert")
         
         # Beat-Intensitaet berechnen (vektorisiert, ~100x schneller als Python-Schleife)
         beat_intensity = np.zeros(frame_count, dtype=np.float32)
@@ -259,7 +285,7 @@ class GPUBatchRenderer:
                 try:
                     self._init_quote_overlay(quotes, quote_config, frame_count, self.fps)
                 except Exception as e:
-                    print(f"[GPU] Quote-Initialisierung fehlgeschlagen: {e}")
+                    logger.warning(f"[GPU] Quote-Initialisierung fehlgeschlagen: {e}")
                     quotes = None  # Quotes fuer diesen Render deaktivieren
 
             # === PRODUCER-CONSUMER: Render und Encode parallel ===
@@ -280,7 +306,7 @@ class GPUBatchRenderer:
                         process.stdin.write(item)
                 except Exception as e:
                     encode_error[0] = e
-                    print(f"[GPU] Encode-Fehler: {e}")
+                    logger.error(f"[GPU] Encode-Fehler: {e}")
                 finally:
                     try:
                         process.stdin.close()
@@ -295,7 +321,7 @@ class GPUBatchRenderer:
                 # Haupt-Render-Loop
                 for i in range(frame_count):
                     if cancel_event is not None and cancel_event.is_set():
-                        print("[GPU] Render abgebrochen durch User.")
+                        logger.info("[GPU] Render abgebrochen durch User.")
                         break
 
                     time = i / self.fps
@@ -370,10 +396,10 @@ class GPUBatchRenderer:
                             if _DEBUG and i == 0:
                                 from PIL import Image
                                 Image.fromarray(arr).save("debug_step5_after_quotes.png")
-                                print(f"[GPU] DEBUG: debug_step5_after_quotes.png gespeichert")
+                                logger.debug("[GPU] DEBUG: debug_step5_after_quotes.png gespeichert")
                         except Exception as e:
                             # Quote-Renderer darf NIEMALS den gesamten Render killen
-                            print(f"[GPU] Quote-Render-Fehler bei Frame {i} ({time:.2f}s): {e}")
+                            logger.warning(f"[GPU] Quote-Render-Fehler bei Frame {i} ({time:.2f}s): {e}")
                             # Weiter mit dem naechsten Frame
                     
                     if _DEBUG and i == 0:
@@ -397,7 +423,7 @@ class GPUBatchRenderer:
                             break
                         except queue.Full:
                             if cancel_event is not None and cancel_event.is_set():
-                                print("[GPU] Render abgebrochen durch User (Queue voll).")
+                                logger.info("[GPU] Render abgebrochen durch User (Queue voll).")
                                 break
                             # Sonst kurz warten und erneut versuchen
                     if cancel_event is not None and cancel_event.is_set():
@@ -408,9 +434,8 @@ class GPUBatchRenderer:
                             progress_callback(i + 1, frame_count)
                         if i % 120 == 0 or i == frame_count - 1:
                             progress_pct = (i + 1) / frame_count * 100
-                            print(
-                                f"[GPU] {progress_pct:.1f}% ({i + 1}/{frame_count})",
-                                flush=True,
+                            logger.info(
+                                f"[GPU] {progress_pct:.1f}% ({i + 1}/{frame_count})"
                             )
             finally:
                 frame_queue.put(None)
@@ -425,7 +450,12 @@ class GPUBatchRenderer:
                 except Exception:
                     pass
 
-            process.wait()
+            try:
+                process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                logger.error("[GPU] FFmpeg reagiert nicht mehr, Prozess wird beendet.")
+                process.kill()
+                process.wait()
 
             # stderr-File schliessen, damit es gelesen werden kann
             try:
@@ -452,7 +482,7 @@ class GPUBatchRenderer:
 
             # Audio mit dem Video muxen
             self._mux_audio(temp_video.name, audio_path, output_path)
-            print(f"[GPU] Fertig: {output_path}")
+            logger.info(f"[GPU] Fertig: {output_path}")
 
         finally:
             # FFmpeg-Prozess sauber beenden falls noch aktiv
@@ -502,9 +532,9 @@ class GPUBatchRenderer:
             arr = np.frombuffer(raw, dtype=np.uint8).reshape((self.height, self.width, 3))
             # ModernGL fbo.read() gibt Daten top-to-bottom (PIL-kompatibel)
             Image.fromarray(arr).save(filename)
-            print(f"[GPU] DEBUG: {filename} gespeichert ({self.width}x{self.height})")
+            logger.debug(f"[GPU] DEBUG: {filename} gespeichert ({self.width}x{self.height})")
         except Exception as e:
-            print(f"[GPU] DEBUG: Konnte {filename} nicht speichern: {e}")
+            logger.warning(f"[GPU] DEBUG: Konnte {filename} nicht speichern: {e}")
 
     def _load_background_texture(self, image_path: str, blur: float):
         """Laedt ein Hintergrundbild als Textur.
@@ -576,7 +606,7 @@ class GPUBatchRenderer:
             shutil.rmtree(temp_dir, ignore_errors=True)
             raise RuntimeError("Keine Frames aus dem Video extrahiert.")
 
-        print(f"[GPU] {len(frames)} Background-Frames aus Video extrahiert")
+        logger.info(f"[GPU] {len(frames)} Background-Frames aus Video extrahiert")
         return frames, temp_dir
 
     def _extract_video_frame_at_time(self, video_path: str, time_sec: float, width: int, height: int) -> str:
@@ -716,7 +746,7 @@ class GPUBatchRenderer:
         for enc in encoders_to_check:
             if self._ffmpeg_has_encoder(enc) and self._test_encoder_works(enc):
                 detected = enc
-                print(f"[GPU] GPU-Encoder verifiziert: {enc}")
+                logger.info(f"[GPU] GPU-Encoder verifiziert: {enc}")
                 break
         
         self._gpu_encoder_cache[cache_key] = detected

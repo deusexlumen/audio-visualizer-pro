@@ -10,6 +10,10 @@ from typing import Dict, Optional, Tuple
 from pathlib import Path
 import colorsys
 
+from .app_logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class PostProcessor:
     """
@@ -62,7 +66,7 @@ class PostProcessor:
             return np.array(lut_data) if lut_data else None
             
         except Exception as e:
-            print(f"[PostProcess] Warnung: Konnte LUT nicht laden: {e}")
+            logger.warning(f"[PostProcess] Konnte LUT nicht laden: {e}")
             return None
     
     def apply(self, frame: np.ndarray) -> np.ndarray:

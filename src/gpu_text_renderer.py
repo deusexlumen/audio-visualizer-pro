@@ -17,6 +17,10 @@ from PIL import Image, ImageDraw, ImageFont
 from scipy import ndimage
 import moderngl
 
+from .app_logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class GlyphInfo:
     """Metadaten fuer eine einzelne Glyphe im Atlas."""
@@ -402,7 +406,7 @@ class GPUTextRenderer:
             if not g:
                 continue
             if instance_idx >= self._max_chars:
-                print(f"[GPUTextRenderer] WARN: Text ab Frame-Char {self._max_chars} abgeschnitten")
+                logger.warning(f"[GPUTextRenderer] Text ab Frame-Char {self._max_chars} abgeschnitten")
                 break
 
             # Quad-Position und Groesse
