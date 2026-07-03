@@ -127,6 +127,118 @@ vec3 applyChromaticAberration(sampler2D tex, vec2 uv, float amount) {
 }
 """
 
+# === Gemeinsame Shader-Bausteine fuer die HDR-Pipeline ===
+# Anti-Aliasing (fwidth-basiert), Tonemapping, Gamma und Dithering.
+# In Visualizern via f-String einbinden: f"...{self.SHADER_COMMON}..."
+SHADER_COMMON_GLSL = """
+// Pixelgenaue weiche Kante: 0..1-Uebergang mit Breite von ~1 Pixel.
+// Ersetzt hartkodierte smoothstep-Breiten (die je Aufloesung anders aussehen).
+float aastep(float threshold, float value) {
+    float w = max(fwidth(value), 1e-6);
+    return smoothstep(threshold - w, threshold + w, value);
+}
+
+// Weiche Fuellung fuer SDF-Werte: 1.0 innerhalb (d < 0), 0.0 ausserhalb.
+float aafill(float d) {
+    float w = max(fwidth(d), 1e-6);
+    return clamp(0.5 - d / w, 0.0, 1.0);
+}
+
+// Kompakter 2D-Hash (bessere Verteilung als sin-Hash)
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+// ACES-Tonemapping (Narkowicz-Fit): weiche Highlight-Kompression
+// statt hartem Clipping, filmische S-Kurve.
+vec3 tonemapACES(vec3 x) {
+    x = max(x, 0.0);
+    return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+
+vec3 linearToSrgb(vec3 c) { return pow(max(c, 0.0), vec3(1.0 / 2.2)); }
+vec3 srgbToLinear(vec3 c) { return pow(max(c, 0.0), vec3(2.2)); }
+
+// Triangular-Dithering (1/255-Amplitude) gegen Farb-Banding
+// bei der Quantisierung von Float-Farben auf 8 Bit.
+float ditherTriangular(vec2 pos, float seed) {
+    float r1 = hash12(pos + seed * 337.0);
+    float r2 = hash12(pos.yx * 1.371 + seed * 173.0 + 17.0);
+    return (r1 + r2 - 1.0) / 255.0;
+}
+"""
+
+# Standard-Vertex-Shader fuer Fullscreen-Quads (Position only)
+FULLSCREEN_VERTEX_SHADER = """
+#version 330
+in vec2 in_pos;
+void main() {
+    gl_Position = vec4(in_pos, 0.0, 1.0);
+}
+"""
+
+# Standard-Vertex-Shader fuer texturierte Fullscreen-Quads
+TEXTURED_VERTEX_SHADER = """
+#version 330
+in vec2 in_pos;
+in vec2 in_uv;
+out vec2 v_uv;
+void main() {
+    gl_Position = vec4(in_pos, 0.0, 1.0);
+    v_uv = in_uv;
+}
+"""
+
+
+def compose_fragment(body: str, includes: tuple = ()) -> str:
+    """Baut einen Fragment-Shader aus #version-Header, Includes und Body zusammen.
+
+    Args:
+        body: Shader-Code ohne #version-Zeile.
+        includes: GLSL-Bausteine (z.B. SHADER_COMMON_GLSL, LYGIA_NOISE_GLSL).
+    """
+    parts = ["#version 330"]
+    parts.extend(includes)
+    parts.append(body)
+    return "\n".join(parts)
+
+
+def create_fullscreen_quad(ctx: moderngl.Context, program, attr: str = "in_pos"):
+    """Erzeugt VAO+VBO fuer einen Fullscreen-Quad (TRIANGLE_STRIP, Clip-Space).
+
+    Returns:
+        (vao, vbo) — der Aufrufer ist fuer release() verantwortlich.
+    """
+    vertices = np.array([
+        -1.0, -1.0,
+         1.0, -1.0,
+        -1.0,  1.0,
+         1.0,  1.0,
+    ], dtype=np.float32)
+    vbo = ctx.buffer(vertices.tobytes())
+    vao = ctx.vertex_array(program, [(vbo, "2f", attr)])
+    return vao, vbo
+
+
+def create_textured_quad(ctx: moderngl.Context, program,
+                         pos_attr: str = "in_pos", uv_attr: str = "in_uv"):
+    """Erzeugt VAO+VBO fuer einen texturierten Fullscreen-Quad (Position + UV).
+
+    Returns:
+        (vao, vbo) — der Aufrufer ist fuer release() verantwortlich.
+    """
+    vertices = np.array([
+        -1.0, -1.0, 0.0, 0.0,
+         1.0, -1.0, 1.0, 0.0,
+        -1.0,  1.0, 0.0, 1.0,
+         1.0,  1.0, 1.0, 1.0,
+    ], dtype=np.float32)
+    vbo = ctx.buffer(vertices.tobytes())
+    vao = ctx.vertex_array(program, [(vbo, "2f 2f", pos_attr, uv_attr)])
+    return vao, vbo
+
 
 class BaseGPUVisualizer(abc.ABC):
     """Basisklasse fuer GPU-beschleunigte Visualizer mit ModernGL.
@@ -161,6 +273,7 @@ class BaseGPUVisualizer(abc.ABC):
     LYGIA_NOISE = LYGIA_NOISE_GLSL
     LYGIA_SDF = LYGIA_SDF_GLSL
     LYGIA_COLOR = LYGIA_COLOR_GLSL
+    SHADER_COMMON = SHADER_COMMON_GLSL
 
     def __init__(self, ctx: moderngl.Context, width: int, height: int):
         self.ctx = ctx

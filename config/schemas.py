@@ -156,6 +156,7 @@ class PostProcessConfig(BaseModel):
     Hinweis: brightness im GPU-Shader ist ein Offset (-0.5..0.5),
     nicht ein Multiplikator. Schema angepasst.
     """
+    exposure: float = Field(default=1.0, ge=0.1, le=4.0)
     contrast: float = Field(default=1.0, ge=0.0, le=3.0)
     saturation: float = Field(default=1.0, ge=0.0, le=3.0)
     brightness: float = Field(default=0.0, ge=-0.5, le=0.5)

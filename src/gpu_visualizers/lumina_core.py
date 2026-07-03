@@ -13,7 +13,15 @@ Optimiert fuer Musik: Reagiert stark auf Beats und Transienten.
 
 import numpy as np
 import moderngl
-from .base import BaseGPUVisualizer
+from .base import (
+    BaseGPUVisualizer,
+    FULLSCREEN_VERTEX_SHADER,
+    LYGIA_MATH_GLSL,
+    LYGIA_NOISE_GLSL,
+    LYGIA_SDF_GLSL,
+    compose_fragment,
+    create_fullscreen_quad,
+)
 
 
 class LuminaCoreGPU(BaseGPUVisualizer):
@@ -27,7 +35,6 @@ class LuminaCoreGPU(BaseGPUVisualizer):
         'ring_count': (4, 1, 8, 1),
         'noise_scale': (2.0, 0.5, 5.0, 0.1),
         'glow_strength': (0.8, 0.0, 2.0, 0.1),
-        'chromatic_aberration': (0.003, 0.0, 0.02, 0.001),
         'rotation_speed': (0.3, 0.0, 1.0, 0.05),
         'core_base_radius': (0.15, 0.05, 0.4, 0.01),
         'ring_base_radius': (0.25, 0.1, 0.5, 0.01),
@@ -44,19 +51,12 @@ class LuminaCoreGPU(BaseGPUVisualizer):
         "Ringe": ["ring_count", "ring_base_radius", "ring_spacing", "ring_width", "rotation_speed"],
         "Noise": ["noise_scale", "noise_amount"],
         "Glow & Licht": ["glow_strength", "specular_power"],
-        "Effekte": ["chromatic_aberration"],
         "Hintergrund": ["bg_brightness"],
     }
 
     def _setup(self):
-        self._prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
-            in vec2 in_pos;
-            void main() { gl_Position = vec4(in_pos, 0.0, 1.0); }
-            """,
-            fragment_shader="""
-            #version 330
+        fragment = compose_fragment(
+            """
             uniform vec2 u_resolution;
             uniform float u_time;
             uniform float u_rms;
@@ -71,7 +71,6 @@ class LuminaCoreGPU(BaseGPUVisualizer):
             uniform float u_ring_count;
             uniform float u_noise_scale;
             uniform float u_glow_strength;
-            uniform float u_chromatic_aberration;
             uniform float u_rotation_speed;
             uniform float u_core_base_radius;
             uniform float u_ring_base_radius;
@@ -84,43 +83,6 @@ class LuminaCoreGPU(BaseGPUVisualizer):
             uniform float u_brightness;
 
             out vec4 f_color;
-
-            // === Lygia Math ===
-            float remap(float v, float i_min, float i_max, float o_min, float o_max) {
-                return o_min + (v - i_min) * (o_max - o_min) / (i_max - i_min + 1e-8);
-            }
-            mat2 rot2(float a) {
-                float c = cos(a), s = sin(a);
-                return mat2(c, -s, s, c);
-            }
-
-            // === Lygia Noise ===
-            float hash(float n) { return fract(sin(n) * 43758.5453123); }
-            float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-            float noise(vec2 p) {
-                vec2 i = floor(p);
-                vec2 f = fract(p);
-                float a = hash(i);
-                float b = hash(i + vec2(1.0, 0.0));
-                float c = hash(i + vec2(0.0, 1.0));
-                float d = hash(i + vec2(1.0, 1.0));
-                vec2 u = f * f * (3.0 - 2.0 * f);
-                return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-            }
-            float fbm(vec2 p, int octaves) {
-                float v = 0.0;
-                float a = 0.5;
-                mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-                for (int i = 0; i < octaves; i++) {
-                    v += a * noise(p);
-                    p = rot * p * 2.0 + vec2(100.0);
-                    a *= 0.5;
-                }
-                return v;
-            }
-
-            // === SDF ===
-            float sdCircle(vec2 p, float r) { return length(p) - r; }
 
             // === Lighting ===
             vec3 phong(vec3 normal, vec3 lightDir, vec3 viewDir, vec3 color, float specPower) {
@@ -191,28 +153,21 @@ class LuminaCoreGPU(BaseGPUVisualizer):
                 // === Transient Flash ===
                 col += u_color * explosion * 0.5;
 
-                // === Chromatic Aberration ===
-                if (u_chromatic_aberration > 0.0) {
-                    float ca = u_chromatic_aberration * (u_rms + u_onset);
-                    vec2 caOffset = normalize(uv) * ca;
-                    // Simuliere CA durch RGB-Shift
-                    col.r += glow * 0.2 * ca * 100.0;
-                    col.b += glow * 0.2 * ca * 100.0;
-                }
-
-                // Tonemapping
-                col = col / (1.0 + col);
-                col = pow(col, vec3(0.95));
-                col *= u_brightness;
+                // HDR-Ausgabe: Tonemapping uebernimmt zentral der finale
+                // ACES-Pass im Renderer (kein lokales Reinhard mehr).
+                col = max(col, 0.0) * u_brightness;
 
                 f_color = vec4(col, 1.0);
             }
             """,
+            includes=(LYGIA_MATH_GLSL, LYGIA_NOISE_GLSL, LYGIA_SDF_GLSL),
         )
 
-        quad = np.array([[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]], dtype=np.float32)
-        vbo = self.ctx.buffer(quad.tobytes())
-        self._vao = self.ctx.vertex_array(self._prog, [(vbo, "2f", "in_pos")])
+        self._prog = self.ctx.program(
+            vertex_shader=FULLSCREEN_VERTEX_SHADER,
+            fragment_shader=fragment,
+        )
+        self._vao, self._vbo = create_fullscreen_quad(self.ctx, self._prog)
 
     def render(self, features: dict, time: float):
         frame_idx = int(time * features.get("fps", 30))
@@ -246,7 +201,6 @@ class LuminaCoreGPU(BaseGPUVisualizer):
         self._prog["u_ring_count"].value = self.params["ring_count"]
         self._prog["u_noise_scale"].value = self.params["noise_scale"]
         self._prog["u_glow_strength"].value = self.params["glow_strength"]
-        self._prog["u_chromatic_aberration"].value = self.params["chromatic_aberration"]
         self._prog["u_rotation_speed"].value = self.params["rotation_speed"]
         self._prog["u_core_base_radius"].value = self.params["core_base_radius"]
         self._prog["u_ring_base_radius"].value = self.params["ring_base_radius"]

@@ -78,25 +78,44 @@ class GPUBatchRenderer:
         # Standalone OpenGL-Context erzeugen (Windows: default, Linux: ggf. egl)
         self.ctx = create_gl_context()
 
-        # Offscreen-Framebuffer fuer das Rendering (RGBA fuer Alpha-Kanal-Erhalt)
+        # === HDR-Pipeline ===
+        # Szene wird in Float16-FBOs gerendert (Werte > 1.0 bleiben erhalten,
+        # kein Banding durch 8-Bit-Zwischenschritte). Erst der finale
+        # Tonemap-Pass quantisiert nach RGBA8 (post_fbo).
+
+        # Haupt-Szenen-FBO (RGBA16F fuer HDR + Alpha-Kanal-Erhalt)
         self.fbo = self.ctx.framebuffer(
-            color_attachments=[self.ctx.texture((width, height), 4)]
+            color_attachments=[self.ctx.texture((width, height), 4, dtype='f2')]
         )
-        
+
         # Temporaerer FBO fuer Hintergrundbild
         self.bg_fbo = self.ctx.framebuffer(
-            color_attachments=[self.ctx.texture((width, height), 3)]
+            color_attachments=[self.ctx.texture((width, height), 3, dtype='f2')]
         )
-        
+
         # Temporaerer FBO fuer Visualizer (wird ueber Hintergrundbild composited)
         self.viz_fbo = self.ctx.framebuffer(
-            color_attachments=[self.ctx.texture((width, height), 4)]
+            color_attachments=[self.ctx.texture((width, height), 4, dtype='f2')]
         )
-        
+
+        # Optionales 4x-MSAA-Target fuer geometriebasierte Visualizer
+        # (weiche Kanten bei Linien/Balken). Faellt bei Treiber-Problemen
+        # transparent auf das Nicht-MSAA-Target zurueck.
+        self.viz_ms_fbo = None
+        try:
+            self.viz_ms_fbo = self.ctx.framebuffer(
+                color_attachments=[
+                    self.ctx.renderbuffer((width, height), 4, samples=4, dtype='f2')
+                ]
+            )
+        except Exception as e:
+            logger.info(f"[GPU] MSAA nicht verfuegbar, rendere ohne Kantenglaettung: {e}")
+            self.viz_ms_fbo = None
+
         # Dummy schwarze Textur fuer Composite ohne Hintergrundbild (verhindert Memory-Leak)
         self._dummy_black_texture = self.ctx.texture((1, 1), 3, b'\x00\x00\x00')
-        
-        # Post-Process FBO (zweiter Pass fuer Color-Grading, RGBA fuer Alpha-Erhalt)
+
+        # Ausgabe-FBO: finaler Tonemap/Grading-Pass schreibt hierhin (RGBA8)
         self.post_fbo = self.ctx.framebuffer(
             color_attachments=[self.ctx.texture((width, height), 4)]
         )
@@ -353,12 +372,21 @@ class GPUBatchRenderer:
                         if _DEBUG and i == 0:
                             self._save_debug(self.fbo, "debug_step2_after_bg.png")
                     
-                    self.viz_fbo.use()
-                    self.ctx.clear(0.0, 0.0, 0.0, 0.0)
-                    viz.render(features_dict, time)
+                    # Visualizer rendern: mit MSAA (falls verfuegbar) fuer
+                    # weiche Kanten bei geometriebasierten Visualizern.
+                    if self.viz_ms_fbo is not None:
+                        self.viz_ms_fbo.use()
+                        self.ctx.clear(0.0, 0.0, 0.0, 0.0)
+                        viz.render(features_dict, time)
+                        # MSAA-Aufloesung: Multisample-FBO in normales FBO kopieren
+                        self.ctx.copy_framebuffer(self.viz_fbo, self.viz_ms_fbo)
+                    else:
+                        self.viz_fbo.use()
+                        self.ctx.clear(0.0, 0.0, 0.0, 0.0)
+                        viz.render(features_dict, time)
                     if _DEBUG and i == 0:
                         self._save_debug(self.viz_fbo, "debug_step3_after_viz.png")
-                    
+
                     self.fbo.use()
                     self._blit_viz_to_fbo(
                         self.viz_fbo.color_attachments[0],
@@ -368,23 +396,24 @@ class GPUBatchRenderer:
                     )
                     if _DEBUG and i == 0:
                         self._save_debug(self.fbo, "debug_step3b_after_viz_blit.png")
-                    
-                    if postprocess:
-                        self._apply_postprocess(
-                            self.fbo.color_attachments[0],
-                            contrast=postprocess.get("contrast", 1.0),
-                            saturation=postprocess.get("saturation", 1.0),
-                            brightness=postprocess.get("brightness", 0.0),
-                            warmth=postprocess.get("warmth", 0.0),
-                            film_grain=postprocess.get("film_grain", 0.0),
-                            time=time,
-                        )
-                        if _DEBUG and i == 0:
-                            self._save_debug(self.post_fbo, "debug_step4_after_postprocess.png")
-                        target_fbo = self.post_fbo
-                    else:
-                        target_fbo = self.fbo
-                    
+
+                    # Finaler Pass laeuft IMMER: Exposure -> ACES-Tonemap ->
+                    # Grading -> Dither -> RGBA8 (post_fbo)
+                    pp = postprocess or {}
+                    self._apply_postprocess(
+                        self.fbo.color_attachments[0],
+                        contrast=pp.get("contrast", 1.0),
+                        saturation=pp.get("saturation", 1.0),
+                        brightness=pp.get("brightness", 0.0),
+                        warmth=pp.get("warmth", 0.0),
+                        film_grain=pp.get("film_grain", 0.0),
+                        time=time,
+                        exposure=pp.get("exposure", 1.0),
+                    )
+                    if _DEBUG and i == 0:
+                        self._save_debug(self.post_fbo, "debug_step4_after_postprocess.png")
+                    target_fbo = self.post_fbo
+
                     pixels = target_fbo.read(components=3)
                     
                     # PIL-basierte Quote-Overlays auf das Frame-Array anwenden
@@ -874,21 +903,21 @@ class GPUBatchRenderer:
         return ["-movflags", "+faststart"]
     
     def _init_postprocess(self):
-        """Initialisiert den Post-Process Shader fuer Color-Grading."""
-        self._pp_prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
-            in vec2 in_pos;
-            in vec2 in_uv;
-            out vec2 v_uv;
-            void main() {
-                gl_Position = vec4(in_pos, 0.0, 1.0);
-                v_uv = in_uv;
-            }
-            """,
-            fragment_shader="""
-            #version 330
+        """Initialisiert den finalen Tonemap/Color-Grading-Pass.
+
+        Dieser Pass laeuft IMMER am Ende der Pipeline:
+        HDR-Szene (f16) -> Exposure -> ACES-Tonemap -> Grading -> Grain
+        -> Triangular-Dither -> RGBA8 (post_fbo).
+        """
+        from .gpu_visualizers.base import (
+            SHADER_COMMON_GLSL, TEXTURED_VERTEX_SHADER, LYGIA_MATH_GLSL,
+            compose_fragment, create_textured_quad,
+        )
+
+        fragment = compose_fragment(
+            """
             uniform sampler2D u_texture;
+            uniform float u_exposure;
             uniform float u_contrast;
             uniform float u_saturation;
             uniform float u_brightness;
@@ -897,43 +926,37 @@ class GPUBatchRenderer:
             uniform float u_time;
             in vec2 v_uv;
             out vec4 f_color;
-            
-            float hash(vec2 p) {
-                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-            }
-            
-            vec3 rgb2hsv(vec3 c) {
-                vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
-                vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-                vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-                float d = q.x - min(q.w, q.y);
-                float e = 1.0e-10;
-                return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
-            }
-            
-            vec3 hsv2rgb(vec3 c) {
-                vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
-                vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-                return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-            }
-            
+
             void main() {
                 vec2 uv = v_uv;
                 vec4 tex = texture(u_texture, uv);
-                vec3 col = tex.rgb;
+                vec3 col = max(tex.rgb, 0.0);
                 float alpha = tex.a;
-                
+
+                // Exposure (im HDR-Raum, vor dem Tonemapping)
+                col *= u_exposure;
+
+                // Tonemapping: weiche Highlight-Kompression statt hartem Clipping.
+                // Mischung aus per-Kanal-ACES (filmisch, entsaettigt Highlights)
+                // und luminanzbasiertem ACES (erhaelt Neon-Saettigung) —
+                // so bleiben die kraeftigen Visualizer-Farben erhalten.
+                vec3 tmPerChannel = tonemapACES(col);
+                float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+                float tmLum = tonemapACES(vec3(lum)).x;
+                vec3 tmSaturated = col * (tmLum / max(lum, 1e-5));
+                col = clamp(mix(tmSaturated, tmPerChannel, 0.35), 0.0, 1.0);
+
                 // Brightness
                 col += u_brightness;
-                
+
                 // Contrast (um 0.5 zentriert)
                 col = (col - 0.5) * u_contrast + 0.5;
-                
+
                 // Saturation
                 vec3 hsv = rgb2hsv(col);
                 hsv.y *= u_saturation;
                 col = hsv2rgb(hsv);
-                
+
                 // Warmth (positive = warm/gelb, negative = kalt/blau)
                 if (u_warmth > 0.0) {
                     col.r += u_warmth * 0.08;
@@ -944,63 +967,56 @@ class GPUBatchRenderer:
                     col.g += u_warmth * 0.01;
                     col.b -= u_warmth * 0.08;
                 }
-                
+
                 // Film Grain
                 if (u_film_grain > 0.0) {
-                    float grain = hash(gl_FragCoord.xy + fract(u_time * 100.0) * 100.0) * 2.0 - 1.0;
+                    float grain = hash12(gl_FragCoord.xy + fract(u_time * 100.0) * 100.0) * 2.0 - 1.0;
                     col += grain * u_film_grain * 0.05;
                 }
-                
-                // Clamp
+
+                // Triangular-Dither gegen Banding bei 8-Bit-Quantisierung
+                col += ditherTriangular(gl_FragCoord.xy, fract(u_time));
+
                 col = clamp(col, 0.0, 1.0);
-                
+
                 // Alpha-Kanal der Original-Textur erhalten!
                 f_color = vec4(col, alpha);
             }
             """,
+            includes=(LYGIA_MATH_GLSL, SHADER_COMMON_GLSL),
         )
-        
-        quad = np.array([
-            [-1.0, -1.0, 0.0, 0.0],
-            [1.0, -1.0, 1.0, 0.0],
-            [-1.0, 1.0, 0.0, 1.0],
-            [1.0, 1.0, 1.0, 1.0],
-        ], dtype=np.float32)
-        vbo = self.ctx.buffer(quad.tobytes())
-        self._pp_vao = self.ctx.vertex_array(
-            self._pp_prog, [(vbo, "2f 2f", "in_pos", "in_uv")]
+
+        self._pp_prog = self.ctx.program(
+            vertex_shader=TEXTURED_VERTEX_SHADER,
+            fragment_shader=fragment,
         )
-    
-    def _apply_postprocess(self, texture, contrast=1.0, saturation=1.0, brightness=0.0, warmth=0.0, film_grain=0.0, time=0.0):
-        """Wendet Color-Grading Post-Process auf die Textur an.
-        
-        Rendert das Ergebnis in self.post_fbo.
+        self._pp_vao, self._pp_vbo = create_textured_quad(self.ctx, self._pp_prog)
+
+    def _apply_postprocess(self, texture, contrast=1.0, saturation=1.0, brightness=0.0,
+                           warmth=0.0, film_grain=0.0, time=0.0, exposure=1.0):
+        """Wendet den finalen Tonemap/Color-Grading-Pass auf die Textur an.
+
+        Rendert das Ergebnis in self.post_fbo (RGBA8, bereit fuer den Readback).
         """
         self.post_fbo.use()
         self._pp_prog["u_texture"].value = 0
+        self._pp_prog["u_exposure"].value = exposure
         self._pp_prog["u_contrast"].value = contrast
         self._pp_prog["u_saturation"].value = saturation
         self._pp_prog["u_brightness"].value = brightness
         self._pp_prog["u_warmth"].value = warmth
         self._pp_prog["u_film_grain"].value = film_grain
         self._pp_prog["u_time"].value = time
-        
+
         texture.use(location=0)
         self._pp_vao.render(mode=moderngl.TRIANGLE_STRIP)
     
     def _init_composite_shader(self):
         """Initialisiert einen Shader, der Visualizer (mit Alpha) ueber Hintergrundbild mischt."""
+        from .gpu_visualizers.base import TEXTURED_VERTEX_SHADER, create_textured_quad
+
         self._composite_prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
-            in vec2 in_pos;
-            in vec2 in_uv;
-            out vec2 v_uv;
-            void main() {
-                gl_Position = vec4(in_pos, 0.0, 1.0);
-                v_uv = in_uv;
-            }
-            """,
+            vertex_shader=TEXTURED_VERTEX_SHADER,
             fragment_shader="""
             #version 330
             uniform sampler2D u_bg_texture;
@@ -1022,15 +1038,8 @@ class GPUBatchRenderer:
             }
             """
         )
-        quad = np.array([
-            [-1.0, -1.0, 0.0, 0.0],
-            [1.0, -1.0, 1.0, 0.0],
-            [-1.0, 1.0, 0.0, 1.0],
-            [1.0, 1.0, 1.0, 1.0],
-        ], dtype=np.float32)
-        vbo = self.ctx.buffer(quad.tobytes())
-        self._composite_vao = self.ctx.vertex_array(
-            self._composite_prog, [(vbo, "2f 2f", "in_pos", "in_uv")]
+        self._composite_vao, self._composite_vbo = create_textured_quad(
+            self.ctx, self._composite_prog
         )
     
     def _composite_viz_over_bg(self, bg_texture, viz_texture):
@@ -1054,17 +1063,10 @@ class GPUBatchRenderer:
     
     def _init_blit_shader(self):
         """Initialisiert einen Shader zum Blitten einer Textur mit Offset und Skalierung."""
+        from .gpu_visualizers.base import TEXTURED_VERTEX_SHADER, create_textured_quad
+
         self._blit_prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
-            in vec2 in_pos;
-            in vec2 in_uv;
-            out vec2 v_uv;
-            void main() {
-                gl_Position = vec4(in_pos, 0.0, 1.0);
-                v_uv = in_uv;
-            }
-            """,
+            vertex_shader=TEXTURED_VERTEX_SHADER,
             fragment_shader="""
             #version 330
             uniform sampler2D u_texture;
@@ -1077,16 +1079,7 @@ class GPUBatchRenderer:
             }
             """
         )
-        quad = np.array([
-            [-1.0, -1.0, 0.0, 0.0],
-            [ 1.0, -1.0, 1.0, 0.0],
-            [-1.0,  1.0, 0.0, 1.0],
-            [ 1.0,  1.0, 1.0, 1.0],
-        ], dtype=np.float32)
-        self._blit_vbo = self.ctx.buffer(quad.tobytes())
-        self._blit_vao = self.ctx.vertex_array(
-            self._blit_prog, [(self._blit_vbo, "2f 2f", "in_pos", "in_uv")]
-        )
+        self._blit_vao, self._blit_vbo = create_textured_quad(self.ctx, self._blit_prog)
     
     def _blit_viz_to_fbo(self, source_texture, offset_x=0.0, offset_y=0.0, scale=1.0, opacity=1.0):
         """Blittet die Visualizer-Textur auf den aktuellen FBO mit Offset und Skalierung."""
@@ -1125,17 +1118,10 @@ class GPUBatchRenderer:
             vignette: Staerke der Vignette im Shader (0.0-1.0).
         """
         if not hasattr(self, '_bg_prog'):
+            from .gpu_visualizers.base import TEXTURED_VERTEX_SHADER, create_textured_quad
+
             self._bg_prog = self.ctx.program(
-                vertex_shader="""
-                #version 330
-                in vec2 in_position;
-                in vec2 in_uv;
-                out vec2 v_uv;
-                void main() {
-                    gl_Position = vec4(in_position, 0.0, 1.0);
-                    v_uv = in_uv;
-                }
-                """,
+                vertex_shader=TEXTURED_VERTEX_SHADER,
                 fragment_shader="""
                 #version 330
                 uniform sampler2D u_texture;
@@ -1156,17 +1142,7 @@ class GPUBatchRenderer:
                 }
                 """
             )
-            vertices = np.array([
-                -1.0, -1.0, 0.0, 0.0,
-                 1.0, -1.0, 1.0, 0.0,
-                -1.0,  1.0, 0.0, 1.0,
-                 1.0,  1.0, 1.0, 1.0,
-            ], dtype=np.float32)
-            self._bg_vbo = self.ctx.buffer(vertices.tobytes())
-            self._bg_vao = self.ctx.vertex_array(
-                self._bg_prog,
-                [(self._bg_vbo, '2f 2f', 'in_position', 'in_uv')]
-            )
+            self._bg_vao, self._bg_vbo = create_textured_quad(self.ctx, self._bg_prog)
         
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
@@ -1226,6 +1202,9 @@ class GPUBatchRenderer:
             if hasattr(self, "bg_fbo") and self.bg_fbo:
                 self.bg_fbo.release()
                 self.bg_fbo = None
+            if hasattr(self, "viz_ms_fbo") and self.viz_ms_fbo:
+                self.viz_ms_fbo.release()
+                self.viz_ms_fbo = None
             if hasattr(self, "_dummy_black_texture") and self._dummy_black_texture:
                 self._dummy_black_texture.release()
                 self._dummy_black_texture = None
@@ -1247,7 +1226,8 @@ class GPUBatchRenderer:
             if hasattr(self, "_quote_overlay_renderer") and self._quote_overlay_renderer:
                 self._quote_overlay_renderer = None
             # Zusaetzliche Shader/VAO/VBO aus dem Render-Pipeline freigeben
-            for name in ("_pp_prog", "_pp_vao", "_composite_prog", "_composite_vao",
+            for name in ("_pp_prog", "_pp_vao", "_pp_vbo", "_composite_prog",
+                         "_composite_vao", "_composite_vbo",
                          "_blit_prog", "_blit_vao", "_blit_vbo", "_bg_prog", "_bg_vao",
                          "_bg_vbo", "_box_prog", "_box_vao", "_box_vbo"):
                 obj = getattr(self, name, None)

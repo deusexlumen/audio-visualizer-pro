@@ -9,16 +9,12 @@ und die Farbe aendert sich basierend auf dem aktuellen color_mode.
 import numpy as np
 import moderngl
 
-from .base import BaseGPUVisualizer
+from .base import (
+    BaseGPUVisualizer,
+    FULLSCREEN_VERTEX_SHADER,
+    create_fullscreen_quad,
+)
 
-
-_VERTEX_SHADER = """
-#version 330
-in vec2 in_position;
-void main() {
-    gl_Position = vec4(in_position, 0.0, 1.0);
-}
-"""
 
 _FRAGMENT_SHADER = """
 #version 330
@@ -107,24 +103,11 @@ class PulsingCoreGPU(BaseGPUVisualizer):
     def _setup(self):
         """Initialisiert Shader, VBO und VAO fuer den Fullscreen-Quad."""
         self.prog = self.ctx.program(
-            vertex_shader=_VERTEX_SHADER,
+            vertex_shader=FULLSCREEN_VERTEX_SHADER,
             fragment_shader=_FRAGMENT_SHADER,
         )
         self.prog["u_resolution"].value = (self.width, self.height)
-
-        # Fullscreen-Quad: 4 Vertices, 2 Dreiecke (Clip-Space: -1 bis +1)
-        vertices = np.array([
-            -1.0, -1.0,
-             1.0, -1.0,
-            -1.0,  1.0,
-             1.0,  1.0,
-        ], dtype=np.float32)
-
-        self.vbo = self.ctx.buffer(vertices.tobytes())
-        self.vao = self.ctx.vertex_array(
-            self.prog,
-            [(self.vbo, "2f", "in_position")],
-        )
+        self.vao, self.vbo = create_fullscreen_quad(self.ctx, self.prog)
 
     def render(self, features: dict, time: float):
         """Rendert einen Frame mit aktuellem RMS, Onset und Chroma-Farbe.

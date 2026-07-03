@@ -169,10 +169,16 @@ def render_gpu_preview(
         if bg_texture is not None:
             renderer._render_background(bg_texture, background_opacity, background_vignette)
 
-        # Visualizer in temporären viz_fbo rendern
-        renderer.viz_fbo.use()
-        renderer.ctx.clear(0.0, 0.0, 0.0, 0.0)
-        viz.render(features_dict, preview_time)
+        # Visualizer rendern: mit MSAA (falls verfuegbar), wie im Haupt-Renderer
+        if getattr(renderer, "viz_ms_fbo", None) is not None:
+            renderer.viz_ms_fbo.use()
+            renderer.ctx.clear(0.0, 0.0, 0.0, 0.0)
+            viz.render(features_dict, preview_time)
+            renderer.ctx.copy_framebuffer(renderer.viz_fbo, renderer.viz_ms_fbo)
+        else:
+            renderer.viz_fbo.use()
+            renderer.ctx.clear(0.0, 0.0, 0.0, 0.0)
+            viz.render(features_dict, preview_time)
 
         # Visualizer von viz_fbo auf main fbo blitten (mit Offset/Scale)
         renderer.fbo.use()
@@ -183,20 +189,20 @@ def render_gpu_preview(
             scale=viz_scale,
         )
 
-        # Post-Process (Color-Grading) anwenden falls konfiguriert
-        if postprocess:
-            renderer._apply_postprocess(
-                renderer.fbo.color_attachments[0],
-                contrast=postprocess.get("contrast", 1.0),
-                saturation=postprocess.get("saturation", 1.0),
-                brightness=postprocess.get("brightness", 0.0),
-                warmth=postprocess.get("warmth", 0.0),
-                film_grain=postprocess.get("film_grain", 0.0),
-                time=preview_time,
-            )
-            pixels = renderer.post_fbo.read(components=3)
-        else:
-            pixels = renderer.fbo.read(components=3)
+        # Finaler Pass laeuft IMMER (Tonemap + Dither), damit die Vorschau
+        # exakt dem gerenderten Video entspricht.
+        pp = postprocess or {}
+        renderer._apply_postprocess(
+            renderer.fbo.color_attachments[0],
+            contrast=pp.get("contrast", 1.0),
+            saturation=pp.get("saturation", 1.0),
+            brightness=pp.get("brightness", 0.0),
+            warmth=pp.get("warmth", 0.0),
+            film_grain=pp.get("film_grain", 0.0),
+            time=preview_time,
+            exposure=pp.get("exposure", 1.0),
+        )
+        pixels = renderer.post_fbo.read(components=3)
 
         # Zu PIL Image konvertieren
         img_array = np.frombuffer(pixels, dtype=np.uint8)
