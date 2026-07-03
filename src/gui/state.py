@@ -201,6 +201,32 @@ class AppState(QObject):
             },
         }
 
+    def apply_dict(self, data: dict):
+        """Uebernimmt gespeicherte Projekt-Daten in DIESE Instanz.
+
+        Anders als from_dict() bleiben bestehende Signal-Verbindungen
+        erhalten — die Panels aktualisieren sich ueber die changed-Signale.
+        """
+        for key, value in data.items():
+            if key == "version":
+                continue
+            if key == "quote_config" and isinstance(value, dict):
+                self.quote_config = QuoteOverlayConfig(**value)
+            elif key == "resolution" and isinstance(value, list):
+                self.resolution = tuple(value)
+            elif key == "quotes" and isinstance(value, list):
+                self.quotes = [
+                    Quote(
+                        text=q.get("text", ""),
+                        start_time=float(q.get("start_time", 0.0)),
+                        end_time=float(q.get("end_time", 0.0)),
+                        confidence=float(q.get("confidence", 1.0)),
+                    )
+                    for q in value
+                ]
+            elif key in self._STATE_KEYS:
+                setattr(self, key, value)
+
     @classmethod
     def from_dict(cls, data: dict):
         s = cls()

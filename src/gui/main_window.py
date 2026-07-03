@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QSettings, QUrl
+from PyQt6.QtGui import QAction, QKeySequence, QDesktopServices
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QPushButton, QLabel, QMessageBox, QTabWidget,
-    QScrollArea, QProgressBar,
+    QScrollArea, QProgressBar, QFileDialog,
 )
 
 from src.app_logging import get_logger
@@ -25,6 +27,11 @@ from src.gui.styles import build_app_stylesheet, Theme
 from src.gui.timeline_widget import TimelineWidget
 
 logger = get_logger(__name__)
+
+# Datei-Endungen fuer Drag & Drop
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a"}
+MEDIA_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".mov", ".gif", ".mkv", ".webm"}
+PROJECT_EXTENSION = ".avproj"
 
 
 class MainWindow(QMainWindow):
@@ -51,8 +58,15 @@ class MainWindow(QMainWindow):
         self._render_worker: RenderWorker | None = None
         self._intro_worker: IntroWorker | None = None
 
+        self._settings = QSettings("AudioVisualizerPro", "AudioVisualizerPro")
+        self._project_path: str | None = None
+        self._dirty = False
+
         self._setup_ui()
+        self._setup_menus()
         self._setup_signals()
+        self._restore_window_state()
+        self.setAcceptDrops(True)
 
     def _setup_ui(self):
         central = QWidget()
@@ -91,6 +105,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.right_tabs)
 
         splitter.setSizes([260, 620, 320])
+        self._splitter = splitter
         layout.addWidget(splitter, stretch=1)
 
         # Untere Statusleiste: Statustext + Fortschritt + Aktions-Buttons
@@ -135,6 +150,249 @@ class MainWindow(QMainWindow):
         bottom_widget.setLayout(bottom)
         layout.addWidget(bottom_widget)
 
+    def _setup_menus(self):
+        """Erstellt die Menueleiste mit Tastenkuerzeln."""
+        menubar = self.menuBar()
+
+        # --- Datei ---
+        file_menu = menubar.addMenu("&Datei")
+
+        act_open_audio = QAction(get_icon("music"), "Audio öffnen…", self)
+        act_open_audio.setShortcut(QKeySequence("Ctrl+O"))
+        act_open_audio.triggered.connect(self.assets_panel._load_audio)
+        file_menu.addAction(act_open_audio)
+
+        file_menu.addSeparator()
+
+        act_open_project = QAction(get_icon("folder-open"), "Projekt öffnen…", self)
+        act_open_project.setShortcut(QKeySequence("Ctrl+Shift+O"))
+        act_open_project.triggered.connect(self._open_project_dialog)
+        file_menu.addAction(act_open_project)
+
+        act_save_project = QAction(get_icon("save"), "Projekt speichern", self)
+        act_save_project.setShortcut(QKeySequence("Ctrl+S"))
+        act_save_project.triggered.connect(self._save_project)
+        file_menu.addAction(act_save_project)
+
+        act_save_project_as = QAction("Projekt speichern unter…", self)
+        act_save_project_as.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        act_save_project_as.triggered.connect(self._save_project_as)
+        file_menu.addAction(act_save_project_as)
+
+        self._recent_menu = file_menu.addMenu("Zuletzt verwendet")
+        self._rebuild_recent_menu()
+
+        file_menu.addSeparator()
+
+        act_quit = QAction("Beenden", self)
+        act_quit.setShortcut(QKeySequence("Ctrl+Q"))
+        act_quit.triggered.connect(self.close)
+        file_menu.addAction(act_quit)
+
+        # --- Rendern ---
+        render_menu = menubar.addMenu("&Rendern")
+
+        act_render = QAction(get_icon("play"), "Rendern starten", self)
+        act_render.setShortcut(QKeySequence("F5"))
+        act_render.triggered.connect(self._on_render_clicked)
+        render_menu.addAction(act_render)
+
+        act_cancel = QAction(get_icon("stop"), "Abbrechen", self)
+        act_cancel.setShortcut(QKeySequence("Esc"))
+        act_cancel.triggered.connect(self._on_cancel_clicked)
+        render_menu.addAction(act_cancel)
+
+        render_menu.addSeparator()
+
+        act_output = QAction(get_icon("folder-open"), "Ausgabeordner öffnen", self)
+        act_output.triggered.connect(self._open_output_dir)
+        render_menu.addAction(act_output)
+
+        # --- Hilfe ---
+        help_menu = menubar.addMenu("&Hilfe")
+
+        act_log = QAction("Log-Datei öffnen", self)
+        act_log.triggered.connect(self._open_log_file)
+        help_menu.addAction(act_log)
+
+        act_about = QAction("Über Audio Visualizer Pro", self)
+        act_about.triggered.connect(self._show_about)
+        help_menu.addAction(act_about)
+
+    # === Projekt speichern/laden ===
+
+    def _save_project(self):
+        if not self._project_path:
+            self._save_project_as()
+            return
+        self._write_project(self._project_path)
+
+    def _save_project_as(self):
+        start_dir = self._settings.value("last_project_dir", "")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Projekt speichern", start_dir,
+            f"Audio Visualizer Projekt (*{PROJECT_EXTENSION})",
+        )
+        if not path:
+            return
+        if not path.endswith(PROJECT_EXTENSION):
+            path += PROJECT_EXTENSION
+        self._write_project(path)
+
+    def _write_project(self, path: str):
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(self.state.to_dict(), f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler beim Speichern", str(e))
+            return
+        self._project_path = path
+        self._settings.setValue("last_project_dir", str(Path(path).parent))
+        self._add_recent_project(path)
+        self._set_dirty(False)
+        self._set_status(f"Projekt gespeichert: {Path(path).name}", "ok")
+
+    def _open_project_dialog(self):
+        start_dir = self._settings.value("last_project_dir", "")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Projekt öffnen", start_dir,
+            f"Audio Visualizer Projekt (*{PROJECT_EXTENSION})",
+        )
+        if path:
+            self._load_project(path)
+
+    def _load_project(self, path: str):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.state.apply_dict(data)
+        except Exception as e:
+            QMessageBox.critical(self, "Fehler beim Laden", f"Projekt konnte nicht geladen werden:\n{e}")
+            return
+        self._project_path = path
+        self._settings.setValue("last_project_dir", str(Path(path).parent))
+        self._add_recent_project(path)
+
+        # Panels aktualisieren, die nicht ueber State-Signale gebunden sind
+        if self.state.audio_path and Path(self.state.audio_path).exists():
+            self.assets_panel.audio_info.setText(Path(self.state.audio_path).name)
+            self._start_analysis()
+        elif self.state.audio_path:
+            self.assets_panel.audio_info.setText("Audio-Datei nicht gefunden")
+            self._set_status(f"Audio-Datei nicht gefunden: {self.state.audio_path}", "warn")
+        if self.state.background_path:
+            self.assets_panel.bg_path_label.setText(Path(self.state.background_path).name)
+
+        self._set_dirty(False)
+        self._set_status(f"Projekt geladen: {Path(path).name}", "ok")
+
+    def _add_recent_project(self, path: str):
+        recent = self._settings.value("recent_projects", [], type=list)
+        if path in recent:
+            recent.remove(path)
+        recent.insert(0, path)
+        self._settings.setValue("recent_projects", recent[:8])
+        self._rebuild_recent_menu()
+
+    def _rebuild_recent_menu(self):
+        self._recent_menu.clear()
+        recent = self._settings.value("recent_projects", [], type=list)
+        existing = [p for p in recent if Path(p).exists()]
+        if not existing:
+            empty = QAction("(leer)", self)
+            empty.setEnabled(False)
+            self._recent_menu.addAction(empty)
+            return
+        for p in existing:
+            act = QAction(Path(p).name, self)
+            act.setToolTip(p)
+            act.triggered.connect(lambda checked, path=p: self._load_project(path))
+            self._recent_menu.addAction(act)
+
+    def _set_dirty(self, dirty: bool):
+        self._dirty = dirty
+        title = "Audio Visualizer Pro"
+        if self._project_path:
+            title += f" — {Path(self._project_path).name}"
+        if dirty:
+            title += " *"
+        self.setWindowTitle(title)
+
+    # === Hilfe / Ordner ===
+
+    def _open_output_dir(self):
+        out_dir = Path(self.state.output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(out_dir.resolve())))
+
+    def _open_log_file(self):
+        from src.app_logging import LOG_FILE
+        if LOG_FILE.exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(LOG_FILE.resolve())))
+        else:
+            QMessageBox.information(self, "Log", "Noch keine Log-Datei vorhanden.")
+
+    def _show_about(self):
+        QMessageBox.about(
+            self,
+            "Über Audio Visualizer Pro",
+            "<b>Audio Visualizer Pro</b><br>"
+            "GPU-beschleunigte Audio-Visualisierungen mit KI-Unterstützung.<br><br>"
+            "16 Visualizer · HDR-Rendering · Bloom · Gemini-Integration<br>"
+            "Lizenz: MIT",
+        )
+
+    # === Fenster-Zustand (QSettings) ===
+
+    def _restore_window_state(self):
+        geometry = self._settings.value("window_geometry")
+        if geometry is not None:
+            self.restoreGeometry(geometry)
+        splitter_state = self._settings.value("splitter_state")
+        if splitter_state is not None:
+            self._splitter.restoreState(splitter_state)
+
+    def _save_window_state(self):
+        self._settings.setValue("window_geometry", self.saveGeometry())
+        self._settings.setValue("splitter_state", self._splitter.saveState())
+
+    # === Drag & Drop ===
+
+    def dragEnterEvent(self, event):
+        if self._first_supported_drop(event) is not None:
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        path = self._first_supported_drop(event)
+        if path is None:
+            return
+        event.acceptProposedAction()
+        suffix = Path(path).suffix.lower()
+        if suffix == PROJECT_EXTENSION:
+            self._load_project(path)
+        elif suffix in AUDIO_EXTENSIONS:
+            self.state.set("audio_path", path)
+            self.assets_panel.audio_info.setText(Path(path).name)
+            self._start_analysis()
+        elif suffix in MEDIA_EXTENSIONS:
+            self.state.set("background_path", path)
+            self.assets_panel.bg_path_label.setText(Path(path).name)
+
+    @staticmethod
+    def _first_supported_drop(event) -> str | None:
+        """Liefert den ersten unterstuetzten Dateipfad eines Drop-Events."""
+        mime = event.mimeData()
+        if not mime.hasUrls():
+            return None
+        supported = AUDIO_EXTENSIONS | MEDIA_EXTENSIONS | {PROJECT_EXTENSION}
+        for url in mime.urls():
+            if not url.isLocalFile():
+                continue
+            path = url.toLocalFile()
+            if Path(path).suffix.lower() in supported:
+                return path
+        return None
+
     @staticmethod
     def _make_scrollable(widget: QWidget) -> QScrollArea:
         """Hilfsmethode: Widget in scrollbaren Bereich verpacken."""
@@ -159,7 +417,23 @@ class MainWindow(QMainWindow):
         self._preview_timer.setSingleShot(True)
         self._preview_timer.timeout.connect(self._start_preview)
 
+    # State-Keys, die als "Projekt-Aenderung" gelten (fuer den *-Marker)
+    _PROJECT_KEYS = frozenset({
+        "audio_path", "background_path", "visualizer_type", "viz_params",
+        "viz_offset_x", "viz_offset_y", "viz_scale",
+        "color_mode", "base_hue", "color_saturation", "viz_brightness",
+        "primary_color", "secondary_color", "background_color",
+        "bg_blur", "bg_vignette", "bg_opacity",
+        "pp_contrast", "pp_saturation", "pp_brightness", "pp_warmth", "pp_grain",
+        "pp_exposure", "pp_bloom", "pp_bloom_threshold", "pp_vignette", "pp_chromatic",
+        "resolution", "render_fps", "codec", "quality", "gpu_encode",
+        "intro_enabled", "intro_path", "intro_fade_duration",
+        "quotes", "quotes_enabled", "quote_config",
+    })
+
     def _on_state_changed(self, key: str):
+        if key in self._PROJECT_KEYS and not self._dirty:
+            self._set_dirty(True)
         if key in {
             "visualizer_type", "viz_params", "viz_offset_x", "viz_offset_y", "viz_scale",
             "bg_blur", "bg_vignette", "bg_opacity",
@@ -196,6 +470,7 @@ class MainWindow(QMainWindow):
         self.state.features = features
         self.state.audio_duration = features.duration
         self.timeline.set_duration(features.duration)
+        self.timeline.set_features(features)
         self.assets_panel.audio_info.setText(
             f"{features.duration:.1f}s · {features.tempo:.0f} BPM · {features.mode}"
         )
@@ -521,4 +796,5 @@ class MainWindow(QMainWindow):
         for worker in workers:
             if worker and worker.isRunning():
                 worker.wait(2000)
+        self._save_window_state()
         event.accept()

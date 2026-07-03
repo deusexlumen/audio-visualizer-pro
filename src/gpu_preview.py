@@ -51,6 +51,7 @@ def render_gpu_preview(
     viz_offset_y: float = 0.0,
     viz_scale: float = 1.0,
     features: AudioFeatures = None,
+    cancel_check=None,
 ):
     """
     Rendert ein einzelnes Frame fuer die Live-Vorschau.
@@ -70,10 +71,16 @@ def render_gpu_preview(
         viz_offset_x: Horizontaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
         viz_offset_y: Vertikaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
         viz_scale: Skalierungsfaktor des Visualizers (0.5 bis 2.0).
+        cancel_check: Optionales Callable; gibt es True zurueck, wird die
+            Vorschau abgebrochen (Rueckgabe None). Erlaubt kooperativen
+            Abbruch verworfener Previews aus dem Worker-Thread.
 
     Returns:
-        PIL.Image oder None bei Fehler
+        PIL.Image oder None bei Fehler/Abbruch
     """
+    def _cancelled():
+        return cancel_check is not None and cancel_check()
+
     temp_bg_frame = None
     bg_texture = None
     renderer = None
@@ -82,6 +89,9 @@ def render_gpu_preview(
         if features is None:
             analyzer = AudioAnalyzer()
             features = analyzer.analyze(audio_path, fps=fps)
+
+        if _cancelled():
+            return None
 
         # Fuer jeden Preview-Frame einen frischen Renderer erstellen.
         # Das verhindert Cross-Thread-Probleme mit dem ModernGL-Context,
@@ -158,6 +168,9 @@ def render_gpu_preview(
         # Zeitpunkt fuer Preview
         preview_time = features.duration * preview_time_percent
 
+        if _cancelled():
+            return None
+
         # Frame rendern
         renderer.fbo.use()
         if bg_texture is None:
@@ -216,6 +229,9 @@ def render_gpu_preview(
             lut_path=pp.get("lut"),
             lut_strength=pp.get("lut_strength", 1.0),
         )
+        if _cancelled():
+            return None
+
         pixels = renderer.post_fbo.read(components=3)
 
         # Zu PIL Image konvertieren

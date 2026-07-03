@@ -118,3 +118,55 @@ def test_preview_timer_triggers_after_parameter_change(qtbot, tmp_path, dummy_au
         window.state.color_mode = "fixed"
         qtbot.wait(100)
         mock_timer_start.assert_called_once_with(150)
+
+
+def test_project_save_and_load_roundtrip(qtbot, tmp_path):
+    """Projekt speichern und in ein frisches Fenster laden."""
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.state.visualizer_type = "bass_temple"
+    window.state.pp_bloom = 1.5
+
+    project = tmp_path / "test.avproj"
+    window._write_project(str(project))
+    assert project.exists()
+    assert not window._dirty
+
+    window2 = MainWindow()
+    qtbot.addWidget(window2)
+    window2._load_project(str(project))
+    assert window2.state.visualizer_type == "bass_temple"
+    assert window2.state.pp_bloom == 1.5
+    assert not window2._dirty
+
+
+def test_state_change_sets_dirty_flag(qtbot):
+    """Projekt-relevante Aenderungen setzen den *-Marker im Titel."""
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window._set_dirty(False)
+    window.state.pp_bloom = 1.9
+    qtbot.wait(50)
+    assert window._dirty
+    assert window.windowTitle().endswith("*")
+
+
+def test_first_supported_drop_filters_extensions(qtbot, tmp_path):
+    """Der Drop-Filter akzeptiert nur bekannte Datei-Endungen."""
+    from unittest.mock import MagicMock
+    from PyQt6.QtCore import QUrl
+
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    def make_event(paths):
+        event = MagicMock()
+        mime = MagicMock()
+        mime.hasUrls.return_value = True
+        mime.urls.return_value = [QUrl.fromLocalFile(p) for p in paths]
+        event.mimeData.return_value = mime
+        return event
+
+    assert window._first_supported_drop(make_event(["C:/musik/song.mp3"])) == "C:/musik/song.mp3"
+    assert window._first_supported_drop(make_event(["C:/p/projekt.avproj"])) == "C:/p/projekt.avproj"
+    assert window._first_supported_drop(make_event(["C:/x/readme.txt"])) is None

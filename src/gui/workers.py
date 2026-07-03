@@ -98,11 +98,15 @@ class PreviewWorker(QThread):
                 features=self.features,
                 quotes=self.quotes,
                 quote_config=self.quote_config,
+                cancel_check=self.isInterruptionRequested,
             )
             if img is not None:
                 self.preview_ready.emit(img)
+            elif self.isInterruptionRequested():
+                # Abbruch durch neuere Vorschau — kein Fehler
+                pass
             else:
-                self.preview_error.emit("Preview returned None")
+                self.preview_error.emit("Vorschau lieferte kein Bild")
         except Exception as e:
             self.preview_error.emit(str(e))
 

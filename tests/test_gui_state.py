@@ -24,3 +24,30 @@ def test_state_to_dict_roundtrip():
     restored = AppState.from_dict(data)
     assert restored.audio_path == "/tmp/test.mp3"
     assert restored.bg_blur == 2.5
+
+
+def test_apply_dict_updates_existing_instance(qtbot):
+    """apply_dict() muss die bestehende Instanz aktualisieren und Signale feuern."""
+    source = AppState()
+    source.visualizer_type = "bass_temple"
+    source.pp_bloom = 1.2
+    source.resolution = (1280, 720)
+    data = source.to_dict()
+
+    target = AppState()
+    received = []
+    target.changed.connect(received.append)
+    target.apply_dict(data)
+
+    assert target.visualizer_type == "bass_temple"
+    assert target.pp_bloom == 1.2
+    assert target.resolution == (1280, 720)
+    assert "visualizer_type" in received
+
+
+def test_apply_dict_ignores_unknown_keys():
+    """Unbekannte Schluessel (z.B. aus neueren Versionen) duerfen nicht crashen."""
+    s = AppState()
+    s.apply_dict({"version": 99, "zukunfts_feature": True, "bg_blur": 3.0})
+    assert s.bg_blur == 3.0
+    assert not hasattr(s, "zukunfts_feature")
