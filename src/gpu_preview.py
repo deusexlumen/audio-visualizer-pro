@@ -189,9 +189,19 @@ def render_gpu_preview(
             scale=viz_scale,
         )
 
+        pp = postprocess or {}
+
+        # HDR-Bloom wie im Haupt-Renderer (vor dem Tonemapping)
+        bloom_intensity = pp.get("bloom_intensity", 0.6)
+        if getattr(renderer, "_bloom", None) is not None and bloom_intensity > 0.0:
+            renderer._apply_bloom(
+                intensity=bloom_intensity,
+                threshold=pp.get("bloom_threshold", 1.0),
+                radius=pp.get("bloom_radius", 1.0),
+            )
+
         # Finaler Pass laeuft IMMER (Tonemap + Dither), damit die Vorschau
         # exakt dem gerenderten Video entspricht.
-        pp = postprocess or {}
         renderer._apply_postprocess(
             renderer.fbo.color_attachments[0],
             contrast=pp.get("contrast", 1.0),
@@ -201,6 +211,10 @@ def render_gpu_preview(
             film_grain=pp.get("film_grain", 0.0),
             time=preview_time,
             exposure=pp.get("exposure", 1.0),
+            vignette=pp.get("vignette", 0.0),
+            chromatic_aberration=pp.get("chromatic_aberration", 0.0),
+            lut_path=pp.get("lut"),
+            lut_strength=pp.get("lut_strength", 1.0),
         )
         pixels = renderer.post_fbo.read(components=3)
 

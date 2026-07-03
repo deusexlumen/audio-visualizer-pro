@@ -165,7 +165,11 @@ class PostProcessConfig(BaseModel):
     film_grain: float = Field(default=0.0, ge=0.0, le=1.0)
     vignette: float = Field(default=0.0, ge=0.0, le=1.0)
     chromatic_aberration: float = Field(default=0.0, ge=0.0, le=5.0)
+    bloom_intensity: float = Field(default=0.6, ge=0.0, le=2.0)
+    bloom_threshold: float = Field(default=1.0, ge=0.0, le=3.0)
+    bloom_radius: float = Field(default=1.0, ge=0.5, le=2.0)
     lut: Optional[str] = None
+    lut_strength: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class BackgroundConfig(BaseModel):

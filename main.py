@@ -159,7 +159,8 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
             cfg_output = cfg.output_file
             if intro is None and cfg.intro_video is not None:
                 cfg_intro_video = cfg.intro_video
-            cfg_intro_fade = cfg.intro_fade if cfg_intro_fade == intro_fade else cfg.intro_fade_duration
+            # CLI-Wert gewinnt nur, wenn er explizit vom Default abweicht
+            cfg_intro_fade = intro_fade if intro_fade != 1.0 else cfg.intro_fade_duration
             if cfg.quotes:
                 cfg_quotes = [
                     Quote(

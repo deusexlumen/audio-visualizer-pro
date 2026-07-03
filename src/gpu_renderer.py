@@ -18,6 +18,7 @@ import numpy as np
 
 from .analyzer import AudioAnalyzer
 from .app_logging import get_logger
+from .gpu_bloom import BloomPass, load_cube_lut
 from .types import AudioFeatures, Quote
 from .gpu_visualizers import get_visualizer
 from .gpu_text_renderer import SDFFontAtlas, GPUTextRenderer
@@ -119,6 +120,26 @@ class GPUBatchRenderer:
         self.post_fbo = self.ctx.framebuffer(
             color_attachments=[self.ctx.texture((width, height), 4)]
         )
+
+        # HDR-Bloom-Kette (Threshold -> Downsample -> Tent-Upsample)
+        try:
+            self._bloom = BloomPass(self.ctx, width, height)
+        except Exception as e:
+            logger.warning(f"[GPU] Bloom nicht verfuegbar: {e}")
+            self._bloom = None
+
+        # LUT-Zustand (3D-Textur wird bei Bedarf geladen und gecached).
+        # Platzhalter-LUT, damit der sampler3D immer gueltig gebunden ist.
+        self._lut_texture = None
+        self._lut_path = None
+        self._lut_size = 0
+        try:
+            self._lut_placeholder = self.ctx.texture3d(
+                (1, 1, 1), 3, b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00', dtype='f4'
+            )
+        except Exception:
+            self._lut_placeholder = None
+
         self._init_postprocess()
         self._init_composite_shader()
 
@@ -397,9 +418,20 @@ class GPUBatchRenderer:
                     if _DEBUG and i == 0:
                         self._save_debug(self.fbo, "debug_step3b_after_viz_blit.png")
 
-                    # Finaler Pass laeuft IMMER: Exposure -> ACES-Tonemap ->
-                    # Grading -> Dither -> RGBA8 (post_fbo)
                     pp = postprocess or {}
+
+                    # HDR-Bloom: helle Bereiche (>threshold) leuchten weich aus,
+                    # additiv auf die Szene VOR dem Tonemapping
+                    bloom_intensity = pp.get("bloom_intensity", 0.6)
+                    if self._bloom is not None and bloom_intensity > 0.0:
+                        self._apply_bloom(
+                            intensity=bloom_intensity,
+                            threshold=pp.get("bloom_threshold", 1.0),
+                            radius=pp.get("bloom_radius", 1.0),
+                        )
+
+                    # Finaler Pass laeuft IMMER: Exposure -> ACES-Tonemap ->
+                    # Grading -> LUT -> Vignette -> Grain -> Dither -> RGBA8
                     self._apply_postprocess(
                         self.fbo.color_attachments[0],
                         contrast=pp.get("contrast", 1.0),
@@ -409,6 +441,10 @@ class GPUBatchRenderer:
                         film_grain=pp.get("film_grain", 0.0),
                         time=time,
                         exposure=pp.get("exposure", 1.0),
+                        vignette=pp.get("vignette", 0.0),
+                        chromatic_aberration=pp.get("chromatic_aberration", 0.0),
+                        lut_path=pp.get("lut"),
+                        lut_strength=pp.get("lut_strength", 1.0),
                     )
                     if _DEBUG and i == 0:
                         self._save_debug(self.post_fbo, "debug_step4_after_postprocess.png")
@@ -917,12 +953,17 @@ class GPUBatchRenderer:
         fragment = compose_fragment(
             """
             uniform sampler2D u_texture;
+            uniform sampler3D u_lut;
             uniform float u_exposure;
             uniform float u_contrast;
             uniform float u_saturation;
             uniform float u_brightness;
             uniform float u_warmth;
             uniform float u_film_grain;
+            uniform float u_vignette;
+            uniform float u_chromatic_aberration;
+            uniform float u_lut_strength;
+            uniform float u_lut_size;
             uniform float u_time;
             in vec2 v_uv;
             out vec4 f_color;
@@ -932,6 +973,15 @@ class GPUBatchRenderer:
                 vec4 tex = texture(u_texture, uv);
                 vec3 col = max(tex.rgb, 0.0);
                 float alpha = tex.a;
+
+                // Echte chromatische Aberration: radialer RGB-Sample-Versatz
+                // (staerker zum Bildrand hin, wie bei realen Linsen)
+                if (u_chromatic_aberration > 0.0) {
+                    vec2 dir = uv - 0.5;
+                    vec2 offset = dir * u_chromatic_aberration * 0.004;
+                    col.r = max(texture(u_texture, uv + offset).r, 0.0);
+                    col.b = max(texture(u_texture, uv - offset).b, 0.0);
+                }
 
                 // Exposure (im HDR-Raum, vor dem Tonemapping)
                 col *= u_exposure;
@@ -968,10 +1018,30 @@ class GPUBatchRenderer:
                     col.b -= u_warmth * 0.08;
                 }
 
-                // Film Grain
+                // 3D-LUT Color-Grading (nach dem Tonemapping, display-referred)
+                if (u_lut_strength > 0.0 && u_lut_size > 1.0) {
+                    vec3 lut_uv = clamp(col, 0.0, 1.0)
+                        * ((u_lut_size - 1.0) / u_lut_size) + 0.5 / u_lut_size;
+                    vec3 lutted = texture(u_lut, lut_uv).rgb;
+                    col = mix(col, lutted, u_lut_strength);
+                }
+
+                // Vignette auf dem Gesamtbild
+                if (u_vignette > 0.0) {
+                    float dist = length(uv - 0.5) * 1.4142;
+                    col *= 1.0 - u_vignette * smoothstep(0.3, 1.0, dist);
+                }
+
+                // Film Grain: luminanzabhaengig (Schatten staerker als Lichter),
+                // dreieckig verteilt und pro Frame animiert
                 if (u_film_grain > 0.0) {
-                    float grain = hash12(gl_FragCoord.xy + fract(u_time * 100.0) * 100.0) * 2.0 - 1.0;
-                    col += grain * u_film_grain * 0.05;
+                    float t = fract(u_time * 100.0);
+                    float g1 = hash12(gl_FragCoord.xy * 1.31 + t * 271.0);
+                    float g2 = hash12(gl_FragCoord.xy * 0.73 + t * 137.0 + 43.0);
+                    float grain = g1 + g2 - 1.0;
+                    float lumaG = dot(clamp(col, 0.0, 1.0), vec3(0.299, 0.587, 0.114));
+                    float weight = 0.3 + 0.7 * (1.0 - smoothstep(0.0, 1.0, lumaG));
+                    col += grain * u_film_grain * 0.08 * weight;
                 }
 
                 // Triangular-Dither gegen Banding bei 8-Bit-Quantisierung
@@ -992,23 +1062,80 @@ class GPUBatchRenderer:
         )
         self._pp_vao, self._pp_vbo = create_textured_quad(self.ctx, self._pp_prog)
 
+    def _apply_bloom(self, intensity=0.6, threshold=1.0, radius=1.0):
+        """Berechnet HDR-Bloom aus der Szene und addiert ihn auf self.fbo."""
+        if self._bloom is None:
+            return
+        self._bloom.apply(
+            self.fbo,
+            self.fbo.color_attachments[0],
+            intensity=intensity,
+            threshold=threshold,
+            radius=radius,
+        )
+
+    def _ensure_lut(self, lut_path):
+        """Laedt die 3D-LUT-Textur bei Bedarf (gecached pro Pfad).
+
+        Returns:
+            Groesse der geladenen LUT (0 wenn keine LUT aktiv).
+        """
+        if not lut_path:
+            return 0
+        if lut_path == self._lut_path and self._lut_texture is not None:
+            return self._lut_size
+        try:
+            arr = load_cube_lut(lut_path)
+            size = arr.shape[0]
+            if self._lut_texture is not None:
+                try:
+                    self._lut_texture.release()
+                except Exception:
+                    pass
+            self._lut_texture = self.ctx.texture3d(
+                (size, size, size), 3, arr.tobytes(), dtype='f4'
+            )
+            self._lut_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+            self._lut_path = lut_path
+            self._lut_size = size
+            logger.info(f"[GPU] LUT geladen: {lut_path} ({size}x{size}x{size})")
+            return size
+        except Exception as e:
+            logger.warning(f"[GPU] LUT konnte nicht geladen werden ({lut_path}): {e}")
+            self._lut_path = lut_path  # Nicht bei jedem Frame erneut versuchen
+            self._lut_size = 0
+            return 0
+
     def _apply_postprocess(self, texture, contrast=1.0, saturation=1.0, brightness=0.0,
-                           warmth=0.0, film_grain=0.0, time=0.0, exposure=1.0):
+                           warmth=0.0, film_grain=0.0, time=0.0, exposure=1.0,
+                           vignette=0.0, chromatic_aberration=0.0,
+                           lut_path=None, lut_strength=1.0):
         """Wendet den finalen Tonemap/Color-Grading-Pass auf die Textur an.
 
         Rendert das Ergebnis in self.post_fbo (RGBA8, bereit fuer den Readback).
         """
+        lut_size = self._ensure_lut(lut_path)
+
         self.post_fbo.use()
         self._pp_prog["u_texture"].value = 0
+        self._pp_prog["u_lut"].value = 1
         self._pp_prog["u_exposure"].value = exposure
         self._pp_prog["u_contrast"].value = contrast
         self._pp_prog["u_saturation"].value = saturation
         self._pp_prog["u_brightness"].value = brightness
         self._pp_prog["u_warmth"].value = warmth
         self._pp_prog["u_film_grain"].value = film_grain
+        self._pp_prog["u_vignette"].value = vignette
+        self._pp_prog["u_chromatic_aberration"].value = chromatic_aberration
+        self._pp_prog["u_lut_strength"].value = lut_strength if lut_size > 0 else 0.0
+        self._pp_prog["u_lut_size"].value = float(lut_size)
         self._pp_prog["u_time"].value = time
 
         texture.use(location=0)
+        if self._lut_texture is not None and lut_size > 0:
+            self._lut_texture.use(location=1)
+        elif self._lut_placeholder is not None:
+            self._lut_placeholder.use(location=1)
         self._pp_vao.render(mode=moderngl.TRIANGLE_STRIP)
     
     def _init_composite_shader(self):
@@ -1205,6 +1332,17 @@ class GPUBatchRenderer:
             if hasattr(self, "viz_ms_fbo") and self.viz_ms_fbo:
                 self.viz_ms_fbo.release()
                 self.viz_ms_fbo = None
+            if hasattr(self, "_bloom") and self._bloom:
+                self._bloom.release()
+                self._bloom = None
+            for lut_attr in ("_lut_texture", "_lut_placeholder"):
+                obj = getattr(self, lut_attr, None)
+                if obj:
+                    try:
+                        obj.release()
+                    except Exception:
+                        pass
+                    setattr(self, lut_attr, None)
             if hasattr(self, "_dummy_black_texture") and self._dummy_black_texture:
                 self._dummy_black_texture.release()
                 self._dummy_black_texture = None
