@@ -146,27 +146,86 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         """Re-initialisiere Partikel wenn sich die Anzahl aendert."""
         self._init_particles()
 
+    # Maximale Trail-Historie (entspricht PARAMS['trail_length'] Maximum)
+    _MAX_TRAIL = 10
+
     def _init_particles(self):
-        """Initialisiere Partikel-Array und Trails."""
+        """Initialisiere Partikel-Array und Trail-Historie (vektorisiert)."""
         count = int(self.params["particle_count"])
+        # Spalten: x, y, vx, vy, life, max_life, size, hue, depth
         self._particles = np.zeros((count, 9), dtype=np.float32)
-        self._trails = [[] for _ in range(count)]
+        # Trail-Historie als Ringpuffer: (Slot, Partikel, [x, y, life])
+        self._trail_hist = np.zeros((self._MAX_TRAIL, count, 3), dtype=np.float32)
+        self._trail_valid = np.zeros(count, dtype=np.int32)
 
+        self._spawn(np.arange(count), explode=False, chroma=None)
+
+    def _spawn(self, idx: np.ndarray, explode: bool, chroma: np.ndarray = None):
+        """(Re-)Initialisiert die Partikel an den angegebenen Indizes.
+
+        Args:
+            idx: Array von Partikel-Indizes.
+            explode: True = Explosion vom Zentrum, False = zufaellige Startposition.
+        """
+        n = idx.size
+        if n == 0:
+            return
+        p = self._particles
         cx, cy = self.width / 2.0, self.height / 2.0
+        angle = np.random.random(n).astype(np.float32) * np.pi * 2
 
-        for i in range(count):
-            angle = np.random.random() * np.pi * 2
-            dist = np.random.random() * 80.0
-            self._particles[i, 0] = cx + np.cos(angle) * dist
-            self._particles[i, 1] = cy + np.sin(angle) * dist
-            self._particles[i, 2] = np.cos(angle) * np.random.random() * 1.5
-            self._particles[i, 3] = np.sin(angle) * np.random.random() * 1.5
-            self._particles[i, 4] = 1.0  # life
-            self._particles[i, 5] = 0.5 + np.random.random() * 1.0  # max_life
-            self._particles[i, 6] = 2.0 + np.random.random() * 5.0  # size
-            self._particles[i, 7] = np.random.random()  # hue
-            self._particles[i, 8] = np.random.random()  # depth
-            self._trails[i] = []
+        if explode:
+            # ease_out_expo Geschwindigkeit
+            t = np.random.random(n).astype(np.float32)
+            speed = (1.0 - np.power(2.0, -10.0 * t)) * 12.0 + 3.0
+            speed *= self.params["speed_scale"]
+            p[idx, 0] = cx
+            p[idx, 1] = cy
+            p[idx, 2] = np.cos(angle) * speed
+            p[idx, 3] = np.sin(angle) * speed
+        else:
+            dist = np.random.random(n).astype(np.float32) * 80.0
+            p[idx, 0] = cx + np.cos(angle) * dist
+            p[idx, 1] = cy + np.sin(angle) * dist
+            p[idx, 2] = np.cos(angle) * np.random.random(n) * 1.5
+            p[idx, 3] = np.sin(angle) * np.random.random(n) * 1.5
+
+        p[idx, 4] = 1.0  # life
+        p[idx, 5] = 0.5 + np.random.random(n) * 1.0  # max_life
+        p[idx, 6] = 2.0 + np.random.random(n) * 5.0  # size
+        p[idx, 7] = self._new_hue(chroma) + np.random.random(n) * 0.1  # hue
+        p[idx, 8] = np.random.random(n)  # depth
+        self._trail_valid[idx] = 0
+
+    @staticmethod
+    def _hsv_to_rgb_array(h: np.ndarray, s, v: np.ndarray) -> np.ndarray:
+        """Vektorisierte HSV->RGB-Konvertierung.
+
+        Args:
+            h: Hue-Array (0-1), s: Saettigung (Skalar oder Array), v: Value-Array.
+
+        Returns:
+            Array der Shape (N, 3).
+        """
+        h = np.mod(h, 1.0)
+        i = (h * 6.0).astype(np.int32) % 6
+        f = h * 6.0 - np.floor(h * 6.0)
+        s = np.broadcast_to(np.float32(s), h.shape)
+        pp = v * (1.0 - s)
+        qq = v * (1.0 - s * f)
+        tt = v * (1.0 - s * (1.0 - f))
+
+        rgb = np.empty(h.shape + (3,), dtype=np.float32)
+        conds = [
+            (v, tt, pp), (qq, v, pp), (pp, v, tt),
+            (pp, qq, v), (tt, pp, v), (v, pp, qq),
+        ]
+        for k, (r, g, b) in enumerate(conds):
+            mask = i == k
+            rgb[mask, 0] = r[mask]
+            rgb[mask, 1] = g[mask]
+            rgb[mask, 2] = b[mask]
+        return rgb
 
     def _new_hue(self, chroma: np.ndarray = None) -> float:
         """Gibt einen neuen Farbton basierend auf color_mode zurueck."""
@@ -187,49 +246,16 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         # monochrome
         return 0.0
 
-    def _explode_particle(self, idx: int, chroma: np.ndarray):
-        """Explodiert ein Partikel vom Zentrum aus."""
-        cx, cy = self.width / 2.0, self.height / 2.0
-        angle = np.random.random() * np.pi * 2
-        # ease_out_expo
-        t = np.random.random()
-        speed = (1.0 - pow(2.0, -10.0 * t)) * 12.0 + 3.0
-        speed *= self.params["speed_scale"]
-
-        self._particles[idx, 0] = cx
-        self._particles[idx, 1] = cy
-        self._particles[idx, 2] = np.cos(angle) * speed
-        self._particles[idx, 3] = np.sin(angle) * speed
-        self._particles[idx, 4] = 1.0
-        self._particles[idx, 5] = 0.5 + np.random.random() * 1.0
-        self._particles[idx, 6] = 2.0 + np.random.random() * 5.0
-        self._particles[idx, 7] = self._new_hue(chroma) + np.random.random() * 0.1
-        self._particles[idx, 8] = np.random.random()
-        self._trails[idx] = []
-
-    def _reset_particle(self, idx: int, chroma: np.ndarray = None):
-        """Setzt ein Partikel auf zufaellige Startposition zurueck."""
-        cx, cy = self.width / 2.0, self.height / 2.0
-        angle = np.random.random() * np.pi * 2
-        dist = np.random.random() * 80.0
-
-        self._particles[idx, 0] = cx + np.cos(angle) * dist
-        self._particles[idx, 1] = cy + np.sin(angle) * dist
-        self._particles[idx, 2] = np.cos(angle) * np.random.random() * 1.5
-        self._particles[idx, 3] = np.sin(angle) * np.random.random() * 1.5
-        self._particles[idx, 4] = 1.0
-        self._particles[idx, 5] = 0.5 + np.random.random() * 1.0
-        self._particles[idx, 6] = 2.0 + np.random.random() * 5.0
-        self._particles[idx, 7] = self._new_hue(chroma) + np.random.random() * 0.1
-        self._particles[idx, 8] = np.random.random()
-        self._trails[idx] = []
-
     def render(self, features: dict, time: float):
-        """Rendert einen Frame mit Partikeln, Trails und Zentrumspuls."""
+        """Rendert einen Frame mit Partikeln, Trails und Zentrumspuls.
+
+        Physik, Farben und Instanz-Aufbau sind komplett vektorisiert
+        (NumPy) — keine Python-Schleife ueber Partikel mehr.
+        """
         frame_idx = int(time * features.get("fps", 30))
         f = self._get_feature_at_frame(features, frame_idx)
-        rms = f["rms"]
-        onset = f["onset"]
+        rms = float(f["rms"])
+        onset = float(f["onset"])
         chroma = f["chroma"]
 
         cx, cy = self.width / 2.0, self.height / 2.0
@@ -243,144 +269,105 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         friction = self.params["friction"]
         life_decay = self.params["life_decay"]
         size_scale = self.params["size_scale"]
+        trail_decay = self.params.get("trail_decay", 0.7)
+
+        p = self._particles
+
+        # Trail-Historie aufzeichnen (Positionen VOR dem Physik-Update)
+        if trail_len > 0:
+            self._trail_hist[:-1] = self._trail_hist[1:]
+            self._trail_hist[-1, :, 0] = p[:, 0]
+            self._trail_hist[-1, :, 1] = p[:, 1]
+            self._trail_hist[-1, :, 2] = p[:, 4]
+            np.minimum(self._trail_valid + 1, trail_len, out=self._trail_valid)
+        else:
+            self._trail_valid[:] = 0
 
         # Beat-Explosion
         if onset > threshold:
             explode_count = int(count * onset * 0.3)
-            for _ in range(explode_count):
-                idx = np.random.randint(0, count)
-                self._explode_particle(idx, chroma)
+            if explode_count > 0:
+                idx = np.random.randint(0, count, explode_count)
+                self._spawn(np.unique(idx), explode=True, chroma=chroma)
 
-        # Farbe aus color_mode/Chroma fuer Partikel und Zentrumspuls
+        # === Physik-Update (vektorisiert) ===
+        p[:, 0] += p[:, 2]
+        p[:, 1] += p[:, 3]
+        dx = cx - p[:, 0]
+        dy = cy - p[:, 1]
+        dist = np.sqrt(dx * dx + dy * dy) + 1.0
+        force = center_force * rms
+        p[:, 2] = (p[:, 2] + dx / dist * force) * friction
+        p[:, 3] = (p[:, 3] + dy / dist * force) * friction
+        p[:, 4] -= life_decay * (1.0 + rms)
+
+        dead = np.where(p[:, 4] <= 0)[0]
+        if dead.size > 0:
+            self._spawn(dead, explode=False, chroma=chroma)
+
+        # === Farben & Groessen (vektorisiert) ===
         base_color = self._chroma_to_color(chroma)
         main_color = tuple(c * 0.7 for c in base_color)
         color_mode = self.params.get('color_mode', 'chroma')
         base_saturation = 0.0 if color_mode == 'monochrome' else float(self.params.get('color_saturation', 0.7))
+        base_hue = self._color_to_hue(base_color)
 
-        # Instance-Array fuellen
-        instance_idx = 0
+        life_ratio = np.where(p[:, 5] > 0, p[:, 4] / np.maximum(p[:, 5], 1e-6), 0.0)
+        value = life_ratio * (0.5 + rms * 0.3)
+        hue = (base_hue + p[:, 7] * 0.15) % 1.0
+        rgb = self._hsv_to_rgb_array(hue, base_saturation * (0.5 + rms * 0.2), value)
 
-        for i in range(count):
-            x = self._particles[i, 0]
-            y = self._particles[i, 1]
-            vx = self._particles[i, 2]
-            vy = self._particles[i, 3]
-            life = self._particles[i, 4]
-            max_life = self._particles[i, 5]
-            size = self._particles[i, 6]
-            hue = self._particles[i, 7]
-            depth = self._particles[i, 8]
+        depth_scale = (0.6 + p[:, 8] * 0.4) if depth_enabled else np.ones(count, dtype=np.float32)
+        current_size = p[:, 6] * life_ratio * (0.8 + rms * 0.4) * depth_scale * size_scale
+        total_size = current_size * 1.5 + glow_size * rms
 
-            # Trail speichern
-            self._trails[i].append((float(x), float(y), float(life)))
-            if len(self._trails[i]) > trail_len:
-                self._trails[i].pop(0)
+        instance_parts = []
 
-            # Physik-Update
-            x += vx
-            y += vy
+        # === Trail-Instanzen ((Slot, Partikel)-Gitter, aeltester Slot zuerst) ===
+        if trail_len > 0:
+            hist = self._trail_hist[self._MAX_TRAIL - trail_len:]  # (T, N, 3)
+            valid = self._trail_valid  # (N,)
+            slots = np.arange(trail_len, dtype=np.int32)[:, None]  # (T, 1)
+            ti = slots - (trail_len - valid[None, :])  # Index innerhalb der Partikel-Liste
+            valid_mask = (ti >= 0) & (hist[:, :, 2] > 0)
+            if valid_mask.any():
+                valid_safe = np.maximum(valid[None, :], 1)
+                t_ratio = (ti + 1) / valid_safe
+                trail_dist = np.maximum(valid[None, :] - 1 - ti, 0)
+                trail_fade = np.power(trail_decay, trail_dist)
+                t_alpha = 0.35 * t_ratio * hist[:, :, 2] * trail_fade
+                t_size = np.maximum(1.0, current_size * 0.4)
 
-            dx = cx - x
-            dy = cy - y
-            dist = np.sqrt(dx * dx + dy * dy) + 1.0
-            force = center_force * rms
-            vx += (dx / dist) * force
-            vy += (dy / dist) * force
-            vx *= friction
-            vy *= friction
+                trails = np.empty((trail_len, count, 7), dtype=np.float32)
+                trails[:, :, 0:2] = hist[:, :, 0:2]
+                trails[:, :, 2:5] = rgb[None, :, :]
+                trails[:, :, 5] = t_size[None, :]
+                trails[:, :, 6] = t_alpha
+                instance_parts.append(trails[valid_mask])
 
-            life -= life_decay * (1.0 + rms)
+        # === Partikel-Instanzen ===
+        part_mask = current_size > 0
+        if part_mask.any():
+            parts = np.empty((count, 7), dtype=np.float32)
+            parts[:, 0] = p[:, 0]
+            parts[:, 1] = p[:, 1]
+            parts[:, 2:5] = rgb
+            parts[:, 5] = total_size
+            parts[:, 6] = life_ratio
+            instance_parts.append(parts[part_mask])
 
-            if life <= 0:
-                self._reset_particle(i, chroma)
-                x = self._particles[i, 0]
-                y = self._particles[i, 1]
-                vx = self._particles[i, 2]
-                vy = self._particles[i, 3]
-                life = self._particles[i, 4]
-                max_life = self._particles[i, 5]
-                size = self._particles[i, 6]
-                hue = self._particles[i, 7]
-                depth = self._particles[i, 8]
-
-            # State zurueckschreiben
-            self._particles[i, 0] = x
-            self._particles[i, 1] = y
-            self._particles[i, 2] = vx
-            self._particles[i, 3] = vy
-            self._particles[i, 4] = life
-
-            # Farbe und Groesse berechnen
-            life_ratio = life / max_life if max_life > 0 else 0.0
-            value = life_ratio * (0.5 + rms * 0.3)
-            # Leichte Hue-Variation pro Partikel, ansonsten Farbe aus color_mode
-            rgb = self._hsv_to_rgb(
-                (self._color_to_hue(base_color) + float(hue) * 0.15) % 1.0,
-                base_saturation * (0.5 + rms * 0.2),
-                value,
-            )
-
-            depth_scale = 0.6 + depth * 0.4 if depth_enabled else 1.0
-            current_size = size * life_ratio * (0.8 + rms * 0.4) * depth_scale * size_scale
-            total_size = current_size * 1.5 + glow_size * rms
-
-            # Trail-Punkte als Instanzen
-            trail_decay = self.params.get("trail_decay", 0.7)
-            if trail_len > 0:
-                for ti, (tx, ty, tl) in enumerate(self._trails[i]):
-                    if tl > 0 and instance_idx < self._max_instances:
-                        t_ratio = (
-                            (ti + 1) / len(self._trails[i])
-                            if len(self._trails[i]) > 0
-                            else 0
-                        )
-                        trail_dist = len(self._trails[i]) - 1 - ti
-                        # Korrektes Trail-Fading: juengere Punkte staerker (decay^dist)
-                        trail_fade = pow(trail_decay, trail_dist)
-                        t_alpha = 0.35 * t_ratio * tl * trail_fade
-                        t_size = max(1.0, current_size * 0.4)
-                        self._instance_data[instance_idx] = [
-                            tx,
-                            ty,
-                            rgb[0],
-                            rgb[1],
-                            rgb[2],
-                            t_size,
-                            t_alpha,
-                        ]
-                        instance_idx += 1
-
-            # Partikel als Instanz
-            if current_size > 0 and instance_idx < self._max_instances:
-                alpha = life_ratio
-                self._instance_data[instance_idx] = [
-                    x,
-                    y,
-                    rgb[0],
-                    rgb[1],
-                    rgb[2],
-                    total_size,
-                    alpha,
-                ]
-                instance_idx += 1
-
-        # Zentrumspuls-Ringe (als grosse, schwache Glow-Kreise)
+        # === Zentrumspuls-Ringe ===
         pulse_radius = 15.0 + rms * 25.0
+        rings = np.empty((4, 7), dtype=np.float32)
         for j in range(4):
-            if instance_idx >= self._max_instances:
-                break
-            ring_alpha = (1.0 - j / 4.0) * rms * 0.35
-            ring_size = pulse_radius + j * 8.0
-            self._instance_data[instance_idx] = [
-                cx,
-                cy,
-                main_color[0],
-                main_color[1],
-                main_color[2],
-                ring_size,
-                ring_alpha,
-            ]
-            instance_idx += 1
+            rings[j] = [cx, cy, main_color[0], main_color[1], main_color[2],
+                        pulse_radius + j * 8.0, (1.0 - j / 4.0) * rms * 0.35]
+        instance_parts.append(rings)
+
+        instances = np.concatenate(instance_parts, axis=0)
+        if instances.shape[0] > self._max_instances:
+            instances = instances[:self._max_instances]
+        instance_count = instances.shape[0]
 
         # Aufloesung und Brightness an Shader uebergeben
         self._prog["u_resolution"].value = (self.width, self.height)
@@ -388,9 +375,9 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         self._prog["u_glow_strength"].value = glow_strength
 
         # Rendern
-        if instance_idx > 0:
-            self._instance_vbo.write(self._instance_data[:instance_idx].tobytes())
+        if instance_count > 0:
+            self._instance_vbo.write(np.ascontiguousarray(instances).tobytes())
             self.ctx.enable(moderngl.BLEND)
             self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-            self._vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_idx)
+            self._vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_count)
             self.ctx.disable(moderngl.BLEND)

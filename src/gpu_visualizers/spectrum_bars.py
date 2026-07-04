@@ -134,9 +134,33 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
         self.prog["u_brightness"].value = self.params.get("brightness", 1.0)
         self.vao.render(mode=moderngl.TRIANGLES)
 
+    @staticmethod
+    def _hsv_to_rgb_array(h: np.ndarray, s: float, v: np.ndarray) -> np.ndarray:
+        """Vektorisierte HSV->RGB-Konvertierung fuer Balken-Farben."""
+        h = np.mod(h, 1.0)
+        i = (h * 6.0).astype(np.int32) % 6
+        f = h * 6.0 - np.floor(h * 6.0)
+        v = np.broadcast_to(np.asarray(v, dtype=np.float32), h.shape)
+        s_arr = np.full(h.shape, s, dtype=np.float32)
+        pp = v * (1.0 - s_arr)
+        qq = v * (1.0 - s_arr * f)
+        tt = v * (1.0 - s_arr * (1.0 - f))
+
+        rgb = np.empty(h.shape + (3,), dtype=np.float32)
+        conds = [
+            (v, tt, pp), (qq, v, pp), (pp, v, tt),
+            (pp, qq, v), (tt, pp, v), (v, pp, qq),
+        ]
+        for k, (r, g, b) in enumerate(conds):
+            mask = i == k
+            rgb[mask, 0] = r[mask]
+            rgb[mask, 1] = g[mask]
+            rgb[mask, 2] = b[mask]
+        return rgb
+
     def _build_bar_vertices(self, max_height: float, hue: float,
                             saturation: float, brightness: float) -> np.ndarray:
-        """Baut das VBO-Array fuer alle Balken.
+        """Baut das VBO-Array fuer alle Balken (vektorisiert via NumPy).
 
         Args:
             max_height: Maximale Balkenhoehe in Pixeln.
@@ -147,10 +171,8 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
         Returns:
             Numpy-Array mit allen Vertex-Daten.
         """
-        vertices = np.zeros(self._max_vertices, dtype=self._vertex_dtype)
-
-        usable_width = self.width
-        total_bar_width = usable_width / self.bar_count
+        n = self.bar_count
+        total_bar_width = self.width / n
         bar_width = total_bar_width * (1.0 - self.bar_spacing_ratio)
         spacing = total_bar_width * self.bar_spacing_ratio
 
@@ -158,42 +180,38 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
         color_spread = self.params['color_spread']
         color_shift = self.params['color_shift']
 
-        for i in range(self.bar_count):
-            # Individuelle Hoehe pro Balken leicht variieren fuer visuelle Dynamik
-            bar_height = max_height * (0.4 + 0.6 * np.sin(i * wave_count + hue * 6.28) ** 2)
-            bar_height = max(2.0, min(bar_height, self.height))
+        i = np.arange(n, dtype=np.float32)
 
-            x_left = i * total_bar_width + spacing / 2.0
-            x_right = x_left + bar_width
-            y_bottom = 0.0
-            y_top = bar_height
+        # Individuelle Hoehe pro Balken (Wellen-Variation wie bisher)
+        bar_height = max_height * (0.4 + 0.6 * np.sin(i * wave_count + hue * 6.28) ** 2)
+        bar_height = np.clip(bar_height, 2.0, self.height)
 
-            # Farbverlauf von unten (dunkel) nach oben (hell)
-            local_hue = hue + i * color_spread + color_shift
-            color_bottom = self._hsv_to_rgb(local_hue, saturation, 0.45 * brightness)
-            color_top = self._hsv_to_rgb(local_hue, saturation, 0.95 * brightness)
+        x_left = i * total_bar_width + spacing / 2.0
+        x_right = x_left + bar_width
 
-            idx = i * self._vertices_per_bar
+        # Farbverlauf von unten (dunkel) nach oben (hell)
+        local_hue = hue + i * color_spread + color_shift
+        color_bottom = self._hsv_to_rgb_array(local_hue, saturation, np.float32(0.45 * brightness))
+        color_top = self._hsv_to_rgb_array(local_hue, saturation, np.float32(0.95 * brightness))
 
-            # Erstes Dreieck (links-unten, rechts-unten, rechts-oben)
-            vertices[idx + 0]["in_position"] = (x_left, y_bottom)
-            vertices[idx + 0]["in_color"] = color_bottom
+        # 6 Vertices pro Balken: (lu, ru, ro) + (lu, ro, lo)
+        vertices = np.zeros(self._max_vertices, dtype=self._vertex_dtype)
+        pos = vertices["in_position"].reshape(n, 6, 2)
+        col = vertices["in_color"].reshape(n, 6, 3)
 
-            vertices[idx + 1]["in_position"] = (x_right, y_bottom)
-            vertices[idx + 1]["in_color"] = color_bottom
+        pos[:, 0, 0] = x_left;  pos[:, 0, 1] = 0.0
+        pos[:, 1, 0] = x_right; pos[:, 1, 1] = 0.0
+        pos[:, 2, 0] = x_right; pos[:, 2, 1] = bar_height
+        pos[:, 3, 0] = x_left;  pos[:, 3, 1] = 0.0
+        pos[:, 4, 0] = x_right; pos[:, 4, 1] = bar_height
+        pos[:, 5, 0] = x_left;  pos[:, 5, 1] = bar_height
 
-            vertices[idx + 2]["in_position"] = (x_right, y_top)
-            vertices[idx + 2]["in_color"] = color_top
-
-            # Zweites Dreieck (links-unten, rechts-oben, links-oben)
-            vertices[idx + 3]["in_position"] = (x_left, y_bottom)
-            vertices[idx + 3]["in_color"] = color_bottom
-
-            vertices[idx + 4]["in_position"] = (x_right, y_top)
-            vertices[idx + 4]["in_color"] = color_top
-
-            vertices[idx + 5]["in_position"] = (x_left, y_top)
-            vertices[idx + 5]["in_color"] = color_top
+        col[:, 0] = color_bottom
+        col[:, 1] = color_bottom
+        col[:, 2] = color_top
+        col[:, 3] = color_bottom
+        col[:, 4] = color_top
+        col[:, 5] = color_top
 
         return vertices
 

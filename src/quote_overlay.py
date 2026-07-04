@@ -96,6 +96,12 @@ class QuoteOverlayRenderer:
         self._frame_count = 0
         self._fps = 30
         self._dirty = True
+
+        # Overlay-Cache: Das gerenderte Text-Overlay ist fuer ein Zitat ueber
+        # hunderte Frames identisch (nur der Fade-Alpha aendert sich).
+        # Key: (text, bildgroesse, config-fingerprint) -> vorgerendertes Overlay.
+        self._overlay_cache: Dict[Any, dict] = {}
+        self._overlay_cache_max = 8
     
     def _load_font(self, size: int = None):
         """Laedt eine Schriftart mit Fallback."""
@@ -277,86 +283,88 @@ class QuoteOverlayRenderer:
             total_height = len(lines) * line_height + (len(lines) - 1) * self.config.line_spacing
             return (max_width, total_height)
     
-    def apply(self, frame: np.ndarray, time_seconds: float, frame_idx: int = None) -> np.ndarray:
-        """
-        Wendet Quote-Overlays auf einen Frame an.
-        
-        Args:
-            frame: RGB numpy array (H, W, 3)
-            time_seconds: Aktuelle Zeit im Video in Sekunden
-            frame_idx: Optionaler Frame-Index fuer schnellen O(1) Buffer-Lookup
-            
+    def _config_fingerprint(self) -> tuple:
+        """Fingerprint aller Config-Felder, die das gerenderte Overlay beeinflussen."""
+        c = self.config
+        return (
+            c.font_size, tuple(c.font_color), tuple(c.box_color), c.box_alpha,
+            c.box_padding, c.box_radius, c.box_margin_bottom, c.max_width_ratio,
+            tuple(c.shadow_color), tuple(c.shadow_offset), c.line_spacing,
+            c.max_chars_per_line, c.position, c.font_path, c.text_align,
+            c.text_shadow_enabled, tuple(c.text_shadow_color),
+            c.box_gradient, c.accent_line, tuple(c.accent_line_color),
+            c.accent_line_height,
+            getattr(c, 'offset_x', 0), getattr(c, 'offset_y', 0),
+            getattr(c, 'scale', 1.0),
+        )
+
+    def _get_cached_overlay(self, text: str, size: tuple) -> Optional[dict]:
+        """Liefert das vorgerenderte Overlay fuer ein Zitat (mit Cache).
+
         Returns:
-            Frame mit Overlay (falls ein Zitat aktiv ist)
+            Dict mit 'rgb' (float32 HxWx3), 'alpha' (float32 HxW, 0-1),
+            'pos' (x1, y1) und 'comp_rect' (Bereich fuer die
+            Hintergrund-Kompensation) — oder None, wenn kein Text vorhanden.
         """
-        if not self.config.enabled or not self.quotes:
-            return frame
-        
-        quote = self._get_active_quote(time_seconds, frame_idx)
-        if quote is None:
-            return frame
-        
-        # Fade-Alpha berechnen
-        alpha = self._calculate_fade_alpha(time_seconds, quote)
-        if alpha <= 0.01:
-            return frame
-        
-        # Konvertiere zu PIL Image (mit Alpha-Kanal fuer Overlay)
-        img = Image.fromarray(frame)
-        overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
+        key = (text, size, self._config_fingerprint())
+        cached = self._overlay_cache.get(key)
+        if cached is not None:
+            return cached
+
+        entry = self._build_overlay(text, size)
+        if entry is None:
+            return None
+        # Einfache Groessenbegrenzung: aeltesten Eintrag verwerfen
+        if len(self._overlay_cache) >= self._overlay_cache_max:
+            self._overlay_cache.pop(next(iter(self._overlay_cache)))
+        self._overlay_cache[key] = entry
+        return entry
+
+    def _build_overlay(self, text: str, size: tuple) -> Optional[dict]:
+        """Rendert das komplette Overlay (Schatten, Box, Text) EINMAL bei Alpha=1.
+
+        Der Rueckgabewert wird im Render-Loop nur noch per NumPy mit dem
+        aktuellen Fade-Alpha auf den Frame gemischt — das erspart die beiden
+        GaussianBlurs und die Gradient-Schleife pro Frame.
+        """
+        img_width, img_height = size
+        overlay = Image.new('RGBA', size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
-        
+
         # Text umbrechen
-        lines = self._wrap_text(quote.text)
+        lines = self._wrap_text(text)
         if not lines:
-            return frame
-        
+            return None
+
         # Groessen berechnen
         text_width, text_height = self._calculate_text_size(lines)
         padding = self.config.box_padding
-        box_width = min(text_width + 2 * padding, int(img.width * self.config.max_width_ratio))
+        box_width = min(text_width + 2 * padding, int(img_width * self.config.max_width_ratio))
         box_height = text_height + 2 * padding
-        
+
         # Offset und Skalierung anwenden
         config_scale = getattr(self.config, 'scale', 1.0)
         offset_x = getattr(self.config, 'offset_x', 0)
         offset_y = getattr(self.config, 'offset_y', 0)
-        
+
         box_width = int(box_width * config_scale)
         box_height = int(box_height * config_scale)
         padding = int(padding * config_scale)
         box_radius = int(self.config.box_radius * config_scale)
-        
+
         # Box positionieren je nach Einstellung (mit Offset)
         if self.config.position == "bottom":
-            box_x = (img.width - box_width) // 2 + offset_x
-            box_y = img.height - box_height - self.config.box_margin_bottom + offset_y
+            box_x = (img_width - box_width) // 2 + offset_x
+            box_y = img_height - box_height - self.config.box_margin_bottom + offset_y
         elif self.config.position == "top":
-            box_x = (img.width - box_width) // 2 + offset_x
+            box_x = (img_width - box_width) // 2 + offset_x
             box_y = self.config.box_margin_bottom + offset_y
         else:  # center
-            box_x = (img.width - box_width) // 2 + offset_x
-            box_y = (img.height - box_height) // 2 + offset_y
-        
-        # === SPATIAL FREQUENCY COMPENSATION ===
-        # Hintergrund im Text-Bereich leicht weichzeichnen und abdunkeln
-        # => Erhoeht Lesbarkeit vor hellen/komplexen Visualizern
-        if getattr(self.config, 'spatial_compensation', False):
-            comp_blur = getattr(self.config, 'compensation_blur', 12.0)
-            comp_darken = getattr(self.config, 'compensation_darken', 0.55)
-            
-            cx1 = max(0, int(box_x))
-            cy1 = max(0, int(box_y))
-            cx2 = min(img.width, int(box_x + box_width))
-            cy2 = min(img.height, int(box_y + box_height))
-            
-            if cx2 > cx1 and cy2 > cy1:
-                region = img.crop((cx1, cy1, cx2, cy2))
-                region = region.filter(ImageFilter.GaussianBlur(radius=comp_blur))
-                enhancer = ImageEnhance.Brightness(region)
-                region = enhancer.enhance(comp_darken)
-                img.paste(region, (cx1, cy1))
-        
+            box_x = (img_width - box_width) // 2 + offset_x
+            box_y = (img_height - box_height) // 2 + offset_y
+
+        alpha = 1.0  # Cache wird bei voller Deckkraft gebaut, Fade kommt in apply()
+
         # === WEICHER BOX-SCHATTEN ===
         shadow = self.config.shadow_offset
         scaled_shadow = (int(shadow[0] * config_scale), int(shadow[1] * config_scale))
@@ -365,7 +373,7 @@ class QuoteOverlayRenderer:
             box_x + box_width + scaled_shadow[0], box_y + box_height + scaled_shadow[1]
         ]
         # Shadow-Layer erstellen und weichzeichnen
-        shadow_layer = Image.new('RGBA', img.size, (0, 0, 0, 0))
+        shadow_layer = Image.new('RGBA', size, (0, 0, 0, 0))
         shadow_draw = ImageDraw.Draw(shadow_layer)
         shadow_draw.rounded_rectangle(
             shadow_rect,
@@ -476,10 +484,87 @@ class QuoteOverlayRenderer:
             
             draw.text((line_x, current_y), line, font=font, fill=tuple(font_color))
             current_y += line_height_actual + self.config.line_spacing
-        
-        # Overlay auf Originalbild komponieren
-        img = img.convert('RGBA')
-        img = Image.alpha_composite(img, overlay)
-        
-        # Zurueck zu RGB
-        return np.array(img.convert('RGB'))
+
+        # Auf den relevanten Ausschnitt zuschneiden (Box + Schatten + Blur-Rand),
+        # damit das Per-Frame-Blending nur eine kleine Region beruehrt.
+        margin = int(16 * config_scale) + max(abs(scaled_shadow[0]), abs(scaled_shadow[1]))
+        x1 = max(0, int(box_x) - margin)
+        y1 = max(0, int(box_y) - margin)
+        x2 = min(img_width, int(box_x + box_width) + margin)
+        y2 = min(img_height, int(box_y + box_height) + margin)
+        if x2 <= x1 or y2 <= y1:
+            return None
+
+        crop = np.asarray(overlay.crop((x1, y1, x2, y2)), dtype=np.float32)
+
+        # Bereich fuer die Hintergrund-Kompensation (nur die Box selbst)
+        cx1 = max(0, int(box_x))
+        cy1 = max(0, int(box_y))
+        cx2 = min(img_width, int(box_x + box_width))
+        cy2 = min(img_height, int(box_y + box_height))
+
+        return {
+            "rgb": crop[:, :, :3],
+            "alpha": crop[:, :, 3] / 255.0,
+            "pos": (x1, y1),
+            "comp_rect": (cx1, cy1, cx2, cy2),
+        }
+
+    def apply(self, frame: np.ndarray, time_seconds: float, frame_idx: int = None) -> np.ndarray:
+        """
+        Wendet Quote-Overlays auf einen Frame an.
+
+        Das Overlay selbst kommt aus dem Cache (einmal pro Zitat gerendert);
+        pro Frame passieren nur noch die Hintergrund-Kompensation in der
+        Box-Region und ein NumPy-Alpha-Blend mit dem Fade-Wert.
+
+        Args:
+            frame: RGB numpy array (H, W, 3)
+            time_seconds: Aktuelle Zeit im Video in Sekunden
+            frame_idx: Optionaler Frame-Index fuer schnellen O(1) Buffer-Lookup
+
+        Returns:
+            Frame mit Overlay (falls ein Zitat aktiv ist)
+        """
+        if not self.config.enabled or not self.quotes:
+            return frame
+
+        quote = self._get_active_quote(time_seconds, frame_idx)
+        if quote is None:
+            return frame
+
+        # Fade-Alpha berechnen
+        fade = self._calculate_fade_alpha(time_seconds, quote)
+        if fade <= 0.01:
+            return frame
+
+        height, width = frame.shape[:2]
+        entry = self._get_cached_overlay(quote.text, (width, height))
+        if entry is None:
+            return frame
+
+        result = frame.copy()
+
+        # === SPATIAL FREQUENCY COMPENSATION ===
+        # Hintergrund im Text-Bereich weichzeichnen und abdunkeln
+        # (haengt vom Frame-Inhalt ab und bleibt daher pro Frame)
+        if getattr(self.config, 'spatial_compensation', False):
+            comp_blur = getattr(self.config, 'compensation_blur', 12.0)
+            comp_darken = getattr(self.config, 'compensation_darken', 0.55)
+            cx1, cy1, cx2, cy2 = entry["comp_rect"]
+            if cx2 > cx1 and cy2 > cy1:
+                region = Image.fromarray(result[cy1:cy2, cx1:cx2])
+                region = region.filter(ImageFilter.GaussianBlur(radius=comp_blur))
+                region = ImageEnhance.Brightness(region).enhance(comp_darken)
+                result[cy1:cy2, cx1:cx2] = np.asarray(region)
+
+        # === Cached Overlay mit Fade-Alpha einblenden (reines NumPy) ===
+        x1, y1 = entry["pos"]
+        rgb = entry["rgb"]
+        h, w = rgb.shape[:2]
+        alpha = (entry["alpha"] * fade)[:, :, np.newaxis]
+        region = result[y1:y1 + h, x1:x1 + w].astype(np.float32)
+        blended = region * (1.0 - alpha) + rgb * alpha
+        result[y1:y1 + h, x1:x1 + w] = np.clip(blended, 0, 255).astype(np.uint8)
+
+        return result

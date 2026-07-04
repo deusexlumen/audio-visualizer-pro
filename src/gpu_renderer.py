@@ -357,6 +357,99 @@ class GPUBatchRenderer:
             encode_thread = threading.Thread(target=_encode_worker, daemon=True)
             encode_thread.start()
 
+            # === Hintergrund-Video-Prefetch ===
+            # Dekodiert kommende BG-Frames in einem eigenen Thread, damit
+            # PIL-Decode + Blur nicht auf dem Render-Thread liegen.
+            bg_queue = None
+            bg_stop = threading.Event()
+            bg_thread = None
+            if bg_video_frames is not None:
+                from PIL import Image, ImageFilter
+
+                bg_queue = queue.Queue(maxsize=4)
+
+                def _bg_decoder():
+                    try:
+                        for frame_i in range(frame_count):
+                            if bg_stop.is_set():
+                                break
+                            video_frame_idx = frame_i % len(bg_video_frames)
+                            img = Image.open(bg_video_frames[video_frame_idx]).convert('RGB')
+                            if background_blur > 0.01:
+                                img = img.filter(ImageFilter.GaussianBlur(radius=background_blur))
+                            data = np.array(img, dtype=np.uint8).tobytes()
+                            while not bg_stop.is_set():
+                                try:
+                                    bg_queue.put(data, timeout=0.1)
+                                    break
+                                except queue.Full:
+                                    continue
+                    except Exception as e:
+                        logger.warning(f"[GPU] BG-Video-Decoder-Fehler: {e}")
+                        bg_stop.set()
+
+                bg_thread = threading.Thread(target=_bg_decoder, daemon=True)
+                bg_thread.start()
+
+            def _emit_frame(pixels, frame_time, frame_i) -> bool:
+                """Quote-Overlay anwenden und Frame in die Encoder-Queue geben.
+
+                Returns:
+                    False, wenn der Render abgebrochen werden soll.
+                """
+                # PIL-basierte Quote-Overlays auf das Frame-Array anwenden
+                if quotes and quote_config and quote_config.enabled:
+                    try:
+                        arr = np.frombuffer(pixels, dtype=np.uint8).copy().reshape(
+                            (self.height, self.width, 3)
+                        )
+                        arr = self._quote_overlay_renderer.apply(
+                            arr, frame_time, frame_idx=frame_i
+                        )
+                        pixels = arr.tobytes()
+                    except Exception as e:
+                        # Quote-Renderer darf NIEMALS den gesamten Render killen
+                        logger.warning(
+                            f"[GPU] Quote-Render-Fehler bei Frame {frame_i} "
+                            f"({frame_time:.2f}s): {e}"
+                        )
+
+                # FFmpeg-Health-Check VOR dem put
+                if process.poll() is not None:
+                    enc = ffmpeg_cmd[ffmpeg_cmd.index("-c:v") + 1] if "-c:v" in ffmpeg_cmd else "unknown"
+                    raise RuntimeError(
+                        f"FFmpeg ist unerwartet beendet (Code {process.returncode}). "
+                        f"Pruefe ob der Encoder '{enc}' verfuegbar ist (ffmpeg -encoders)."
+                    )
+
+                if encode_error[0] is not None:
+                    raise RuntimeError(f"Encode-Thread-Fehler: {encode_error[0]}")
+
+                # Bei voller Queue blockieren, aber Abbruch regelmaessig pruefen
+                while True:
+                    try:
+                        frame_queue.put(pixels, timeout=0.1)
+                        break
+                    except queue.Full:
+                        if cancel_event is not None and cancel_event.is_set():
+                            logger.info("[GPU] Render abgebrochen durch User (Queue voll).")
+                            return False
+                return not (cancel_event is not None and cancel_event.is_set())
+
+            # === PBO-Doppelpufferung fuer den Readback ===
+            # Der blockierende glReadPixels-Download wird in zwei Pixel-Buffer
+            # ueberlappt: Frame N wird angestossen, waehrend Frame N-1
+            # ausgelesen und encodiert wird (1 Frame Latenz, kein GPU-Stall).
+            use_pbo = True
+            pbo_pair = None
+            pending = None  # (pbo, time, frame_index) des noch nicht gelesenen Frames
+            try:
+                buf_size = self.width * self.height * 3
+                pbo_pair = [self.ctx.buffer(reserve=buf_size) for _ in range(2)]
+            except Exception as e:
+                logger.info(f"[GPU] PBO nicht verfuegbar, nutze direkten Readback: {e}")
+                use_pbo = False
+
             try:
                 # Haupt-Render-Loop
                 for i in range(frame_count):
@@ -377,18 +470,13 @@ class GPUBatchRenderer:
                         self._save_debug(self.fbo, "debug_step1_after_clear.png")
 
                     if bg_texture is not None:
-                        if bg_video_frames is not None:
-                            # Video-Background: Aktuelles Frame basierend auf Zeit (Loop)
-                            video_frame_idx = int(time * self.fps) % len(bg_video_frames)
-                            if video_frame_idx != getattr(self, '_last_bg_frame_idx', -1):
-                                # Textur-Daten aktualisieren (schneller als neu erstellen)
-                                from PIL import Image, ImageFilter
-                                img = Image.open(bg_video_frames[video_frame_idx]).convert('RGB')
-                                if background_blur > 0.01:
-                                    img = img.filter(ImageFilter.GaussianBlur(radius=background_blur))
-                                data = np.array(img, dtype=np.uint8)
-                                bg_texture.write(data.tobytes())
-                                self._last_bg_frame_idx = video_frame_idx
+                        if bg_queue is not None and not bg_stop.is_set():
+                            # Vorab dekodiertes BG-Frame aus dem Prefetch-Thread holen
+                            try:
+                                data = bg_queue.get(timeout=5.0)
+                                bg_texture.write(data)
+                            except queue.Empty:
+                                logger.warning("[GPU] BG-Video-Prefetch zu langsam, Frame wiederverwendet.")
                         self._render_background(bg_texture, background_opacity, background_vignette)
                         if _DEBUG and i == 0:
                             self._save_debug(self.fbo, "debug_step2_after_bg.png")
@@ -449,50 +537,36 @@ class GPUBatchRenderer:
                     if _DEBUG and i == 0:
                         self._save_debug(self.post_fbo, "debug_step4_after_postprocess.png")
                     target_fbo = self.post_fbo
-
-                    pixels = target_fbo.read(components=3)
-                    
-                    # PIL-basierte Quote-Overlays auf das Frame-Array anwenden
-                    if quotes and quote_config and quote_config.enabled:
-                        try:
-                            arr = np.frombuffer(pixels, dtype=np.uint8).copy().reshape((self.height, self.width, 3))
-                            arr = self._quote_overlay_renderer.apply(arr, time, frame_idx=i)
-                            pixels = arr.tobytes()
-                            if _DEBUG and i == 0:
-                                from PIL import Image
-                                Image.fromarray(arr).save("debug_step5_after_quotes.png")
-                                logger.debug("[GPU] DEBUG: debug_step5_after_quotes.png gespeichert")
-                        except Exception as e:
-                            # Quote-Renderer darf NIEMALS den gesamten Render killen
-                            logger.warning(f"[GPU] Quote-Render-Fehler bei Frame {i} ({time:.2f}s): {e}")
-                            # Weiter mit dem naechsten Frame
-                    
                     if _DEBUG and i == 0:
                         self._save_debug(target_fbo, "debug_step6_final.png")
-                    
-                    # FFmpeg-Health-Check VOR dem put
-                    if process.poll() is not None:
-                        enc = ffmpeg_cmd[ffmpeg_cmd.index("-c:v") + 1] if "-c:v" in ffmpeg_cmd else "unknown"
-                        raise RuntimeError(
-                            f"FFmpeg ist unerwartet beendet (Code {process.returncode}). "
-                            f"Pruefe ob der Encoder '{enc}' verfuegbar ist (ffmpeg -encoders)."
-                        )
-                    
-                    if encode_error[0] is not None:
-                        raise RuntimeError(f"Encode-Thread-Fehler: {encode_error[0]}")
-                    
-                    # Bei voller Queue blockieren, aber Abbruch regelmaessig pruefen
-                    while True:
+
+                    if use_pbo:
+                        # Download von Frame i anstossen (asynchron in den PBO),
+                        # danach Frame i-1 auslesen und weiterreichen
+                        pbo = pbo_pair[i % 2]
                         try:
-                            frame_queue.put(pixels, timeout=0.1)
-                            break
-                        except queue.Full:
-                            if cancel_event is not None and cancel_event.is_set():
-                                logger.info("[GPU] Render abgebrochen durch User (Queue voll).")
+                            target_fbo.read_into(pbo, components=3)
+                        except Exception as e:
+                            logger.warning(f"[GPU] PBO-Readback fehlgeschlagen, Fallback: {e}")
+                            use_pbo = False
+                            if pending is not None:
+                                prev_pbo, prev_time, prev_i = pending
+                                if not _emit_frame(prev_pbo.read(), prev_time, prev_i):
+                                    break
+                                pending = None
+                            if not _emit_frame(target_fbo.read(components=3), time, i):
                                 break
-                            # Sonst kurz warten und erneut versuchen
-                    if cancel_event is not None and cancel_event.is_set():
-                        break
+                        else:
+                            if pending is not None:
+                                prev_pbo, prev_time, prev_i = pending
+                                if not _emit_frame(prev_pbo.read(), prev_time, prev_i):
+                                    pending = None
+                                    break
+                            pending = (pbo, time, i)
+                    else:
+                        pixels = target_fbo.read(components=3)
+                        if not _emit_frame(pixels, time, i):
+                            break
 
                     if i % 30 == 0 or i == frame_count - 1:
                         if progress_callback:
@@ -502,7 +576,29 @@ class GPUBatchRenderer:
                             logger.info(
                                 f"[GPU] {progress_pct:.1f}% ({i + 1}/{frame_count})"
                             )
+
+                # Letzten anhaengigen PBO-Frame nachliefern (1-Frame-Latenz)
+                if pending is not None and not (cancel_event is not None and cancel_event.is_set()):
+                    prev_pbo, prev_time, prev_i = pending
+                    _emit_frame(prev_pbo.read(), prev_time, prev_i)
+                    pending = None
             finally:
+                # BG-Prefetch-Thread stoppen (Queue leeren, damit put() nicht blockiert)
+                bg_stop.set()
+                if bg_queue is not None:
+                    try:
+                        while True:
+                            bg_queue.get_nowait()
+                    except queue.Empty:
+                        pass
+                if bg_thread is not None:
+                    bg_thread.join(timeout=5)
+                if pbo_pair is not None:
+                    for pbo in pbo_pair:
+                        try:
+                            pbo.release()
+                        except Exception:
+                            pass
                 frame_queue.put(None)
                 # Warte bis der Encode-Thread fertig ist (stdin schliesst sich)
                 # Bei 31k Frames kann das >10s dauern, besonders bei Software-Encoding
