@@ -1,32 +1,31 @@
-[![Version](https://img.shields.io/badge/SOTA-v2.1.0-blue)](https://github.com/audio-visualizer-pro/audio-visualizer-pro)
+[![Version](https://img.shields.io/badge/SOTA-v2.6.0-blue)](https://github.com/audio-visualizer-pro/audio-visualizer-pro)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-134%20passed-brightgreen)](https://github.com/audio-visualizer-pro/audio-visualizer-pro/actions)
-[![Coverage](https://img.shields.io/badge/coverage-77%25-yellowgreen)](https://github.com/audio-visualizer-pro/audio-visualizer-pro/actions)
+[![Tests](https://img.shields.io/badge/tests-212%20passed-brightgreen)](https://github.com/audio-visualizer-pro/audio-visualizer-pro/actions)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-# Audio Visualizer Pro v2.1.0
+# Audio Visualizer Pro v2.6.0
 
 **Professionelles Audio-Visualisierungs-System mit GPU-Beschleunigung und KI-Unterstützung**
 
-Erstelle atemberaubende Musikvideos, Podcast-Visuals und kreative Projekte mit 16 GPU-beschleunigten Visualizern, KI-gestützter Zitat-Extraktion und professionellem Video-Encoding.
+Erstelle atemberaubende Musikvideos, Podcast-Visuals und kreative Projekte mit 16 GPU-beschleunigten Visualizern, HDR-Rendering, KI-gestützter Zitat-Extraktion und professionellem Video-Encoding.
 
 ---
 
 ## 🎯 Überblick
 
-Audio Visualizer Pro ist ein modulares System zur Erstellung hochwertiger Audio-Visualisierungen. Es kombiniert GPU-beschleunigtes Rendering (ModernGL/OpenGL), KI-gestützte Audio-Analyse (Gemini) und eine professionelle DearPyGui-Oberfläche.
+Audio Visualizer Pro ist ein modulares System zur Erstellung hochwertiger Audio-Visualisierungen. Es kombiniert GPU-beschleunigtes HDR-Rendering (ModernGL/OpenGL), KI-gestützte Audio-Analyse (Gemini) und eine moderne PyQt6-Desktop-Oberfläche.
 
 ### Kernfunktionen
 
 - **🎨 16 GPU-Visualizer**: Shader-basierte Visualisierung mit ModernGL (10 Classic + 6 Signature Pro)
+- **🌈 HDR-Pipeline**: Float16-Rendering mit ACES-Tonemapping, Dithering und 4x-MSAA — kein Banding, keine harten Clips
+- **✨ Premium-Post-FX**: Echter HDR-Bloom, Belichtung, Vignette, chromatische Aberration, luminanzabhängiges Film-Grain, 3D-LUTs (.cube)
 - **🤖 KI-Integration**: Automatische Transkription und Zitat-Extraktion mit Gemini 3.1 Flash-Lite
-- **🖥️ DearPyGui GUI**: Premium Dark UI mit Echtzeit-Vorschau
-- **✨ Post-Processing**: Bloom, Film Grain, Vignette, Chromatic Aberration, LUTs
+- **🖥️ PyQt6-GUI**: Dark-Studio-Oberfläche mit Wellenform-Timeline, Live-Vorschau, Drag & Drop und Projekt-Dateien (.avproj)
 - **🎬 Multi-Codec**: H.264, HEVC, ProRes Encoding via FFmpeg
 - **🎵 Beat-Sync**: Synchronisierte Zitat-Einblendungen und Visual-Effekte
 - **🔌 Plugin-System**: Einfache Erweiterung um eigene Visualizer
-- **🧪 134 Tests**: Umfassende Testabdeckung mit 77% Coverage
-- **🧠 Evo-Agent Framework**: State Ledger, Root Orchestrator & Skill-Dispatcher
+- **🧪 212 Tests**: Umfassende Testabdeckung, GPU-Tests laufen headless-sicher
 
 ---
 
@@ -52,8 +51,9 @@ pip install -r requirements.txt
 ```
 ### GUI starten
 ```bash
-# DearPyGui Oberfläche starten
+# PyQt6-Oberfläche starten
 python gui.py
+# oder unter Windows: start.bat doppelklicken
 ```
 ### CLI Nutzung
 ```bash
@@ -127,24 +127,24 @@ Die KI analysiert Audio-Eigenschaften und empfiehlt:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Layer 4: Quote Overlays                                    │
-│  → GPUTextRenderer mit SDF-Fonts                            │
+│  → Gecachtes Overlay-Rendering mit Fade-Animation           │
 ├─────────────────────────────────────────────────────────────┤
-│  Layer 3: Post-Processing                                   │
-│  → Bloom, Grain, Vignette, Chromatic Aberration, LUTs       │
+│  Layer 3: HDR-Post-Processing                               │
+│  → Bloom, Exposure, ACES-Tonemap, LUTs, Vignette, CA, Grain │
 ├─────────────────────────────────────────────────────────────┤
-│  Layer 2: GPU Visualization                                 │
-│  → ModernGL Shader, 16 Visualizer, Real-time Preview        │
+│  Layer 2: GPU Visualization (Float16 HDR + 4x MSAA)         │
+│  → ModernGL Shader, 16 Visualizer, Live-Vorschau            │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 1: Audio Analysis                                    │
 │  → librosa Features, Beat Detection, Voice Clarity          │
 └─────────────────────────────────────────────────────────────┘
 ```
 ### Datenfluss
-1. **Audio-Analyse**: Extrahiert RMS, Onset, Chroma, MFCC, Tempogram
-2. **GPU-Rendering**: ModernGL Shader verarbeiten Features in Echtzeit
-3. **Quote Overlay**: SDF-basiertes Text-Rendering mit Fade-Animation
-4. **Post-Processing**: Color Grading und Effekte
-5. **Video-Encoding**: FFmpeg mit Multi-Codec Support
+1. **Audio-Analyse**: Extrahiert RMS, Onset, Chroma, MFCC, Tempogram (gecached)
+2. **GPU-Rendering**: ModernGL Shader rendern in Float16-HDR (MSAA)
+3. **HDR-Post-FX**: Bloom → ACES-Tonemapping → LUT → Vignette → Grain → Dither
+4. **Quote Overlay**: Gecachtes Text-Overlay mit Fade-Animation
+5. **Video-Encoding**: FFmpeg mit PBO-Readback und parallelem Encoder-Thread
 
 ---
 
@@ -180,24 +180,17 @@ python main.py render audio.mp3 --visual particle_swarm \
 
 ## 🧪 Testing
 ```bash
-# Alle Tests ausführen (134 Tests)
+# Alle Tests ausführen (212 Tests)
 pytest tests/ -v
 # Spezifische Test-Suiten
 pytest tests/test_gpu_renderer.py -v        # GPU Rendering
 pytest tests/test_visuals.py -v             # Visualizer Tests
+pytest tests/test_gpu_bloom.py -v           # Bloom & LUT
 pytest tests/test_gemini_integration.py -v  # KI Integration
-pytest tests/test_postprocess.py -v         # Post-Processing
 pytest tests/test_quote_overlay.py -v       # Quote Overlays
 ```
-### Coverage
-| Modul | Coverage |
-|-------|----------|
-| `postprocess.py` | 100% |
-| `gpu_preview.py` | 95% |
-| `gpu_text_renderer.py` | 78% |
-| `quote_overlay.py` | 93% |
-| `types.py` | 100% |
-| **Gesamt** | **77%** |
+GPU-abhängige Tests werden auf Systemen ohne OpenGL-GPU automatisch
+übersprungen (kein Fehlschlag in headless-Umgebungen).
 
 ---
 
@@ -205,9 +198,12 @@ pytest tests/test_quote_overlay.py -v       # Quote Overlays
 ```
 audio-visualizer-pro/
 ├── main.py                     # CLI Entry Point
-├── gui.py                      # DearPyGui Frontend
+├── gui.py                      # PyQt6-GUI Entry Point
 ├── pyproject.toml              # Project Configuration
 ├── requirements.txt            # Python Dependencies
+├── assets/
+│   ├── fonts/                  # Gebuendelte Inter-Schrift (OFL)
+│   └── icons/                  # SVG-Icons der GUI
 ├── config/                     # JSON Presets
 │   ├── schemas.py              # Pydantic Validation
 │   ├── default.json
@@ -215,57 +211,26 @@ audio-visualizer-pro/
 │   ├── podcast_interview.json
 │   └── ...
 ├── src/
-│   ├── __init__.py
-│   ├── analyzer.py             # Audio Feature Extraction
+│   ├── analyzer.py             # Audio Feature Extraction (mit Cache)
 │   ├── ai_matcher.py           # KI Parameter Matching
+│   ├── app_logging.py          # Zentrales Logging (logs/app.log)
 │   ├── beat_sync.py            # Beat Synchronization
 │   ├── gemini_integration.py   # Gemini KI Client
+│   ├── gpu_bloom.py            # HDR-Bloom-Kette + .cube-LUT-Parser
 │   ├── gpu_preview.py          # Live Preview Renderer
-│   ├── gpu_renderer.py         # Batch GPU Renderer
+│   ├── gpu_renderer.py         # Batch GPU Renderer (HDR + PBO)
 │   ├── gpu_text_renderer.py    # SDF Text Rendering
-│   ├── gpu_visualizers/        # 16 GPU Visualizer
-│   │   ├── __init__.py
-│   │   ├── base.py
-│   │   ├── spectrum_bars.py
-│   │   ├── pulsing_core.py
-│   │   ├── particle_swarm.py
-│   │   ├── neon_oscilloscope.py
-│   │   ├── chroma_field.py
-│   │   ├── typographic.py
-│   │   ├── sacred_mandala.py
-│   │   ├── liquid_blobs.py
-│   │   ├── neon_wave_circle.py
-│   │   ├── frequency_flower.py
-│   │   ├── lumina_core.py         # Signature Pro
-│   │   ├── voice_flow.py          # Signature Pro
-│   │   ├── spectrum_genesis.py    # Signature Pro
-│   │   ├── speech_focus.py        # Signature Pro
-│   │   ├── bass_temple.py         # Signature Pro
-│   │   └── orchestral_swell.py    # Signature Pro
-│   ├── local_transcription.py  # Lokale Transkription
-│   ├── postprocess.py          # Post-Processing Effects
+│   ├── gpu_visualizers/        # 16 GPU Visualizer + base.py
+│   ├── gui/                    # PyQt6-Oberflaeche (Panels, State, Worker)
+│   ├── intro_renderer.py       # Intro-Video vor Hauptvideo
 │   ├── quote_cache.py          # Quote Caching
-│   ├── quote_overlay.py        # Quote Overlay Logic
+│   ├── quote_overlay.py        # Quote Overlay (gecachtes Rendering)
 │   ├── quote_refiner.py        # Quote Timestamp Refinement
-│   └── types.py                # Pydantic Models
-├── tests/                      # Test Suite (134 Tests)
-│   ├── conftest.py
-│   ├── test_ai_matcher.py
-│   ├── test_analyzer.py
-│   ├── test_beat_sync.py
-│   ├── test_e2e.py
-│   ├── test_gemini_integration.py
-│   ├── test_gpu_preview.py
-│   ├── test_gpu_renderer.py
-│   ├── test_gpu_text_renderer.py
-│   ├── test_postprocess.py
-│   ├── test_quote_overlay.py
-│   ├── test_quote_refiner.py
-│   └── test_visuals.py
+│   ├── render_common.py        # Gemeinsame Renderer-Hilfen
+│   ├── types.py                # Pydantic Models
+│   └── visualizer_wizard.py    # Generator fuer eigene Visualizer
+├── tests/                      # Test Suite (212 Tests)
 └── cognitive_core/             # Evo-Agent Framework
-    ├── agents.md
-    ├── system_prompt.md
-    └── tool.md
 ```
 
 ---
@@ -289,9 +254,9 @@ audio-visualizer-pro/
 #### 2024-2025 — Foundation & Core Features
 - ✅ GPU-basiertes Rendering mit ModernGL/OpenGL
 - ✅ 16 GPU-Visualizer implementiert (10 Classic + 6 Signature Pro)
-- ✅ DearPyGui Premium UI mit Live-Preview
+- ✅ PyQt6 Premium UI mit Live-Preview (DearPyGui-Vorgänger abgelöst)
 - ✅ Gemini KI-Integration (Transkription & Zitat-Extraktion)
-- ✅ Test-Suite: 134 Tests mit 77% Coverage
+- ✅ Test-Suite: 212 Tests, headless-sichere GPU-Tests
 - ✅ Post-Processing Pipeline (Bloom, Grain, Vignette, LUTs, Chromatic Aberration)
 - ✅ SDF-basiertes Text-Rendering für Quote Overlays
 - ✅ Multi-Codec Support (H.264, HEVC, ProRes)
@@ -307,9 +272,10 @@ Da dieses Projekt von einem Ein-Personen-Team (mit KI-Unterstützung) entwickelt
 
 - ✅ **Code-Qualität**: Refactoring für bessere Wartbarkeit ohne Programmier-Kenntnisse
 - ✅ **Dokumentation**: Ausführliche Anleitungen für Nicht-Entwickler
-- ✅ **Fehlerbehandlung**: Robuste Error-Messages für Endnutzer
+- ✅ **Fehlerbehandlung**: Robuste Error-Messages für Endnutzer (v2.6)
+- ✅ **GUI-Verbesserungen**: Menü, Shortcuts, Drag & Drop, Projekt-Dateien, Wellenform-Timeline (v2.6)
+- ✅ **Render-Qualität**: HDR-Pipeline, Bloom, LUTs, Anti-Aliasing (v2.6)
 - [ ] **One-Click Installer**: Vereinfachte Installation ohne manuelle Dependency-Konfiguration
-- [ ] **GUI-Verbesserungen**: Intuitivere Bedienung für Power-User-Funktionen
 - [ ] **Preset-Bibliothek**: 10+ zusätzliche vordefinierte Presets für häufige Anwendungsfälle
 
 #### Q3-Q4 2026 — Geplante Erweiterungen (realistisch für Solo-Entwicklung)
@@ -369,7 +335,7 @@ Als Ein-Personen-Projekt mit Fokus auf **Stabilität und Einfachheit** werden fo
 | v2.0 | GPU-Rendering Launch | ✅ Abgeschlossen | 2024 |
 | v2.1 | Testing & Stability | ✅ Abgeschlossen | Q1 2025 |
 | v2.2-v2.5 | Evo-Agent Framework, Quality Improvements | ✅ Abgeschlossen | 2025 |
-| v2.6 | Usability & One-Click Setup | 🔄 In Arbeit | Q2 2026 |
+| v2.6 | Premium-Qualität & Usability | ✅ Abgeschlossen | Q3 2026 |
 | v2.7 | Batch Processing & Auto-Updates | 📅 Geplant | Q3 2026 |
 | v3.0 | Documentation Complete & Community Ready | 📅 Geplant | Q4 2026 |
 | v3.1+ | Community-Driven Features | 💭 Evaluierung | 2027+ |
@@ -385,7 +351,7 @@ Als Ein-Personen-Projekt mit Fokus auf **Stabilität und Einfachheit** werden fo
 **Entwicklungs-Geschwindigkeit:**
 - Realistische Feature-Umsetzung: 1-2 größere Features pro Quartal
 - Fokus auf Qualität statt Quantität
-- Alle Änderungen werden umfassend getestet (77%+ Coverage)
+- Alle Änderungen werden umfassend getestet (212 Tests)
 - Dokumentation hat gleiche Priorität wie Code
 
 **Warum dieser Ansatz?**
@@ -436,7 +402,8 @@ MIT License — Siehe [LICENSE](LICENSE) für Details.
 |---------|-------|
 | [ModernGL](https://moderngl.readthedocs.io/) | GPU Rendering Engine |
 | [librosa](https://librosa.org/) | Audio-Analyse |
-| [DearPyGui](https://dearpygui.readthedocs.io/) | GUI Framework |
+| [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) | GUI Framework |
+| [Inter](https://rsms.me/inter/) | GUI-Schriftart (OFL) |
 | [Gemini API](https://ai.google.dev/) | KI Transkription |
 | [FFmpeg](https://ffmpeg.org/) | Video Encoding |
 | [Pydantic](https://docs.pydantic.dev/) | Datenvalidierung |

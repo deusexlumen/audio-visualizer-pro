@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 
 from src.ai_matcher import SmartMatcher
 from src.app_logging import get_logger
+from src.gui.helpers import _features_to_dict
 from src.gpu_visualizers import get_visualizer
 from src.quote_overlay import QuoteOverlayConfig
 from config.schemas import QuoteOverlayConfigSchema
@@ -320,36 +321,10 @@ class KIPanel(QWidget):
             "gemini": self.gemini,
             "visualizer_type": self.state.visualizer_type,
             "current_params": self.state.get_params(),
-            "audio_features": self._features_to_dict(self.state.features),
+            "audio_features": _features_to_dict(self.state.features),
             "colors": self.state.ki_suggested_colors or {},
             "param_specs": param_specs,
             "user_prompt": self.prompt_input.text().strip() or None,
             "recommendation": rec,
         }
 
-    @staticmethod
-    def _features_to_dict(features) -> dict:
-        import numpy as np
-
-        def _mean(arr):
-            arr = np.asarray(arr)
-            return float(arr.mean()) if arr.size else 0.0
-
-        def _std(arr):
-            arr = np.asarray(arr)
-            return float(arr.std()) if arr.size else 0.0
-
-        return {
-            "duration": float(getattr(features, "duration", 0)),
-            "tempo": float(getattr(features, "tempo", 120)),
-            "mode": str(getattr(features, "mode", "music")),
-            "rms_mean": _mean(getattr(features, "rms", [])),
-            "rms_std": _std(getattr(features, "rms", [])),
-            "onset_mean": _mean(getattr(features, "onset", [])),
-            "onset_std": _std(getattr(features, "onset", [])),
-            "spectral_mean": _mean(getattr(features, "spectral_centroid", [])),
-            "brightness": _mean(getattr(features, "spectral_centroid", [])),
-            "noisiness": _mean(getattr(features, "zero_crossing_rate", [])),
-            "transient_mean": _mean(getattr(features, "transient", [])),
-            "voice_clarity_mean": _mean(getattr(features, "voice_clarity", [])),
-        }

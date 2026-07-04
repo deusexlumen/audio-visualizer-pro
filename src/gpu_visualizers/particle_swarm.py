@@ -252,8 +252,7 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         Physik, Farben und Instanz-Aufbau sind komplett vektorisiert
         (NumPy) — keine Python-Schleife ueber Partikel mehr.
         """
-        frame_idx = int(time * features.get("fps", 30))
-        f = self._get_feature_at_frame(features, frame_idx)
+        f = self._features_at_time(features, time)
         rms = float(f["rms"])
         onset = float(f["onset"])
         chroma = f["chroma"]

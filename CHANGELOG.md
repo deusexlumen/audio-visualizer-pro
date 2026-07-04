@@ -5,6 +5,65 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
+## [2.6.0] — 2026-07-04
+
+Grosses Qualitaets-Release in 7 Phasen: Stabilität, HDR-Rendering, Premium-Post-FX,
+GUI-Politur, Workflow-Komfort, Performance und Code-Bereinigung.
+
+### Added
+- **HDR-Rendering-Pipeline**: Szene rendert in RGBA16F (Float16), finaler Pass mit
+  Exposure → sättigungserhaltendem ACES-Tonemapping → Triangular-Dithering.
+  Behebt Farb-Banding, matschige Glows und hartes Highlight-Clipping global.
+- **Echter HDR-Bloom** (`src/gpu_bloom.py`): Soft-Knee-Threshold, progressive
+  Downsample-Kette, Tent-Upsample — helle Bereiche leuchten weich aus
+- **GPU-LUT-Color-Grading**: `.cube`-Dateien werden als 3D-Textur geladen und
+  im Finalpass angewendet (`lut`, `lut_strength`)
+- **Neue Post-FX**: echte radiale chromatische Aberration, Vignette auf dem
+  Gesamtbild, luminanzabhängiges animiertes Film-Grain, `exposure`-Parameter
+- **4x-MSAA** für Visualizer-Geometrie (mit transparentem Fallback)
+- **Anti-Aliasing-Infrastruktur**: fwidth-basierte `aastep`/`aafill`-Helfer,
+  gemeinsame Shader-Bausteine und Quad-Helper in `base.py`
+- **Projekt-Dateien (`.avproj`)**: Speichern/Laden aller Einstellungen,
+  Zuletzt-verwendet-Liste, Stern-Marker bei ungespeicherten Änderungen
+- **Menüleiste + Shortcuts**: Strg+O/S, F5 Rendern, Esc Abbrechen u.a.
+- **Drag & Drop**: Audio, Hintergrund-Medien und Projekte aufs Fenster ziehen
+- **Wellenform-Timeline** mit Beat-Markern, Playhead und Klick-Seek
+- **Fortschrittsbalken** beim Rendern, Busy-Overlay auf der Vorschau,
+  separater Abbrechen-Button, Erfolgs-Dialog mit „Ordner öffnen"
+- **Icons & Schrift**: 13 SVG-Icons, App-Icon, gebündelte Inter-Schrift (OFL)
+- **Zentrales Logging** (`logs/app.log`), verständliche deutsche Fehlermeldungen
+  in CLI und GUI (kein Python-Traceback mehr für Endnutzer)
+- **QSettings-Persistenz**: Fenstergeometrie und Splitter-Layout bleiben erhalten
+
+### Changed
+- **Performance**: PBO-Doppelpufferung beim Framebuffer-Readback (+33 % Durchsatz
+  im Render-Loop), Quote-Overlay wird pro Zitat gecached statt pro Frame neu
+  gerendert, `particle_swarm`/`spectrum_bars` komplett vektorisiert,
+  Hintergrund-Video-Decode in eigenem Prefetch-Thread
+- **GUI durchgängig Deutsch** und vollständig gestylt (Tabs, Scrollbars,
+  Checkboxen, Menüs, Dialoge, Hover-/Fokus-/Disabled-Zustände)
+- **Vorschau = Endergebnis**: Preview nutzt exakt dieselbe Render-Pipeline
+- Verworfene Vorschauen brechen jetzt wirklich ab (kooperativer Abbruch)
+- Duplizierter Code konsolidiert: `render_common.py` (Feature-Dict,
+  Beat-Intensität), `hex_to_rgb` zentral, GLSL-Helper injiziert statt kopiert
+
+### Fixed
+- Rendern mit `--config` brach mit AttributeError ab (`intro_fade`)
+- Analyzer-Cache ignorierte `ema_alpha` (lieferte veraltete Features)
+- FFmpeg-Hänger nach Encode-Ende (Timeout + Kill-Fallback)
+- Doppelt gefeuerte State-Signale im Parameter-Panel
+- Stille Fehler sichtbar gemacht: Visualizer-Import-Fehler werden geloggt,
+  Preview-Fehler als Dialog, Gemini-Init-Fehler mit Grund im KI-Panel
+- `pydantic>=2.0` korrekt gepinnt (vorher `>=1.10` trotz v2-API)
+
+### Removed
+- Legacy-GUIs (`gui_legacy.py` DearPyGui, `gui_streamlit_legacy.py` Streamlit)
+  samt `streamlit`/`dearpygui`-Abhängigkeiten
+- Toter Code: `src/postprocess.py` (durch GPU-Pipeline ersetzt),
+  `src/local_transcription.py` (verwaist), Debug-Artefakte aus dem Repo
+
+---
+
 ## [2.1.0] — 2026-05-01
 
 ### Added

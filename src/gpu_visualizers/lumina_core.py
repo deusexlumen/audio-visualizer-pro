@@ -170,8 +170,7 @@ class LuminaCoreGPU(BaseGPUVisualizer):
         self._vao, self._vbo = create_fullscreen_quad(self.ctx, self._prog)
 
     def render(self, features: dict, time: float):
-        frame_idx = int(time * features.get("fps", 30))
-        f = self._get_feature_at_frame(features, frame_idx)
+        f = self._features_at_time(features, time)
         uniforms = self._map_features_to_uniforms(f, mode="music")
 
         color = self._chroma_to_color(uniforms["u_chroma"])

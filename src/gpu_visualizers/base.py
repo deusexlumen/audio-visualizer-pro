@@ -222,6 +222,20 @@ def create_fullscreen_quad(ctx: moderngl.Context, program, attr: str = "in_pos")
     return vao, vbo
 
 
+def hex_to_rgb(hex_color: str) -> tuple:
+    """Konvertiert 6-stelligen Hex-String nach RGB-Tupel (0.0-1.0).
+
+    Zentrale Implementierung — frueher dreifach dupliziert in
+    base.py, gpu_renderer.py und gpu_preview.py.
+    """
+    hex_color = hex_color.lstrip('#')
+    return (
+        int(hex_color[0:2], 16) / 255.0,
+        int(hex_color[2:4], 16) / 255.0,
+        int(hex_color[4:6], 16) / 255.0,
+    )
+
+
 def create_textured_quad(ctx: moderngl.Context, program,
                          pos_attr: str = "in_pos", uv_attr: str = "in_uv"):
     """Erzeugt VAO+VBO fuer einen texturierten Fullscreen-Quad (Position + UV).
@@ -310,6 +324,16 @@ class BaseGPUVisualizer(abc.ABC):
             time: Aktuelle Zeit in Sekunden.
         """
         raise NotImplementedError
+
+    def _features_at_time(self, features: dict, time: float) -> dict:
+        """Hilfsmethode: Features fuer einen Zeitpunkt (statt Frame-Index).
+
+        Ersetzt den in jedem Visualizer duplizierten Boilerplate:
+        Frame-Index aus Zeit berechnen, clampen, Features extrahieren.
+        """
+        frame_idx = int(time * features.get("fps", 30))
+        frame_idx = max(0, min(frame_idx, features.get("frame_count", 0) - 1))
+        return self._get_feature_at_frame(features, frame_idx)
 
     def _get_feature_at_frame(self, features: dict, frame_idx: int) -> dict:
         """Hilfsmethode: Extrahiert die Features fuer einen bestimmten Frame.
@@ -519,11 +543,7 @@ class BaseGPUVisualizer(abc.ABC):
     @staticmethod
     def _hex_to_rgb(hex_color: str) -> tuple:
         """Konvertiert 6-stelligen Hex-String nach RGB-Tupel (0.0-1.0)."""
-        hex_color = hex_color.lstrip('#')
-        r = int(hex_color[0:2], 16) / 255.0
-        g = int(hex_color[2:4], 16) / 255.0
-        b = int(hex_color[4:6], 16) / 255.0
-        return (r, g, b)
+        return hex_to_rgb(hex_color)
 
     @staticmethod
     def _rgb_to_hsv(r: float, g: float, b: float) -> tuple:

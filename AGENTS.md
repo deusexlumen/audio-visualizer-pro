@@ -29,7 +29,7 @@ Dieses Dokument enthält alle relevanten Informationen für KI-Code-Agents, die 
 | GPU-Rendering | moderngl>=5.0 | OpenGL Offscreen-Rendering |
 | GUI | PyQt6>=6.0 | Desktop-GUI |
 
-> **Hinweis**: Die GUI basiert seit Task 11 auf PyQt6. Die ursprüngliche DearPyGui-Implementierung ist als `gui_legacy.py` erhalten.
+> **Hinweis**: Die GUI basiert auf PyQt6. Die alten DearPyGui/Streamlit-Implementierungen wurden in v2.6 entfernt.
 | Video-Encoding | FFmpeg (system) | H.264/H.265/ProRes Encoding |
 
 **System-Voraussetzung**: FFmpeg muss system-seitig installiert sein.
@@ -43,8 +43,8 @@ Dieses Dokument enthält alle relevanten Informationen für KI-Code-Agents, die 
 audio_visualizer_pro/
 ├── main.py                 # CLI Entry Point (Click-basiert)
 ├── gui.py                  # PyQt6 Desktop-GUI (Thin-Wrapper)
-├── gui_legacy.py           # Backup der ursprünglichen DearPyGui-GUI
 ├── requirements.txt        # Python-Abhängigkeiten
+├── assets/                 # SVG-Icons + Inter-Schrift (OFL)
 ├── config/                 # Konfigurations-Presets und Validierung
 │   ├── __init__.py
 │   ├── schemas.py          # Pydantic v2 Schemas für Config-Validierung
@@ -56,18 +56,22 @@ audio_visualizer_pro/
 │   ├── __init__.py
 │   ├── analyzer.py         # AudioAnalyzer mit Caching
 │   ├── ai_matcher.py       # SmartMatcher - KI-gestützte Visualizer-Empfehlung
-│   ├── gpu_renderer.py     # GPUBatchRenderer, GPUPreviewRenderer
+│   ├── app_logging.py      # Zentrales Logging (Konsole + logs/app.log)
+│   ├── gpu_renderer.py     # GPUBatchRenderer, GPUPreviewRenderer (HDR, PBO)
+│   ├── gpu_bloom.py        # HDR-Bloom-Kette + .cube-LUT-Parser
 │   ├── gpu_preview.py      # Einzel-Frame Preview-Renderer
 │   ├── gpu_text_renderer.py # SDF Text-Rendering auf der GPU
 │   ├── gpu_quote_renderer.py # GPU-basierter Quote-Renderer (aktuell nicht aktiv)
+│   ├── render_common.py    # Gemeinsame Renderer-Hilfen (features_dict, Beat-Decay)
 │   ├── types.py            # Pydantic Models (AudioFeatures, VisualConfig, etc.)
-│   ├── postprocess.py      # PIL-basierter PostProcessor (Fallback)
-│   ├── quote_overlay.py    # PIL-basierter QuoteOverlayRenderer (aktiv im Render-Loop)
+│   ├── quote_overlay.py    # QuoteOverlayRenderer mit Overlay-Cache (aktiv im Render-Loop)
 │   ├── quote_refiner.py    # Zeitstempel-Verfeinerung für Quotes
 │   ├── quote_cache.py      # Caching für Gemini Uploads/Transkripte
 │   ├── gemini_integration.py # Gemini KI für Transkription und Zitat-Extraktion
-│   ├── local_transcription.py # faster-whisper Fallback
 │   ├── beat_sync.py        # Beat-Synchronisation
+│   ├── intro_renderer.py   # Intro-Video vor Hauptvideo (FFmpeg)
+│   ├── visualizer_wizard.py # Generator für eigene Visualizer
+│   ├── gui/                # PyQt6-GUI (Panels, AppState, QThread-Worker)
 │   └── gpu_visualizers/    # GPU-Visualizer Plugin-System
 │       ├── __init__.py     # VISUALIZER_MAP Registry
 │       ├── base.py         # BaseGPUVisualizer (abstrakte Basisklasse)
@@ -204,7 +208,15 @@ pytest tests/test_gpu_renderer.py -v
 
 ### GPU-Visualizer erstellen
 
-**WICHTIG**: Neue GPU-Visualizer MÜSSEN diese Struktur folgen:
+**WICHTIG**: Neue GPU-Visualizer MÜSSEN diese Struktur folgen.
+
+Seit v2.6 stellt `base.py` gemeinsame Bausteine bereit — bitte nutzen statt kopieren:
+- `create_fullscreen_quad(ctx, prog)` / `create_textured_quad(ctx, prog)` für Quad-Setup
+- `compose_fragment(body, includes=(...))` mit `LYGIA_MATH_GLSL`, `LYGIA_NOISE_GLSL`,
+  `LYGIA_SDF_GLSL`, `SHADER_COMMON_GLSL` (enthält `aastep`/`aafill` für pixelgenaues
+  Anti-Aliasing, `tonemapACES`, `hash12`, Dithering)
+- `self._features_at_time(features, time)` statt Frame-Index-Boilerplate
+- Shader geben HDR aus (kein `clamp` am Ende) — Tonemapping macht zentral der Renderer.
 
 ```python
 import numpy as np

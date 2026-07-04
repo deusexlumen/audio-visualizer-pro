@@ -19,8 +19,10 @@ import numpy as np
 from .analyzer import AudioAnalyzer
 from .app_logging import get_logger
 from .gpu_bloom import BloomPass, load_cube_lut
+from .render_common import build_features_dict
 from .types import AudioFeatures, Quote
 from .gpu_visualizers import get_visualizer
+from .gpu_visualizers.base import hex_to_rgb as _hex_to_rgb
 from .gpu_text_renderer import SDFFontAtlas, GPUTextRenderer
 from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
 
@@ -28,16 +30,6 @@ logger = get_logger(__name__)
 
 # Video-Erweiterungen für automatische Erkennung im Hintergrund
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.gif'}
-
-
-def _hex_to_rgb(hex_color: str) -> tuple:
-    """Wandelt 6-stelligen Hex-String in RGB (0.0-1.0) um."""
-    hex_color = hex_color.lstrip('#')
-    return (
-        int(hex_color[0:2], 16) / 255.0,
-        int(hex_color[2:4], 16) / 255.0,
-        int(hex_color[4:6], 16) / 255.0,
-    )
 
 
 class GPUNichtVerfuegbarError(RuntimeError):
@@ -237,20 +229,6 @@ class GPUBatchRenderer:
             quotes = sync_fn(quotes, features.beat_frames, self.fps)
             logger.info(f"[GPU] {len(quotes)} Quotes auf Beats synchronisiert")
         
-        # Beat-Intensitaet berechnen (vektorisiert, ~100x schneller als Python-Schleife)
-        beat_intensity = np.zeros(frame_count, dtype=np.float32)
-        if len(features.beat_frames) > 0:
-            decay_frames = max(3, int(self.fps * 0.1))
-            for bf in features.beat_frames:
-                if bf >= frame_count:
-                    continue
-                end = min(bf + decay_frames + 1, frame_count)
-                if end > bf:
-                    dists = np.arange(end - bf, dtype=np.float32)
-                    vals = 1.0 - dists / decay_frames
-                    vals = np.clip(vals, 0.0, 1.0)
-                    beat_intensity[bf:end] = np.maximum(beat_intensity[bf:end], vals)
-        
         # Visualizer-Instanz erzeugen
         viz_cls = get_visualizer(visualizer_type)
         viz = viz_cls(self.ctx, self.width, self.height)
@@ -277,27 +255,8 @@ class GPUBatchRenderer:
                 )
 
         # Feature-Dictionary fuer den Visualizer vorbereiten
-        # Vollstaendiges Dictionary mit allen Pro-Features
-        features_dict = {
-            "rms": features.rms[:frame_count],
-            "onset": features.onset[:frame_count],
-            "beat_intensity": beat_intensity,
-            "chroma": features.chroma[:, :frame_count] if features.chroma.ndim > 1 and features.chroma.shape[1] >= frame_count else features.chroma,
-            "spectral_centroid": features.spectral_centroid[:frame_count],
-            "spectral_rolloff": features.spectral_rolloff[:frame_count],
-            "zero_crossing_rate": features.zero_crossing_rate[:frame_count],
-            "transient": features.transient[:frame_count] if len(features.transient) > 0 else np.zeros(frame_count, dtype=np.float32),
-            "voice_clarity": features.voice_clarity[:frame_count] if len(features.voice_clarity) > 0 else np.zeros(frame_count, dtype=np.float32),
-            "voice_band": features.voice_band[:frame_count] if len(features.voice_band) > 0 else np.zeros(frame_count, dtype=np.float32),
-            "mfcc": features.mfcc[:, :frame_count] if features.mfcc.ndim > 1 and features.mfcc.shape[1] >= frame_count else features.mfcc,
-            "tempogram": features.tempogram[:, :frame_count] if features.tempogram.ndim > 1 and features.tempogram.shape[1] >= frame_count else features.tempogram,
-            "beat_frames": features.beat_frames,
-            "tempo": float(features.tempo),
-            "mode": features.mode,
-            "duration": float(features.duration),
-            "fps": self.fps,
-            "frame_count": frame_count,
-        }
+        # (gemeinsame Logik mit dem Preview-Renderer in render_common.py)
+        features_dict = build_features_dict(features, frame_count, self.fps)
 
         # Temporaere Videodatei fuer den Video-Stream (ohne Audio)
         temp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)

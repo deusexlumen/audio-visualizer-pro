@@ -13,22 +13,14 @@ from PIL import Image
 
 from .analyzer import AudioAnalyzer
 from .app_logging import get_logger
-
-logger = get_logger(__name__)
-
-
-def _hex_to_rgb(hex_color: str) -> tuple:
-    """Wandelt einen 6-stelligen Hex-String in RGB (0.0-1.0) um."""
-    hex_color = hex_color.lstrip('#')
-    return (
-        int(hex_color[0:2], 16) / 255.0,
-        int(hex_color[2:4], 16) / 255.0,
-        int(hex_color[4:6], 16) / 255.0,
-    )
 from .gpu_renderer import GPUPreviewRenderer
 from .gpu_visualizers import get_visualizer
+from .gpu_visualizers.base import hex_to_rgb as _hex_to_rgb
 from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
+from .render_common import build_features_dict
 from .types import AudioFeatures
+
+logger = get_logger(__name__)
 
 
 def render_gpu_preview(
@@ -123,47 +115,9 @@ def render_gpu_preview(
                 logger.warning(f'[GPU Preview] Konnte Hintergrundbild nicht laden: {e}')
                 bg_texture = None
 
-        # Beat-Intensity vektorisiert berechnen (fuer Visualizer die es brauchen)
+        # Feature-Dict vorbereiten (gemeinsame Logik mit dem Haupt-Renderer)
         frame_count = features.frame_count
-        beat_intensity = np.zeros(frame_count, dtype=np.float32)
-        if len(features.beat_frames) > 0:
-            decay_frames = max(3, int(fps * 0.1))
-            for bf in features.beat_frames:
-                if bf >= frame_count:
-                    continue
-                end = min(bf + decay_frames + 1, frame_count)
-                if end > bf:
-                    dists = np.arange(end - bf, dtype=np.float32)
-                    vals = 1.0 - dists / decay_frames
-                    vals = np.clip(vals, 0.0, 1.0)
-                    beat_intensity[bf:end] = np.maximum(beat_intensity[bf:end], vals)
-
-        # Feature-Dict vorbereiten (vollstaendig wie im Haupt-Renderer)
-        def _slice_or_zeros(arr, fc):
-            if arr is None or len(arr) == 0:
-                return np.zeros(fc, dtype=np.float32)
-            return arr[:fc]
-
-        features_dict = {
-            "rms": _slice_or_zeros(features.rms, frame_count),
-            "onset": _slice_or_zeros(features.onset, frame_count),
-            "chroma": features.chroma[:, :frame_count] if features.chroma.ndim > 1 and features.chroma.shape[1] >= frame_count else features.chroma,
-            "spectral_centroid": _slice_or_zeros(features.spectral_centroid, frame_count),
-            "spectral_rolloff": _slice_or_zeros(features.spectral_rolloff, frame_count),
-            "zero_crossing_rate": _slice_or_zeros(features.zero_crossing_rate, frame_count),
-            "transient": _slice_or_zeros(features.transient, frame_count),
-            "voice_clarity": _slice_or_zeros(features.voice_clarity, frame_count),
-            "voice_band": _slice_or_zeros(features.voice_band, frame_count),
-            "mfcc": features.mfcc[:, :frame_count] if features.mfcc.ndim > 1 and features.mfcc.shape[1] >= frame_count else features.mfcc,
-            "tempogram": features.tempogram[:, :frame_count] if features.tempogram.ndim > 1 and features.tempogram.shape[1] >= frame_count else features.tempogram,
-            "beat_frames": features.beat_frames,
-            "beat_intensity": beat_intensity,
-            "tempo": float(features.tempo),
-            "mode": features.mode,
-            "duration": float(features.duration),
-            "fps": fps,
-            "frame_count": frame_count,
-        }
+        features_dict = build_features_dict(features, frame_count, fps)
 
         # Zeitpunkt fuer Preview
         preview_time = features.duration * preview_time_percent

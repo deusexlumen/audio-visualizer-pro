@@ -105,10 +105,7 @@ class SpectrumBarsGPU(BaseGPUVisualizer):
             features: Dictionary mit Audio-Features fuer alle Frames.
             time: Aktuelle Zeit in Sekunden.
         """
-        frame_idx = int(time * features.get("fps", 30))
-        frame_idx = max(0, min(frame_idx, features.get("frame_count", 0) - 1))
-
-        f = self._get_feature_at_frame(features, frame_idx)
+        f = self._features_at_time(features, time)
 
         rms = f["rms"]
         spectral_centroid = f["spectral_centroid"]

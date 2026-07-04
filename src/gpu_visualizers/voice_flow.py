@@ -176,8 +176,7 @@ class VoiceFlowGPU(BaseGPUVisualizer):
         self._vao = self.ctx.vertex_array(self._prog, [(vbo, "2f", "in_pos")])
 
     def render(self, features: dict, time: float):
-        frame_idx = int(time * features.get("fps", 30))
-        f = self._get_feature_at_frame(features, frame_idx)
+        f = self._features_at_time(features, time)
 
         # === DYNAMISCHES SMOOTHING ===
         # Roh-Wert aus dem Voice-Band (FFT Bins 4-20), Fallback auf voice_clarity / RMS
