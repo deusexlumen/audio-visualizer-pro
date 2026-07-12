@@ -61,7 +61,6 @@ audio_visualizer_pro/
 │   ├── gpu_bloom.py        # HDR-Bloom-Kette + .cube-LUT-Parser
 │   ├── gpu_preview.py      # Einzel-Frame Preview-Renderer
 │   ├── gpu_text_renderer.py # SDF Text-Rendering auf der GPU
-│   ├── gpu_quote_renderer.py # GPU-basierter Quote-Renderer (aktuell nicht aktiv)
 │   ├── render_common.py    # Gemeinsame Renderer-Hilfen (features_dict, Beat-Decay)
 │   ├── types.py            # Pydantic Models (AudioFeatures, VisualConfig, etc.)
 │   ├── quote_overlay.py    # QuoteOverlayRenderer mit Overlay-Cache (aktiv im Render-Loop)

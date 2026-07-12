@@ -111,11 +111,13 @@ def test_ai_optimize_worker_emits_optimize_error(qtbot):
     )
 
     captured = []
-    worker.optimize_error.connect(captured.append)
+    worker.optimize_error.connect(lambda msg, tb: captured.append((msg, tb)))
     worker.run()
 
     assert len(captured) == 1
-    assert "API error" in captured[0]
+    msg, tb = captured[0]
+    assert "API error" in msg
+    assert "RuntimeError" in tb  # Traceback fuers Log wird mitgeliefert
 
 
 def test_quote_extract_worker_emits_quotes_error(qtbot):
@@ -133,11 +135,13 @@ def test_quote_extract_worker_emits_quotes_error(qtbot):
     )
 
     captured = []
-    worker.quotes_error.connect(captured.append)
+    worker.quotes_error.connect(lambda msg, tb: captured.append((msg, tb)))
     worker.run()
 
     assert len(captured) == 1
-    assert "API error" in captured[0]
+    msg, tb = captured[0]
+    assert "API error" in msg
+    assert "RuntimeError" in tb
 
 
 def test_render_worker_emits_finished(qtbot):

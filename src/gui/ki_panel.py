@@ -163,7 +163,9 @@ class KIPanel(QWidget):
         self._apply_optimize_result(result)
         self.lbl_status.setText("Parameter optimiert!")
 
-    def on_optimize_error(self, msg: str):
+    def on_optimize_error(self, msg: str, tb: str = ""):
+        if tb:
+            logger.error(f"[KI] Optimierungs-Fehler:\n{tb}")
         self.state.ki_optimizing = False
         self.btn_optimize.setEnabled(True)
         self.btn_optimize.setText("Komplett optimieren")

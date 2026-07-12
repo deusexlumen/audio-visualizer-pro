@@ -477,9 +477,11 @@ class MainWindow(QMainWindow):
         self._set_status("Analyse fertig.", "ok")
         self._start_preview()
 
-    def _on_analysis_error(self, msg: str):
+    def _on_analysis_error(self, msg: str, tb: str = ""):
         if self.sender() is not self._analyze_worker:
             return
+        if tb:
+            logger.error(f"[GUI] Analyse-Fehler:\n{tb}")
         self._set_status(f"Analyse-Fehler: {msg}", "error")
         QMessageBox.critical(self, "Analyse-Fehler", msg)
 
@@ -568,12 +570,12 @@ class MainWindow(QMainWindow):
         self.preview_widget.set_image(img)
         self._set_status("Vorschau aktualisiert.", "ok")
 
-    def _on_preview_error(self, msg: str):
+    def _on_preview_error(self, msg: str, tb: str = ""):
         if self.sender() is not self._preview_worker:
             return
         self.preview_widget.set_busy(False)
         self._set_status(f"Vorschau-Fehler: {msg}", "error")
-        logger.error(f"[GUI] Vorschau-Fehler: {msg}")
+        logger.error(f"[GUI] Vorschau-Fehler: {msg}\n{tb}" if tb else f"[GUI] Vorschau-Fehler: {msg}")
         QMessageBox.warning(
             self,
             "Vorschau fehlgeschlagen",
@@ -715,9 +717,11 @@ class MainWindow(QMainWindow):
             return
         self._finish_render(main_path)
 
-    def _on_intro_error(self, msg: str):
+    def _on_intro_error(self, msg: str, tb: str = ""):
         if self.sender() is not self._intro_worker:
             return
+        if tb:
+            logger.error(f"[GUI] Intro-Fehler:\n{tb}")
         self._set_render_ui(False)
         self._set_status(f"Intro-Fehler: {msg}", "error")
         QMessageBox.critical(self, "Intro-Fehler", msg)
@@ -749,9 +753,11 @@ class MainWindow(QMainWindow):
         folder = str(Path(output_path).resolve().parent)
         QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
 
-    def _on_render_error(self, msg: str):
+    def _on_render_error(self, msg: str, tb: str = ""):
         if self.sender() is not self._render_worker:
             return
+        if tb:
+            logger.error(f"[GUI] Render-Fehler:\n{tb}")
         self._set_render_ui(False)
         self._set_status(f"Render-Fehler: {msg}", "error")
         QMessageBox.critical(self, "Render-Fehler", msg)

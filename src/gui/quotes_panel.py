@@ -7,7 +7,10 @@ from PyQt6.QtWidgets import (
     QColorDialog, QGroupBox, QGridLayout, QInputDialog,
 )
 
+from src.app_logging import get_logger
 from src.types import Quote
+
+logger = get_logger(__name__)
 
 
 class QuotesPanel(QWidget):
@@ -163,7 +166,9 @@ class QuotesPanel(QWidget):
         self.state.quotes = quotes
         self.lbl_status.setText(f"{len(quotes)} Zitate extrahiert.")
 
-    def on_extract_error(self, msg: str):
+    def on_extract_error(self, msg: str, tb: str = ""):
+        if tb:
+            logger.error(f"[Zitate] Extraktions-Fehler:\n{tb}")
         self.state.quotes_extracting = False
         self.btn_extract.setEnabled(True)
         self.btn_extract.setText("Key-Zitate extrahieren")

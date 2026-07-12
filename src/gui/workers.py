@@ -1,6 +1,7 @@
 """QThread-Worker fuer blockierende GUI-Operationen."""
 
 import threading
+import traceback
 
 from PyQt6.QtCore import QThread, pyqtSignal
 from PIL import Image
@@ -10,7 +11,8 @@ from src.analyzer import AudioAnalyzer
 
 class AnalyzeWorker(QThread):
     analysis_ready = pyqtSignal(object)
-    analysis_error = pyqtSignal(str)
+    # Alle *_error-Signale liefern (Meldung, Traceback) — Traceback nur fuers Log
+    analysis_error = pyqtSignal(str, str)
 
     def __init__(self, audio_path: str, fps: int = 30, parent=None):
         super().__init__(parent)
@@ -23,12 +25,12 @@ class AnalyzeWorker(QThread):
             features = analyzer.analyze(self.audio_path, fps=self.fps)
             self.analysis_ready.emit(features)
         except Exception as e:
-            self.analysis_error.emit(str(e))
+            self.analysis_error.emit(str(e), traceback.format_exc())
 
 
 class PreviewWorker(QThread):
     preview_ready = pyqtSignal(Image.Image)
-    preview_error = pyqtSignal(str)
+    preview_error = pyqtSignal(str, str)
 
     def __init__(
         self,
@@ -106,15 +108,15 @@ class PreviewWorker(QThread):
                 # Abbruch durch neuere Vorschau — kein Fehler
                 pass
             else:
-                self.preview_error.emit("Vorschau lieferte kein Bild")
+                self.preview_error.emit("Vorschau lieferte kein Bild", "")
         except Exception as e:
-            self.preview_error.emit(str(e))
+            self.preview_error.emit(str(e), traceback.format_exc())
 
 
 class RenderWorker(QThread):
     render_progress = pyqtSignal(float)
     render_finished = pyqtSignal(str)
-    render_error = pyqtSignal(str)
+    render_error = pyqtSignal(str, str)
 
     def __init__(self, config: dict, parent=None):
         super().__init__(parent)
@@ -166,11 +168,11 @@ class RenderWorker(QThread):
             )
 
             if self._cancel_event.is_set():
-                self.render_error.emit("Rendering abgebrochen.")
+                self.render_error.emit("Rendering abgebrochen.", "")
             else:
                 self.render_finished.emit(self.config["output_path"])
         except Exception as e:
-            self.render_error.emit(str(e))
+            self.render_error.emit(str(e), traceback.format_exc())
         finally:
             if renderer is not None:
                 try:
@@ -182,7 +184,7 @@ class RenderWorker(QThread):
 class IntroWorker(QThread):
     intro_progress = pyqtSignal(float)
     intro_finished = pyqtSignal(str)
-    intro_error = pyqtSignal(str)
+    intro_error = pyqtSignal(str, str)
 
     def __init__(
         self,
@@ -221,16 +223,16 @@ class IntroWorker(QThread):
             )
 
             if self._cancel_event.is_set():
-                self.intro_error.emit("Intro-Rendering abgebrochen.")
+                self.intro_error.emit("Intro-Rendering abgebrochen.", "")
             else:
                 self.intro_finished.emit(self.output_path)
         except Exception as e:
-            self.intro_error.emit(str(e))
+            self.intro_error.emit(str(e), traceback.format_exc())
 
 
 class AIOptimizeWorker(QThread):
     optimize_ready = pyqtSignal(dict)
-    optimize_error = pyqtSignal(str)
+    optimize_error = pyqtSignal(str, str)
 
     def __init__(
         self,
@@ -268,12 +270,12 @@ class AIOptimizeWorker(QThread):
             result = future.result(timeout=60)
             self.optimize_ready.emit(result)
         except Exception as e:
-            self.optimize_error.emit(str(e))
+            self.optimize_error.emit(str(e), traceback.format_exc())
 
 
 class QuoteExtractWorker(QThread):
     quotes_ready = pyqtSignal(list)
-    quotes_error = pyqtSignal(str)
+    quotes_error = pyqtSignal(str, str)
 
     def __init__(
         self,
@@ -299,4 +301,4 @@ class QuoteExtractWorker(QThread):
             quotes = future.result(timeout=120)
             self.quotes_ready.emit(quotes)
         except Exception as e:
-            self.quotes_error.emit(str(e))
+            self.quotes_error.emit(str(e), traceback.format_exc())

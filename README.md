@@ -1,9 +1,9 @@
-[![Version](https://img.shields.io/badge/SOTA-v2.6.0-blue)](https://github.com/audio-visualizer-pro/audio-visualizer-pro)
+[![Version](https://img.shields.io/badge/SOTA-v2.6.1-blue)](https://github.com/deusexlumen/audio-visualizer-pro)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-212%20passed-brightgreen)](https://github.com/audio-visualizer-pro/audio-visualizer-pro/actions)
+[![Tests](https://img.shields.io/badge/tests-217%20passed-brightgreen)](https://github.com/deusexlumen/audio-visualizer-pro)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-# Audio Visualizer Pro v2.6.0
+# Audio Visualizer Pro v2.6.1
 
 **Professionelles Audio-Visualisierungs-System mit GPU-Beschleunigung und KI-Unterstützung**
 
@@ -25,7 +25,7 @@ Audio Visualizer Pro ist ein modulares System zur Erstellung hochwertiger Audio-
 - **🎬 Multi-Codec**: H.264, HEVC, ProRes Encoding via FFmpeg
 - **🎵 Beat-Sync**: Synchronisierte Zitat-Einblendungen und Visual-Effekte
 - **🔌 Plugin-System**: Einfache Erweiterung um eigene Visualizer
-- **🧪 212 Tests**: Umfassende Testabdeckung, GPU-Tests laufen headless-sicher
+- **🧪 217 Tests**: Umfassende Testabdeckung, GPU-Tests laufen headless-sicher
 
 ---
 
@@ -44,7 +44,7 @@ brew install ffmpeg
 ### Installation
 ```bash
 # Repository klonen
-git clone https://github.com/audio-visualizer-pro/audio-visualizer-pro.git
+git clone https://github.com/deusexlumen/audio-visualizer-pro.git
 cd audio-visualizer-pro
 # Abhängigkeiten installieren
 pip install -r requirements.txt
@@ -180,7 +180,7 @@ python main.py render audio.mp3 --visual particle_swarm \
 
 ## 🧪 Testing
 ```bash
-# Alle Tests ausführen (212 Tests)
+# Alle Tests ausführen (217 Tests)
 pytest tests/ -v
 # Spezifische Test-Suiten
 pytest tests/test_gpu_renderer.py -v        # GPU Rendering
@@ -229,7 +229,7 @@ audio-visualizer-pro/
 │   ├── render_common.py        # Gemeinsame Renderer-Hilfen
 │   ├── types.py                # Pydantic Models
 │   └── visualizer_wizard.py    # Generator fuer eigene Visualizer
-├── tests/                      # Test Suite (212 Tests)
+├── tests/                      # Test Suite (217 Tests)
 └── cognitive_core/             # Evo-Agent Framework
 ```
 
@@ -256,7 +256,7 @@ audio-visualizer-pro/
 - ✅ 16 GPU-Visualizer implementiert (10 Classic + 6 Signature Pro)
 - ✅ PyQt6 Premium UI mit Live-Preview (DearPyGui-Vorgänger abgelöst)
 - ✅ Gemini KI-Integration (Transkription & Zitat-Extraktion)
-- ✅ Test-Suite: 212 Tests, headless-sichere GPU-Tests
+- ✅ Test-Suite: 217 Tests, headless-sichere GPU-Tests
 - ✅ Post-Processing Pipeline (Bloom, Grain, Vignette, LUTs, Chromatic Aberration)
 - ✅ SDF-basiertes Text-Rendering für Quote Overlays
 - ✅ Multi-Codec Support (H.264, HEVC, ProRes)
@@ -351,7 +351,7 @@ Als Ein-Personen-Projekt mit Fokus auf **Stabilität und Einfachheit** werden fo
 **Entwicklungs-Geschwindigkeit:**
 - Realistische Feature-Umsetzung: 1-2 größere Features pro Quartal
 - Fokus auf Qualität statt Quantität
-- Alle Änderungen werden umfassend getestet (212 Tests)
+- Alle Änderungen werden umfassend getestet (217 Tests)
 - Dokumentation hat gleiche Priorität wie Code
 
 **Warum dieser Ansatz?**
@@ -411,13 +411,13 @@ MIT License — Siehe [LICENSE](LICENSE) für Details.
 ---
 
 ## 📬 Support
-- **Issues**: [GitHub Issues](https://github.com/audio-visualizer-pro/audio-visualizer-pro/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/audio-visualizer-pro/audio-visualizer-pro/discussions)
+- **Issues**: [GitHub Issues](https://github.com/deusexlumen/audio-visualizer-pro/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/deusexlumen/audio-visualizer-pro/discussions)
 - **E-Mail**: support@audio-visualizer.pro
 
 ---
 <div align="center">
 **Audio Visualizer Pro v2.1.0**
 Mit ❤️ erstellt vom Audio Visualizer Pro Team
-[Documentation](https://github.com/audio-visualizer-pro/audio-visualizer-pro/blob/main/README.md) · [Changelog](CHANGELOG.md) · [Quickstart](QUICKSTART.md)
+[Documentation](https://github.com/deusexlumen/audio-visualizer-pro/blob/main/README.md) · [Changelog](CHANGELOG.md) · [Quickstart](QUICKSTART.md)
 </div>

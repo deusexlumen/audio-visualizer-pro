@@ -5,6 +5,26 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
+## [2.6.1] — 2026-07-12
+
+Fundament-Release (Phase 1 des Ausbauplans v3.0): Robustheit und Repo-Hygiene.
+
+### Added
+- **Globaler Exception-Handler** (`src/gui/app.py`): Unbehandelte Fehler in
+  Qt-Slots und Threads erscheinen jetzt als Fehlerdialog mit Traceback-Details
+  und "Log-Ordner öffnen"-Button statt die App still zu beenden
+- `.env.example` als Vorlage für den Gemini-API-Schlüssel
+
+### Changed
+- **Worker-Fehlersignale** liefern jetzt `(Meldung, Traceback)` — vollständige
+  Tracebacks landen in `logs/app.log`, die GUI zeigt weiterhin die kurze Meldung
+- README/pyproject: GitHub-URLs auf das echte Repository korrigiert,
+  Testzahl aktualisiert (217)
+
+### Removed
+- Totes Modul `src/gpu_quote_renderer.py` (357 Zeilen, keine Importer)
+- Nutzer-Upload aus dem Git-Index entfernt; `assets/user_uploads/` ignoriert
+
 ## [2.6.0] — 2026-07-04
 
 Grosses Qualitaets-Release in 7 Phasen: Stabilität, HDR-Rendering, Premium-Post-FX,
