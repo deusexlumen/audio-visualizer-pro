@@ -663,3 +663,59 @@ class SmartMatcher:
             params=params,
             top_candidates=top3,
         )
+
+    def suggest_timeline(self, features: AudioFeatures, segments):
+        """Erzeugt eine regelbasierte Szenen-Timeline (offline, ohne LLM).
+
+        Weist jedem Segment einen Visualizer zu: energiereiche Abschnitte
+        erhalten den bestbewerteten Visualizer, ruhigere einen zweiten
+        Kandidaten — das schafft visuellen Kontrast zwischen Passagen.
+
+        Args:
+            features: Analysierte Audio-Features (fuer Ranking + Basis-Params).
+            segments: Liste von `Segment` (aus src.segmentation).
+
+        Returns:
+            src.types.Timeline mit einer Szene pro Segment.
+        """
+        from src.types import Scene, Timeline
+
+        if not segments:
+            rec = self.match(features)
+            return Timeline(scenes=[Scene(
+                start=0.0, end=float(features.duration),
+                visualizer=rec.visualizer, params=rec.params, transition="cut",
+            )])
+
+        global_f = self._extract_features(features)
+        ranked = [name for name, _ in self.rank_visualizers(features)]
+        if not ranked:
+            ranked = ["lumina_core"]
+        primary = ranked[0]
+        secondary = ranked[1] if len(ranked) > 1 else ranked[0]
+
+        rms_vals = [float(s.stats.get("rms", 0.0)) for s in segments]
+        median = float(np.median(rms_vals)) if rms_vals else 0.0
+
+        scenes = []
+        for idx, seg in enumerate(segments):
+            energy = float(seg.stats.get("rms", 0.0))
+            viz = primary if energy >= median else secondary
+
+            # Per-Segment-Feature-Dict fuer die Parameterwahl
+            seg_f = dict(global_f)
+            seg_f["rms_mean"] = energy
+            if seg.stats.get("onset_density") is not None:
+                seg_f["onset_density"] = float(seg.stats["onset_density"])
+            params = self._select_params(viz, seg_f)
+
+            scenes.append(Scene(
+                start=float(seg.start),
+                end=float(seg.end),
+                visualizer=viz,
+                params=params,
+                transition="cut" if idx == 0 else "crossfade",
+                transition_duration=0.6,
+                label=seg.stats.get("dominant_chroma"),
+            ))
+        return Timeline(scenes=scenes)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "audio-visualizer-pro"
-version = "2.8.0"
+version = "2.9.0"
 description = "Modulares, KI-optimiertes Audio-Visualisierungs-System fuer professionelle Musikvideos und Podcast-Visuals"
 readme = "README.md"
 license = {text = "MIT"}

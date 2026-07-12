@@ -26,6 +26,8 @@ class WaveformBar(QWidget):
         self._rms: np.ndarray | None = None
         self._beats: list[float] = []  # Positionen 0.0-1.0
         self._percent: float = 0.3
+        self._scenes: list = []        # (start_pct, end_pct, label)
+        self._duration: float = 0.0
 
     def set_features(self, features):
         """Uebernimmt Analyzer-Features (RMS-Wellenform + Beat-Frames)."""
@@ -57,6 +59,20 @@ class WaveformBar(QWidget):
 
     def set_percent(self, percent: float):
         self._percent = max(0.0, min(1.0, percent))
+        self.update()
+
+    def set_scenes(self, scenes, duration: float):
+        """Uebernimmt Timeline-Szenen als farbige Bloecke (0..1-Positionen)."""
+        self._duration = max(duration, 0.0)
+        self._scenes = []
+        if scenes and self._duration > 0:
+            for s in scenes:
+                self._scenes.append((
+                    max(0.0, s.start / self._duration),
+                    min(1.0, s.end / self._duration),
+                    getattr(s, "label", None) or s.visualizer,
+                ))
+        self.setMinimumHeight(72 if self._scenes else 56)
         self.update()
 
     def _seek_to(self, x: float):
@@ -107,6 +123,31 @@ class WaveformBar(QWidget):
             # Ohne Analyse: dezente Mittellinie
             painter.setPen(QPen(unplayed, 2))
             painter.drawLine(int(8), int(center_y), int(w - 8), int(center_y))
+
+        # Szenen-Bloecke (unterer Streifen, wenn eine Timeline aktiv ist)
+        if self._scenes:
+            band_h = 14
+            band_y = h - band_h
+            palette = [
+                (94, 129, 234), (118, 75, 162), (78, 205, 196),
+                (255, 107, 107), (255, 200, 100), (150, 206, 180),
+            ]
+            painter.setPen(Qt.PenStyle.NoPen)
+            for i, (sp, ep, label) in enumerate(self._scenes):
+                x0 = sp * w
+                x1 = ep * w
+                col = palette[i % len(palette)]
+                painter.setBrush(QColor(*col, 200))
+                painter.drawRect(QRectF(x0, band_y, max(1.0, x1 - x0 - 1), band_h))
+                # Label, wenn genug Platz
+                if (x1 - x0) > 44 and label:
+                    painter.setPen(QColor(20, 20, 30))
+                    painter.drawText(
+                        QRectF(x0 + 3, band_y, x1 - x0 - 4, band_h),
+                        Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                        str(label)[:14],
+                    )
+                    painter.setPen(Qt.PenStyle.NoPen)
 
         # Beat-Marker (kleine Punkte am unteren Rand)
         if self._beats:
@@ -166,6 +207,10 @@ class TimelineWidget(QWidget):
     def set_features(self, features):
         """Zeigt Wellenform und Beat-Marker der analysierten Audio-Datei."""
         self.waveform.set_features(features)
+
+    def set_scenes(self, scenes):
+        """Zeigt eine Szenen-Timeline als farbige Bloecke unter der Wellenform."""
+        self.waveform.set_scenes(scenes, self._duration)
 
     def set_percent(self, percent: float):
         percent = max(0.0, min(1.0, percent))

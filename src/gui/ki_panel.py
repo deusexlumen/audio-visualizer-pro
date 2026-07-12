@@ -21,6 +21,7 @@ logger = get_logger(__name__)
 
 class KIPanel(QWidget):
     optimize_requested = pyqtSignal()
+    full_ai_requested = pyqtSignal()
 
     def __init__(self, state, gemini=None, parent=None, gemini_error=None):
         super().__init__(parent)
@@ -59,6 +60,20 @@ class KIPanel(QWidget):
         self.btn_optimize.clicked.connect(self._on_optimize)
         opt_layout.addWidget(self.btn_optimize)
 
+        # Voll-KI-Modus: erstellt zusaetzlich eine Szenen-Timeline
+        self.btn_full_ai = QPushButton("Voll-KI-Modus (Szenen-Timeline)")
+        self.btn_full_ai.setToolTip(
+            "Analysiert die Songstruktur und erstellt eine Timeline mit "
+            "wechselnden Visualizern je Abschnitt."
+        )
+        self.btn_full_ai.clicked.connect(self._on_full_ai)
+        opt_layout.addWidget(self.btn_full_ai)
+
+        self.btn_clear_timeline = QPushButton("Timeline entfernen")
+        self.btn_clear_timeline.clicked.connect(self._on_clear_timeline)
+        self.btn_clear_timeline.setVisible(False)
+        opt_layout.addWidget(self.btn_clear_timeline)
+
         self.lbl_status = QLabel("")
         self.lbl_status.setWordWrap(True)
         opt_layout.addWidget(self.lbl_status)
@@ -95,10 +110,43 @@ class KIPanel(QWidget):
             self.lbl_status.setText("")
             self._update_button_states()
 
+    def _on_full_ai(self):
+        """Startet den Voll-KI-Modus (Timeline-Erstellung, Worker in MainWindow)."""
+        if self.state.features is None:
+            return
+        self.btn_full_ai.setEnabled(False)
+        self.btn_full_ai.setText("⏳ Erstelle Timeline...")
+        self.lbl_status.setText("Analysiere Songstruktur...")
+        self.full_ai_requested.emit()
+
+    def _on_clear_timeline(self):
+        self.state.timeline = None
+        self.btn_clear_timeline.setVisible(False)
+        self.lbl_status.setText("Timeline entfernt — einzelner Visualizer aktiv.")
+
+    def on_full_ai_progress(self, msg: str):
+        self.lbl_status.setText(msg)
+
+    def on_full_ai_finished(self, timeline):
+        self.state.timeline = timeline
+        self.btn_full_ai.setEnabled(True)
+        self.btn_full_ai.setText("Voll-KI-Modus (Szenen-Timeline)")
+        n = len(timeline.scenes) if timeline else 0
+        self.lbl_status.setText(f"Timeline mit {n} Szenen erstellt.")
+        self.btn_clear_timeline.setVisible(n > 0)
+
+    def on_full_ai_error(self, msg: str, tb: str = ""):
+        if tb:
+            logger.error(f"[Voll-KI] Fehler:\n{tb}")
+        self.btn_full_ai.setEnabled(True)
+        self.btn_full_ai.setText("Voll-KI-Modus (Szenen-Timeline)")
+        self.lbl_status.setText(f"Voll-KI-Fehler: {msg}")
+
     def _update_button_states(self):
         has_features = self.state.features is not None
         has_gemini = self.gemini is not None
         self.btn_optimize.setEnabled(has_features and has_gemini and not self.state.ki_optimizing)
+        self.btn_full_ai.setEnabled(has_features and not self.state.ki_optimizing)
         if not has_gemini:
             reason = f"\nGrund: {self.gemini_error}" if self.gemini_error else ""
             self.lbl_status.setText(

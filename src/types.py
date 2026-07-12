@@ -67,6 +67,29 @@ class VisualConfig(BaseModel):
     fps: int = 60
 
 
+class Scene(BaseModel):
+    """Laufzeit-Modell einer Timeline-Szene (ein Visualizer je Zeitabschnitt)."""
+    start: float
+    end: float
+    visualizer: str
+    params: Dict = Field(default_factory=dict)
+    transition: Literal["cut", "crossfade"] = "crossfade"
+    transition_duration: float = 0.6
+    label: Optional[str] = None
+
+
+class Timeline(BaseModel):
+    """Laufzeit-Modell einer Szenen-Timeline."""
+    scenes: List[Scene] = Field(default_factory=list)
+
+    def scene_at(self, t: float) -> Optional[Scene]:
+        """Liefert die Szene, die den Zeitpunkt t (Sekunden) enthaelt."""
+        for s in self.scenes:
+            if s.start <= t < s.end:
+                return s
+        return self.scenes[-1] if self.scenes else None
+
+
 class ProjectConfig(BaseModel):
     """Gesamtkonfiguration einer Render-Job."""
     audio_file: str

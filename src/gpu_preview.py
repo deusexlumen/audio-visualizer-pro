@@ -44,6 +44,7 @@ def render_gpu_preview(
     viz_scale: float = 1.0,
     features: AudioFeatures = None,
     cancel_check=None,
+    timeline=None,
 ):
     """
     Rendert ein einzelnes Frame fuer die Live-Vorschau.
@@ -89,6 +90,14 @@ def render_gpu_preview(
         # Das verhindert Cross-Thread-Probleme mit dem ModernGL-Context,
         # wenn der Preview-Worker in einem QThread laeuft.
         renderer = GPUPreviewRenderer(width=width, height=height, fps=fps)
+
+        # Bei Timeline: Visualizer + Params der Szene am Vorschau-Zeitpunkt waehlen
+        if timeline is not None and getattr(timeline, "scenes", None):
+            scene = timeline.scene_at(features.duration * preview_time_percent)
+            if scene is not None:
+                visualizer_type = scene.visualizer
+                params = scene.params or params
+
         viz_cls = get_visualizer(visualizer_type)
         viz = viz_cls(renderer.ctx, width, height)
 

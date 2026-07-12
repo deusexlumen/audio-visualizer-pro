@@ -209,6 +209,46 @@ class BackgroundConfig(BaseModel):
     opacity: float = Field(default=0.3, ge=0.0, le=1.0)
 
 
+class SceneSchema(BaseModel):
+    """Eine Szene der Timeline: ein Visualizer fuer einen Zeitabschnitt."""
+    start: float = Field(..., ge=0.0)
+    end: float = Field(..., ge=0.0)
+    visualizer: str
+    params: Dict[str, Any] = Field(default_factory=dict)
+    transition: Literal["cut", "crossfade"] = "crossfade"
+    transition_duration: float = Field(default=0.6, ge=0.0, le=5.0)
+    label: Optional[str] = None
+
+    @model_validator(mode="after")
+    def check_end_after_start(self):
+        if self.end <= self.start:
+            raise ValueError("Szenen-Ende muss nach dem Start liegen")
+        return self
+
+    @field_validator("visualizer")
+    @classmethod
+    def validate_visualizer(cls, v: str) -> str:
+        known = _known_visualizer_names()
+        if known and v not in known:
+            raise ValueError(f"Unbekannter Visualizer '{v}' in Szene")
+        return v
+
+
+class TimelineSchema(BaseModel):
+    """Geordnete, lueckenlose Folge von Szenen ueber die Track-Dauer."""
+    scenes: List[SceneSchema] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def check_sorted_non_overlapping(self):
+        scenes = self.scenes
+        for a, b in zip(scenes, scenes[1:]):
+            if b.start < a.end - 1e-3:
+                raise ValueError("Szenen duerfen sich nicht ueberlappen")
+            if b.start < a.start:
+                raise ValueError("Szenen muessen nach Startzeit sortiert sein")
+        return self
+
+
 class ProjectConfigSchema(BaseModel):
     """Vollstaendiges Schema fuer Projekt-Konfiguration."""
     audio_file: str
@@ -226,6 +266,10 @@ class ProjectConfigSchema(BaseModel):
 
     intro_video: Optional[str] = None
     intro_fade_duration: float = Field(default=1.0, ge=0.1, le=2.0)
+
+    # Optionale Szenen-Timeline. Ist sie gesetzt, ueberschreibt sie beim
+    # Rendern den einzelnen visual.type (Visualizer-Wechsel ueber die Zeit).
+    timeline: Optional[TimelineSchema] = None
 
     @model_validator(mode="after")
     def flatten_background(self):

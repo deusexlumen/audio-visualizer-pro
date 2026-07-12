@@ -1,8 +1,9 @@
 from unittest.mock import patch, MagicMock
 from PyQt6.QtCore import QCoreApplication
+import numpy as np
 from src.gui.workers import (
     PreviewWorker, RenderWorker, AIOptimizeWorker, QuoteExtractWorker,
-    TranscribeWorker,
+    TranscribeWorker, FullAIWorker,
 )
 
 
@@ -91,6 +92,20 @@ def test_quote_extract_worker_emits_quotes_ready(qtbot):
         max_quotes=5,
         use_cache=True,
     )
+
+
+def test_full_ai_worker_emits_timeline(qtbot, dummy_audio_features):
+    app = QCoreApplication.instance() or QCoreApplication([])
+    # Ohne Gemini: rein regelbasierte Timeline
+    worker = FullAIWorker(features=dummy_audio_features, gemini=None, use_gemini=False)
+
+    captured = []
+    worker.timeline_ready.connect(captured.append)
+    worker.run()
+
+    assert len(captured) == 1
+    timeline = captured[0]
+    assert len(timeline.scenes) >= 1
 
 
 def test_transcribe_worker_emits_ready(qtbot):

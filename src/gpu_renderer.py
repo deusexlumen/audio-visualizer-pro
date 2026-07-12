@@ -161,6 +161,7 @@ class GPUBatchRenderer:
         viz_scale: float = 1.0,
         progress_callback=None,
         cancel_event=None,
+        timeline=None,
     ):
         """Rendert ein Video aus Audio-Analyse auf der GPU.
 
@@ -234,6 +235,36 @@ class GPUBatchRenderer:
         viz = viz_cls(self.ctx, self.width, self.height)
         if params:
             viz.set_params(params)
+
+        # === Timeline vorbereiten ===
+        # Alle in der Timeline vorkommenden Visualizer EINMAL instanziieren
+        # (Shader-Kompilierung ist einmalig; Instanzen bleiben ueber Szenen
+        # erhalten, damit Trails/Feedback beim Wiedereintritt bestehen).
+        timeline_scenes = None
+        viz_instances = {}
+        scene_for_frame = None
+        applied_scene = {}
+        if timeline is not None and getattr(timeline, "scenes", None):
+            timeline_scenes = list(timeline.scenes)
+            for sc in timeline_scenes:
+                name = sc.visualizer
+                if name not in viz_instances:
+                    try:
+                        viz_instances[name] = get_visualizer(name)(self.ctx, self.width, self.height)
+                    except Exception as e:
+                        logger.warning(f"[GPU] Timeline-Visualizer '{name}' nicht ladbar: {e}")
+            if viz_instances:
+                self._ensure_timeline_resources()
+                # Frame -> Szenen-Index vorberechnen (O(1)-Lookup pro Frame)
+                scene_for_frame = [0] * frame_count
+                si = 0
+                for fi in range(frame_count):
+                    t = fi / self.fps
+                    while si + 1 < len(timeline_scenes) and t >= timeline_scenes[si + 1].start:
+                        si += 1
+                    scene_for_frame[fi] = si
+            else:
+                timeline_scenes = None
         
         # Hintergrundbild vorbereiten
         bg_texture = None
@@ -442,22 +473,20 @@ class GPUBatchRenderer:
                     
                     # Visualizer rendern: mit MSAA (falls verfuegbar) fuer
                     # weiche Kanten bei geometriebasierten Visualizern.
-                    if self.viz_ms_fbo is not None:
-                        self.viz_ms_fbo.use()
-                        self.ctx.clear(0.0, 0.0, 0.0, 0.0)
-                        viz.render(features_dict, time)
-                        # MSAA-Aufloesung: Multisample-FBO in normales FBO kopieren
-                        self.ctx.copy_framebuffer(self.viz_fbo, self.viz_ms_fbo)
+                    if timeline_scenes is not None:
+                        active_viz_tex = self._render_timeline_frame(
+                            timeline_scenes, scene_for_frame, viz_instances,
+                            applied_scene, features_dict, i, time,
+                        )
                     else:
-                        self.viz_fbo.use()
-                        self.ctx.clear(0.0, 0.0, 0.0, 0.0)
-                        viz.render(features_dict, time)
+                        self._render_viz_into(viz, self.viz_fbo, features_dict, time)
+                        active_viz_tex = self.viz_fbo.color_attachments[0]
                     if _DEBUG and i == 0:
                         self._save_debug(self.viz_fbo, "debug_step3_after_viz.png")
 
                     self.fbo.use()
                     self._blit_viz_to_fbo(
-                        self.viz_fbo.color_attachments[0],
+                        active_viz_tex,
                         offset_x=viz_offset_x,
                         offset_y=viz_offset_y,
                         scale=viz_scale,
@@ -1263,6 +1292,116 @@ class GPUBatchRenderer:
         )
         self._blit_vao, self._blit_vbo = create_textured_quad(self.ctx, self._blit_prog)
     
+    def _render_viz_into(self, viz, dest_fbo, features_dict, time):
+        """Rendert einen Visualizer (mit MSAA falls verfuegbar) in dest_fbo."""
+        if self.viz_ms_fbo is not None:
+            self.viz_ms_fbo.use()
+            self.ctx.clear(0.0, 0.0, 0.0, 0.0)
+            viz.render(features_dict, time)
+            self.ctx.copy_framebuffer(dest_fbo, self.viz_ms_fbo)
+        else:
+            dest_fbo.use()
+            self.ctx.clear(0.0, 0.0, 0.0, 0.0)
+            viz.render(features_dict, time)
+
+    def _ensure_timeline_resources(self):
+        """Legt die zusaetzlichen FBOs und den Blend-Shader fuer Crossfades an."""
+        if getattr(self, "_timeline_ready", False):
+            return
+        from .gpu_visualizers.base import create_textured_quad
+        # Zweites Resolve-Target (ausgehende Szene) + Blend-Ziel (RGBA16F HDR)
+        self.viz_fbo_b = self.ctx.framebuffer(
+            color_attachments=[self.ctx.texture((self.width, self.height), 4, dtype='f2')]
+        )
+        self.viz_fbo_blend = self.ctx.framebuffer(
+            color_attachments=[self.ctx.texture((self.width, self.height), 4, dtype='f2')]
+        )
+        self._xfade_prog = self.ctx.program(
+            vertex_shader="""
+            #version 330
+            in vec2 in_pos; in vec2 in_uv; out vec2 v_uv;
+            void main() { v_uv = in_uv; gl_Position = vec4(in_pos, 0.0, 1.0); }
+            """,
+            fragment_shader="""
+            #version 330
+            uniform sampler2D u_from;   // ausgehende Szene
+            uniform sampler2D u_to;     // eingehende Szene
+            uniform float u_alpha;      // 0 = ausgehend, 1 = eingehend
+            in vec2 v_uv; out vec4 f_color;
+            void main() {
+                vec4 a = texture(u_from, v_uv);
+                vec4 b = texture(u_to, v_uv);
+                f_color = mix(a, b, clamp(u_alpha, 0.0, 1.0));
+            }
+            """,
+        )
+        self._xfade_vao, self._xfade_vbo = create_textured_quad(self.ctx, self._xfade_prog)
+        self._timeline_ready = True
+
+    def _apply_scene_params(self, viz, viz_name, scene, scene_idx, applied_scene):
+        """Setzt die Params einer Szene auf ihre Visualizer-Instanz (nur bei Wechsel)."""
+        if applied_scene.get(viz_name) != scene_idx:
+            try:
+                if scene.params:
+                    viz.set_params(scene.params)
+            except Exception as e:
+                logger.debug(f"[GPU] Szenen-Params fuer '{viz_name}' fehlgeschlagen: {e}")
+            applied_scene[viz_name] = scene_idx
+
+    def _render_timeline_frame(self, scenes, scene_for_frame, viz_instances,
+                                applied_scene, features_dict, frame_i, time):
+        """Rendert einen Timeline-Frame und liefert die anzuzeigende Viz-Textur.
+
+        Ausserhalb einer Transition entspricht das exakt dem Einzel-Viz-Pfad.
+        Im Crossfade-Fenster werden aus- und eingehende Szene getrennt gerendert
+        und ueber mix() ineinander geblendet.
+        """
+        si = scene_for_frame[frame_i]
+        scene = scenes[si]
+        viz = viz_instances.get(scene.visualizer)
+        if viz is None:
+            # Fallback: leeres FBO
+            self.viz_fbo.use()
+            self.ctx.clear(0.0, 0.0, 0.0, 0.0)
+            return self.viz_fbo.color_attachments[0]
+
+        self._apply_scene_params(viz, scene.visualizer, scene, si, applied_scene)
+
+        # Crossfade nur am Szenen-Anfang, wenn Vorgaenger existiert, Transition
+        # 'crossfade' ist und die Visualizer sich unterscheiden (eine Instanz
+        # kann nicht gleichzeitig zwei Param-Saetze rendern).
+        in_xfade = False
+        alpha = 1.0
+        prev = scenes[si - 1] if si > 0 else None
+        if (prev is not None and scene.transition == "crossfade"
+                and scene.transition_duration > 0.0
+                and prev.visualizer != scene.visualizer
+                and time < scene.start + scene.transition_duration):
+            prev_viz = viz_instances.get(prev.visualizer)
+            if prev_viz is not None:
+                in_xfade = True
+                alpha = (time - scene.start) / scene.transition_duration
+
+        if not in_xfade:
+            self._render_viz_into(viz, self.viz_fbo, features_dict, time)
+            return self.viz_fbo.color_attachments[0]
+
+        # Eingehende Szene -> viz_fbo, ausgehende -> viz_fbo_b
+        self._render_viz_into(viz, self.viz_fbo, features_dict, time)
+        self._apply_scene_params(prev_viz, prev.visualizer, prev, si - 1, applied_scene)
+        self._render_viz_into(prev_viz, self.viz_fbo_b, features_dict, time)
+
+        # Blenden -> viz_fbo_blend
+        self.viz_fbo_blend.use()
+        self.ctx.clear(0.0, 0.0, 0.0, 0.0)
+        self.viz_fbo_b.color_attachments[0].use(location=0)
+        self.viz_fbo.color_attachments[0].use(location=1)
+        self._xfade_prog["u_from"].value = 0
+        self._xfade_prog["u_to"].value = 1
+        self._xfade_prog["u_alpha"].value = float(alpha)
+        self._xfade_vao.render(mode=moderngl.TRIANGLE_STRIP)
+        return self.viz_fbo_blend.color_attachments[0]
+
     def _blit_viz_to_fbo(self, source_texture, offset_x=0.0, offset_y=0.0, scale=1.0, opacity=1.0):
         """Blittet die Visualizer-Textur auf den aktuellen FBO mit Offset und Skalierung."""
         if not hasattr(self, '_blit_prog'):
@@ -1387,6 +1526,14 @@ class GPUBatchRenderer:
             if hasattr(self, "viz_ms_fbo") and self.viz_ms_fbo:
                 self.viz_ms_fbo.release()
                 self.viz_ms_fbo = None
+            for tl_attr in ("viz_fbo_b", "viz_fbo_blend"):
+                obj = getattr(self, tl_attr, None)
+                if obj:
+                    try:
+                        obj.release()
+                    except Exception:
+                        pass
+                    setattr(self, tl_attr, None)
             if hasattr(self, "_bloom") and self._bloom:
                 self._bloom.release()
                 self._bloom = None

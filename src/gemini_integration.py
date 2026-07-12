@@ -1466,6 +1466,85 @@ Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
                 }
             return default_result
 
+    def generate_scene_timeline(self, segments_stats: list, available_visualizers: list,
+                                 audio_path: str = None, mode: str = "music",
+                                 use_cache: bool = True) -> list:
+        """Verfeinert eine Szenen-Timeline per Gemini (nur kompakte Stats, kein Audio).
+
+        Sendet die Segment-Kennwerte als JSON und laesst das Modell je Segment
+        einen passenden Visualizer und ein Label (Intro/Drop/Refrain/...) waehlen.
+        Sehr guenstig, da kein Audio-Upload. Ergebnis wird gecacht.
+
+        Args:
+            segments_stats: Liste von Dicts mit Segment-Kennwerten (start, end, stats).
+            available_visualizers: Erlaubte Visualizer-Namen.
+            audio_path: Fuer den Cache-Schluessel (optional).
+            mode: 'music' | 'speech' | 'hybrid'.
+            use_cache: Gecachtes Ergebnis nutzen, wenn vorhanden.
+
+        Returns:
+            Liste von Dicts {index, visualizer, label} — leer bei Fehler.
+        """
+        sig = f"{self.model}|{PROMPT_VERSION}|{mode}|{len(segments_stats)}"
+        if use_cache and audio_path:
+            cached = load_json_result(audio_path, "timeline", sig)
+            if cached is not None:
+                logger.info("[Gemini] Gecachte Timeline verwendet.")
+                return cached
+
+        viz_list = ", ".join(available_visualizers)
+        seg_json = json.dumps(segments_stats, ensure_ascii=False)
+        prompt = f"""
+        Du gestaltest eine Szenen-Timeline fuer ein Musik-/Podcast-Video.
+        Modus: {mode}. Verfuegbare Visualizer: {viz_list}.
+
+        Hier die Segmente (Start/Ende in Sekunden + Kennwerte):
+        {seg_json}
+
+        Waehle fuer JEDES Segment genau einen Visualizer aus der Liste und ein
+        kurzes deutsches Label (z.B. "Intro", "Aufbau", "Drop", "Refrain",
+        "Bridge", "Outro"). Energiereiche Segmente duerfen kraeftigere Visualizer
+        bekommen, ruhige sanftere. Sorge fuer etwas Abwechslung zwischen Segmenten.
+
+        Gib NUR ein JSON-Array zurueck, ein Objekt pro Segment mit den Feldern:
+        - "index": Ganzzahl (0-basiert, Reihenfolge wie oben)
+        - "visualizer": exakt einer der erlaubten Namen
+        - "label": kurzes Label
+        """
+
+        try:
+            response = self._call_gemini_with_retry(
+                lambda: self.client.models.generate_content(
+                    model=self.model,
+                    contents=[prompt],
+                    config={"response_mime_type": "application/json", "temperature": 0.2},
+                )
+            )
+            data = self._parse_json_response(response.text)
+            if not isinstance(data, list):
+                logger.warning("[Gemini] Timeline-Antwort war kein Array, ignoriere.")
+                return []
+            # Nur gueltige Visualizer zulassen
+            allowed = set(available_visualizers)
+            cleaned = []
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                viz = str(item.get("visualizer", "")).strip()
+                if viz not in allowed:
+                    continue
+                cleaned.append({
+                    "index": int(item.get("index", len(cleaned))),
+                    "visualizer": viz,
+                    "label": str(item.get("label", "")).strip() or None,
+                })
+            if use_cache and audio_path and cleaned:
+                save_json_result(audio_path, "timeline", sig, cleaned)
+            return cleaned
+        except Exception as e:
+            logger.warning(f"[Gemini] Timeline-Generierung fehlgeschlagen: {e}")
+            return []
+
     def generate_background_prompt(self, audio_features: dict) -> str:
         """
         Generiert einen Bildgenerierungs-Prompt basierend auf Audio-Analyse.

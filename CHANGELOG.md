@@ -5,6 +5,32 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
+## [2.9.0] — 2026-07-12
+
+Szenen-Timeline & Voll-KI-Modus (Phase 5 des Ausbauplans v3.0): Visualizer
+wechseln über die Zeit, automatisch aus der Songstruktur.
+
+### Added
+- **Lokale Audio-Segmentierung** (`src/segmentation.py`): zerlegt einen Track
+  ohne LLM/Kosten in strukturelle Abschnitte (chroma/MFCC/RMS-Clusterung,
+  Sprach-Fallback über Pausen) mit kompakten Kennwerten je Segment
+- **Szenen-Timeline**: neues Datenmodell (`Scene`/`Timeline` in `types.py`,
+  `SceneSchema`/`TimelineSchema` in `config/schemas.py`); ein Visualizer je
+  Zeitabschnitt mit `cut`- oder `crossfade`-Übergang
+- **Renderer-Crossfade**: `GPUBatchRenderer.render(timeline=...)` erzeugt alle
+  benötigten Visualizer einmal vorab und blendet an Szenengrenzen über ein
+  zweites HDR-FBO weich über — außerhalb von Übergängen null Mehraufwand
+- **Voll-KI-Modus** in der GUI: ein Klick analysiert die Struktur, erstellt eine
+  Timeline (regelbasiert via `SmartMatcher.suggest_timeline`, optional durch
+  Gemini verfeinert mit Labels wie „Intro"/„Drop") und zeigt die Szenen als
+  farbige Blöcke unter der Wellenform
+- **Gemini-Timeline** (`generate_scene_timeline`): verfeinert Szenen aus
+  kompaktem Stats-JSON (kein Audio-Upload, sehr günstig, gecacht)
+
+### Note
+- Imagen-Hintergrundgenerierung bewusst ausgelassen (kostenpflichtige API);
+  separat nachrüstbar.
+
 ## [2.8.0] — 2026-07-12
 
 Visualizer-Qualität (Phase 4 des Ausbauplans v3.0): schwache Visualizer poliert,

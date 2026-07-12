@@ -56,6 +56,7 @@ class MainWindow(QMainWindow):
         self._ai_optimize_worker: AIOptimizeWorker | None = None
         self._quote_extract_worker: QuoteExtractWorker | None = None
         self._transcribe_worker = None
+        self._full_ai_worker = None
         self._render_worker: RenderWorker | None = None
         self._intro_worker: IntroWorker | None = None
 
@@ -409,6 +410,7 @@ class MainWindow(QMainWindow):
         self.timeline.time_changed.connect(self._on_time_changed)
         self.state.changed.connect(self._on_state_changed)
         self.ki_panel.optimize_requested.connect(self._start_ai_optimize)
+        self.ki_panel.full_ai_requested.connect(self._start_full_ai)
         self.quotes_panel.btn_extract.clicked.connect(self._start_quote_extract)
         self.quotes_panel.btn_transcribe.clicked.connect(self._start_transcribe)
         self.btn_render.clicked.connect(self._on_render_clicked)
@@ -514,6 +516,7 @@ class MainWindow(QMainWindow):
             features=self.state.features,
             quotes=self.state.quotes if self.state.quotes_enabled else None,
             quote_config=self.state.quote_config if self.state.quotes_enabled else None,
+            timeline=self.state.timeline,
         )
         self._preview_worker.preview_ready.connect(self._on_preview_ready)
         self._preview_worker.preview_error.connect(self._on_preview_error)
@@ -565,6 +568,32 @@ class MainWindow(QMainWindow):
         self._quote_extract_worker.quotes_error.connect(self.quotes_panel.on_extract_error)
         self._quote_extract_worker.finished.connect(lambda: self._cleanup_worker("_quote_extract_worker"))
         self._quote_extract_worker.start()
+
+    def _start_full_ai(self):
+        from src.gui.workers import FullAIWorker
+
+        if getattr(self, "_full_ai_worker", None) and self._full_ai_worker.isRunning():
+            return
+        if self.state.features is None:
+            return
+        self._full_ai_worker = FullAIWorker(
+            features=self.state.features,
+            gemini=self.gemini,
+            use_gemini=self.gemini is not None,
+            parent=self,
+        )
+        self._full_ai_worker.progress.connect(self.ki_panel.on_full_ai_progress)
+        self._full_ai_worker.timeline_ready.connect(self._on_full_ai_finished)
+        self._full_ai_worker.ai_error.connect(self.ki_panel.on_full_ai_error)
+        self._full_ai_worker.finished.connect(lambda: self._cleanup_worker("_full_ai_worker"))
+        self._full_ai_worker.start()
+
+    def _on_full_ai_finished(self, timeline):
+        self.ki_panel.on_full_ai_finished(timeline)
+        # Timeline in der Waveform-Timeline anzeigen und Vorschau aktualisieren
+        if hasattr(self.timeline, "set_scenes"):
+            self.timeline.set_scenes(timeline.scenes if timeline else [])
+        self._start_preview()
 
     def _start_transcribe(self):
         from src.gui.workers import TranscribeWorker
@@ -664,6 +693,7 @@ class MainWindow(QMainWindow):
             "viz_offset_x": self.state.viz_offset_x,
             "viz_offset_y": self.state.viz_offset_y,
             "viz_scale": self.state.viz_scale,
+            "timeline": self.state.timeline,
         }
 
         self._set_render_ui(True)

@@ -53,12 +53,14 @@ class PreviewWorker(QThread):
         features=None,
         quotes=None,
         quote_config=None,
+        timeline=None,
         parent=None,
     ):
         super().__init__(parent)
         self.audio_path = audio_path
         self.visualizer_type = visualizer_type
         self.params = params
+        self.timeline = timeline
         self.width = width
         self.height = height
         self.fps = fps
@@ -101,6 +103,7 @@ class PreviewWorker(QThread):
                 quotes=self.quotes,
                 quote_config=self.quote_config,
                 cancel_check=self.isInterruptionRequested,
+                timeline=self.timeline,
             )
             if img is not None:
                 self.preview_ready.emit(img)
@@ -165,6 +168,7 @@ class RenderWorker(QThread):
                 viz_scale=self.config.get("viz_scale", 1.0),
                 progress_callback=_progress,
                 cancel_event=self._cancel_event,
+                timeline=self.config.get("timeline"),
             )
 
             if self._cancel_event.is_set():
@@ -305,6 +309,64 @@ class QuoteExtractWorker(QThread):
             self.quotes_ready.emit(quotes)
         except Exception as e:
             self.quotes_error.emit(str(e), traceback.format_exc())
+
+
+class FullAIWorker(QThread):
+    """Voll-KI-Modus: Segmentierung -> Timeline (offline + optional Gemini)."""
+
+    progress = pyqtSignal(str)
+    timeline_ready = pyqtSignal(object)   # src.types.Timeline
+    ai_error = pyqtSignal(str, str)
+
+    def __init__(self, features, gemini=None, use_gemini=True, parent=None):
+        super().__init__(parent)
+        self.features = features
+        self.gemini = gemini
+        self.use_gemini = use_gemini
+
+    def run(self):
+        try:
+            from src.segmentation import segment_audio
+            from src.ai_matcher import SmartMatcher
+
+            self.progress.emit("Analysiere Songstruktur...")
+            segments = segment_audio(self.features)
+
+            self.progress.emit("Erstelle Szenen-Timeline...")
+            matcher = SmartMatcher()
+            timeline = matcher.suggest_timeline(self.features, segments)
+
+            # Optionale Gemini-Verfeinerung (Labels + Visualizer je Segment)
+            if self.use_gemini and self.gemini is not None and segments:
+                try:
+                    self.progress.emit("KI verfeinert die Szenen...")
+                    from src.gpu_visualizers import list_visualizers
+                    stats = [
+                        {"start": round(s.start, 2), "end": round(s.end, 2), **s.stats}
+                        for s in segments
+                    ]
+                    refined = self.gemini.generate_scene_timeline(
+                        segments_stats=stats,
+                        available_visualizers=list_visualizers(),
+                        mode=getattr(self.features, "mode", "music"),
+                    )
+                    for item in refined:
+                        idx = item.get("index")
+                        if isinstance(idx, int) and 0 <= idx < len(timeline.scenes):
+                            timeline.scenes[idx].visualizer = item["visualizer"]
+                            if item.get("label"):
+                                timeline.scenes[idx].label = item["label"]
+                except Exception as e:
+                    # Gemini optional — Offline-Timeline bleibt gueltig
+                    import logging
+                    logging.getLogger("avp.gui.workers").warning(
+                        f"Gemini-Timeline uebersprungen: {e}"
+                    )
+
+            self.progress.emit(f"{len(timeline.scenes)} Szenen erstellt.")
+            self.timeline_ready.emit(timeline)
+        except Exception as e:
+            self.ai_error.emit(str(e), traceback.format_exc())
 
 
 class TranscribeWorker(QThread):

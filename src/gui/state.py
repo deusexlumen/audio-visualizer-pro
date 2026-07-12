@@ -19,7 +19,7 @@ class AppState(QObject):
         "preview_time_percent", "preview_fps", "preview_width", "preview_height",
         "resolution", "render_fps", "codec", "quality", "gpu_encode", "output_dir",
         "intro_enabled", "intro_path", "intro_fade_duration",
-        "quotes", "quotes_enabled", "quote_config",
+        "quotes", "quotes_enabled", "quote_config", "timeline",
         "status_message", "status_kind",
         "ki_prompt", "ki_suggested_colors", "ki_status", "ki_error",
         "ki_optimizing", "quotes_extracting",
@@ -82,6 +82,10 @@ class AppState(QObject):
 
         self.quotes: list = []
         self.quotes_enabled: bool = False
+
+        # Optionale Szenen-Timeline (src.types.Timeline oder None). Ist sie
+        # gesetzt, wechselt der Renderer die Visualizer ueber die Zeit.
+        self.timeline = None
         self.quote_config: QuoteOverlayConfig = QuoteOverlayConfig(enabled=True)
 
         self.status_message: str = "Bereit."
