@@ -7,6 +7,30 @@ Pydantic v2 Schemas fuer die Validierung von Config-JSONs.
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Any, Dict, List, Optional, Tuple, Union, Literal
 
+# Statische Fallback-Liste der eingebauten Visualizer. Wird nur genutzt, wenn
+# die Laufzeit-Registry nicht ladbar ist (z.B. Validierung ohne OpenGL/Import).
+_BUILTIN_VISUALIZER_NAMES = {
+    "pulsing_core", "spectrum_bars", "chroma_field", "particle_swarm",
+    "typographic", "neon_oscilloscope", "sacred_mandala", "liquid_blobs",
+    "neon_wave_circle", "frequency_flower", "lumina_core", "voice_flow",
+    "spectrum_genesis", "speech_focus", "bass_temple", "orchestral_swell",
+    "aurora_voice", "nebula_drift", "glass_prism",
+}
+
+
+def _known_visualizer_names() -> set:
+    """Liefert die gueltigen Visualizer-Namen (Registry, sonst Fallback-Liste).
+
+    Der Import der Registry kann OpenGL/Module ziehen; schlaegt er fehl, faellt
+    die Validierung auf die statische Liste zurueck statt hart zu scheitern.
+    """
+    try:
+        from src.gpu_visualizers import list_visualizers
+        names = set(list_visualizers())
+        return names | _BUILTIN_VISUALIZER_NAMES
+    except Exception:
+        return set(_BUILTIN_VISUALIZER_NAMES)
+
 
 class ColorConfig(BaseModel):
     """Farb-Konfiguration als Hex-Strings."""
@@ -123,20 +147,25 @@ class VisualParams(BaseModel):
 
 class VisualConfigSchema(BaseModel):
     """Schema fuer Visual-Konfiguration."""
-    type: Literal[
-        # Classic
-        "pulsing_core", "spectrum_bars", "chroma_field",
-        "particle_swarm", "typographic", "neon_oscilloscope",
-        "sacred_mandala", "liquid_blobs", "neon_wave_circle",
-        "frequency_flower",
-        # Signature Pro
-        "lumina_core", "voice_flow", "spectrum_genesis",
-        "speech_focus", "bass_temple", "orchestral_swell",
-    ]
+    # Kein festes Literal mehr: neue Visualizer und Studio-Rezepte sollen ohne
+    # Schema-Aenderung nutzbar sein. Der Typ wird gegen die Laufzeit-Registry
+    # geprueft (siehe Validator), mit Fallback auf eine statische Liste, falls
+    # die Registry (z.B. ohne OpenGL) nicht ladbar ist.
+    type: str = Field(default="lumina_core")
     resolution: List[int] = Field(default=[1920, 1080], min_length=2, max_length=2)
     fps: int = Field(default=60, ge=1, le=240)
     colors: ColorConfig = Field(default_factory=ColorConfig)
     params: VisualParams = Field(default_factory=VisualParams)
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, v: str) -> str:
+        known = _known_visualizer_names()
+        if known and v not in known:
+            raise ValueError(
+                f"Unbekannter Visualizer '{v}'. Verfuegbar: {', '.join(sorted(known))}"
+            )
+        return v
 
     @field_validator("resolution")
     @classmethod

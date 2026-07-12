@@ -414,6 +414,30 @@ class BaseGPUVisualizer(abc.ABC):
         else:
             result["tempo"] = 120.0
 
+        # Zusaetzliche Klangfarben-Features (im Dict vorhanden, bisher nicht
+        # herausgereicht). Rein additiv — bestehende Visualizer ignorieren sie.
+        if "spectral_rolloff" in features and len(features["spectral_rolloff"]) > 0:
+            result["spectral_rolloff"] = _safe_float(features["spectral_rolloff"], frame_idx, 0.0)
+        else:
+            result["spectral_rolloff"] = result["spectral_centroid"]
+
+        if "zero_crossing_rate" in features and len(features["zero_crossing_rate"]) > 0:
+            result["zero_crossing_rate"] = _safe_float(features["zero_crossing_rate"], frame_idx, 0.0)
+        else:
+            result["zero_crossing_rate"] = 0.0
+
+        # Erster MFCC-Koeffizient (grobe Klangfarbe/Lautheit)
+        mfcc = features.get("mfcc")
+        if mfcc is not None and hasattr(mfcc, "shape") and len(mfcc.shape) > 1:
+            n_frames = mfcc.shape[1] if mfcc.shape[0] <= mfcc.shape[1] else mfcc.shape[0]
+            idx = max(0, min(frame_idx, n_frames - 1))
+            try:
+                result["mfcc0"] = float(mfcc[0, idx] if mfcc.shape[0] <= mfcc.shape[1] else mfcc[idx, 0])
+            except (IndexError, ValueError):
+                result["mfcc0"] = 0.0
+        else:
+            result["mfcc0"] = 0.0
+
         return result
 
     def _map_features_to_uniforms(self, f: dict, mode: str = None) -> dict:
@@ -429,8 +453,14 @@ class BaseGPUVisualizer(abc.ABC):
         if mode is None:
             mode = f.get("mode", "music")
 
+        # Klangfarben-Uniforms, in allen Modi verfuegbar:
+        # u_texture: Rauheit/Zischen (Zero-Crossing-Rate), u_warmth: hell<->dunkel
+        # (invertierter Roll-off; niedriger Roll-off = warm/dunkel)
+        texture = f.get("zero_crossing_rate", 0.0)
+        warmth = 1.0 - min(1.0, f.get("spectral_rolloff", f["spectral_centroid"]))
+
         if mode == "music":
-            return {
+            base = {
                 "u_energy": f["rms"],
                 "u_beat": f["onset"],
                 "u_impact": f.get("transient", f["onset"]),
@@ -440,7 +470,7 @@ class BaseGPUVisualizer(abc.ABC):
                 "u_beat_intensity": f.get("beat_intensity", f["onset"]),
             }
         elif mode == "speech":
-            return {
+            base = {
                 "u_energy": f["rms"] * 0.7,
                 "u_beat": f["onset"] * 0.3,
                 "u_impact": f.get("transient", f["onset"]) * 0.2,
@@ -450,7 +480,7 @@ class BaseGPUVisualizer(abc.ABC):
                 "u_beat_intensity": f.get("beat_intensity", f["onset"]) * 0.3,
             }
         else:  # hybrid
-            return {
+            base = {
                 "u_energy": f["rms"],
                 "u_beat": f["onset"] * 0.7,
                 "u_impact": f.get("transient", f["onset"]) * 0.7,
@@ -459,6 +489,10 @@ class BaseGPUVisualizer(abc.ABC):
                 "u_chroma": f["chroma"],
                 "u_beat_intensity": f.get("beat_intensity", f["onset"]),
             }
+
+        base["u_texture"] = texture
+        base["u_warmth"] = warmth
+        return base
 
     def _chroma_to_color(self, chroma: np.ndarray) -> tuple:
         """Wandelt ein Chroma-Vektor in eine RGB-Farbe um.

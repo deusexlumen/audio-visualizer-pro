@@ -5,6 +5,32 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
+## [2.8.0] — 2026-07-12
+
+Visualizer-Qualität (Phase 4 des Ausbauplans v3.0): schwache Visualizer poliert,
+zwei neue Premium-Visualizer, mehr Audio-Features für Shader.
+
+### Added
+- **Zwei neue Signature-Visualizer**:
+  - `aurora_voice` (Podcast): ruhige, wogende Aurora-Bänder, sprachband-getrieben,
+    bewusst ohne Beat-Blitzen — für stundenlange Sprach-Inhalte
+  - `nebula_drift` (Musik): treibende fbm-Nebel + Partikelfeld mit Chroma-Hue-Drift
+    und beat-getriebenem Pulsieren (Ambient bis EDM)
+- **Neue Feature-Uniforms** für alle Visualizer: `spectral_rolloff`,
+  `zero_crossing_rate` und `mfcc0` sind jetzt in `_get_feature_at_frame`
+  erreichbar; `_map_features_to_uniforms` liefert zusätzlich `u_texture`
+  (Rauheit) und `u_warmth` (hell↔dunkel)
+
+### Changed
+- **`pulsing_core` runderneuert**: mehrschichtiger HDR-Kern, fbm-Korona,
+  beat-getriggerte Schockwellen, Orbit-Partikel
+- **`typographic` runderneuert**: kinetisches SDF-Type-Grid mit beat-quantisierter
+  Bewegung statt einfacher VU-Balken
+- **`spectrum_genesis` aufgewertet**: Peak-Hold-Caps, Reflexions-Tiefe, Chroma-Sweep
+- **Schema `visual.type`**: von fester Literal-Liste auf registry-validierten String
+  (neue Visualizer und Studio-Rezepte ohne Schema-Änderung nutzbar)
+- `SmartMatcher` kennt und bewertet die neuen Visualizer (Podcast/Musik/Hybrid)
+
 ## [2.7.0] — 2026-07-12
 
 KI-Härtung (Phase 3 des Ausbauplans v3.0): verlässliche, kostentransparente

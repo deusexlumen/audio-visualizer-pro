@@ -29,8 +29,17 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
         'wave_frequency': (10.0, 1.0, 40.0, 1.0),
         'wave_complexity': (3, 1, 6, 1),
         'glow_radius': (12.0, 4.0, 30.0, 2.0),
-        'color_shift': (0.0, 0.0, 1.0, 0.05),
+        'color_shift': (0.15, 0.0, 1.0, 0.05),
         'beat_flash': (0.4, 0.0, 1.0, 0.05),
+        'peak_hold': (1.0, 0.0, 1.0, 1.0),
+        'peak_decay': (0.02, 0.005, 0.1, 0.005),
+        'reflection': (0.35, 0.0, 1.0, 0.05),
+    }
+
+    PARAMS_GROUPS = {
+        "Balken": ["bar_count", "bar_height", "glow_radius", "color_shift"],
+        "Wellenform": ["wave_intensity", "wave_frequency", "wave_complexity"],
+        "Extras": ["beat_flash", "peak_hold", "peak_decay", "reflection"],
     }
 
     def _setup(self):
@@ -130,10 +139,13 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
 
         quad = np.array([[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]], dtype=np.float32)
 
-        # Bar VAO: 2 Instanzen pro Balken (obere/untere Haelfte)
+        # Bar VAO: bis zu 4 Instanzen pro Balken (obere/untere Haelfte + 2 Peak-Caps)
         self._bar_max = 128
-        self._bar_data = np.zeros((self._bar_max * 2, 8), dtype=np.float32)
-        self._bar_vbo = self.ctx.buffer(reserve=self._bar_max * 2 * 8 * 4, dynamic=True)
+        # Peak-Hold-Zustand pro Balken (bleibt ueber Frames erhalten)
+        self._peaks = np.zeros(self._bar_max, dtype=np.float32)
+        self._bar_slots = self._bar_max * 4
+        self._bar_data = np.zeros((self._bar_slots, 8), dtype=np.float32)
+        self._bar_vbo = self.ctx.buffer(reserve=self._bar_slots * 8 * 4, dynamic=True)
         quad_vbo = self.ctx.buffer(quad.tobytes())
         self._bar_vao = self.ctx.vertex_array(
             self._prog,
@@ -154,11 +166,14 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
         uniforms = self._map_features_to_uniforms(f, mode=mode)
 
         color = self._chroma_to_color(uniforms["u_chroma"])
-        bar_count = int(self.params["bar_count"])
+        bar_count = min(int(self.params["bar_count"]), self._bar_max)
         bar_height = self.params["bar_height"]
         glow = self.params["glow_radius"]
         color_shift = self.params["color_shift"]
         beat_flash = self.params["beat_flash"]
+        peak_hold = self.params.get("peak_hold", 1.0) > 0.5
+        peak_decay = float(self.params.get("peak_decay", 0.02))
+        reflection = float(self.params.get("reflection", 0.35))
 
         # === Bars generieren ===
         bar_w = self.width / bar_count
@@ -173,8 +188,15 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
             h = (np.sin(phase) * 0.3 + uniforms["u_energy"] * 0.5 + uniforms["u_impact"] * 0.3) * max_h
             h = max(2.0, h)
 
+            # Peak-Hold: Spitzenwert langsam absinken lassen
+            norm_h = h / max_h if max_h > 0 else 0.0
+            if norm_h >= self._peaks[i]:
+                self._peaks[i] = norm_h
+            else:
+                self._peaks[i] = max(norm_h, self._peaks[i] - peak_decay)
+
             # Farbverlauf: bei Monochrom/Farblos einfach Helligkeit modulieren,
-            # sonst den Hue entlang der Balken verschieben.
+            # sonst den Hue entlang der Balken verschieben (Chroma-Sweep).
             val = base_v * (0.4 + (h / max_h) * 0.6)
             if base_s < 0.05:
                 bar_rgb = self._hsv_to_rgb(base_h, base_s, val)
@@ -187,18 +209,36 @@ class SpectrumGenesisGPU(BaseGPUVisualizer):
             cy = self.height / 2.0
 
             # Obere Haelfte
-            if instance_idx < self._bar_max * 2:
+            if instance_idx < self._bar_slots:
                 self._bar_data[instance_idx] = [
                     x, cy - h / 2.0, bar_w / 2.0, h / 2.0,
                     bar_rgb[0], bar_rgb[1], bar_rgb[2], 1.0
                 ]
                 instance_idx += 1
 
-            # Untere Haelfte
-            if instance_idx < self._bar_max * 2:
+            # Untere Haelfte (Reflexion: gedimmt fuer Tiefenwirkung)
+            if instance_idx < self._bar_slots:
+                refl_alpha = 0.35 + reflection * 0.65
                 self._bar_data[instance_idx] = [
                     x, cy + h / 2.0, bar_w / 2.0, h / 2.0,
-                    bar_rgb[0], bar_rgb[1], bar_rgb[2], 1.0
+                    bar_rgb[0] * (0.5 + reflection * 0.5),
+                    bar_rgb[1] * (0.5 + reflection * 0.5),
+                    bar_rgb[2] * (0.5 + reflection * 0.5),
+                    refl_alpha
+                ]
+                instance_idx += 1
+
+            # Peak-Hold-Cap: heller, duenner Balken an der Spitze
+            if peak_hold and instance_idx < self._bar_slots:
+                peak_h = self._peaks[i] * max_h
+                cap_half = max(1.5, bar_w * 0.08)
+                cap_rgb = self._hsv_to_rgb(
+                    (base_h + (i / bar_count) * color_shift) % 1.0,
+                    base_s * 0.4, min(1.0, val + 0.4)
+                ) if base_s >= 0.05 else self._hsv_to_rgb(base_h, base_s, min(1.0, val + 0.4))
+                self._bar_data[instance_idx] = [
+                    x, cy - peak_h - cap_half, bar_w / 2.0, cap_half,
+                    cap_rgb[0], cap_rgb[1], cap_rgb[2], 1.0
                 ]
                 instance_idx += 1
 

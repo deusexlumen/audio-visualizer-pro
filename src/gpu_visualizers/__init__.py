@@ -39,6 +39,10 @@ from .speech_focus import SpeechFocusGPU
 from .bass_temple import BassTempleGPU
 from .orchestral_swell import OrchestralSwellGPU
 
+# Signature-Erweiterung v2.8 (Podcast + Musik)
+from .aurora_voice import AuroraVoiceGPU
+from .nebula_drift import NebulaDriftGPU
+
 
 # Manuelle Registry fuer Rueckwaerts-Kompatibilitaet.
 # Diese Eintraege haben Vorrang vor automatisch entdeckten Klassen.
@@ -61,6 +65,8 @@ _MANUAL_VISUALIZER_MAP = {
     "speech_focus": SpeechFocusGPU,
     "bass_temple": BassTempleGPU,
     "orchestral_swell": OrchestralSwellGPU,
+    "aurora_voice": AuroraVoiceGPU,
+    "nebula_drift": NebulaDriftGPU,
 }
 
 # Oeffentliches Mapping: wird beim Import und bei refresh_registry() befuellt.

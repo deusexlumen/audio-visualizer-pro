@@ -1,260 +1,178 @@
 """
 GPU-beschleunigte typografische Visualisierung fuer Podcasts.
 
-Symmetrische Wellenform-Balken, Mittellinie, Beat-Indikator und Fortschrittsbalken.
-Text-Overlays werden vom Post-Processing-System uebernommen.
+Signature-Ueberarbeitung: kinetisches Type-Grid aus SDF-Bloecken (glyphen-artig)
+mit beat-quantisierter Bewegung, u_detail-gesteuerter Blockdichte und einer
+ruhigen Mittellinie plus Fortschrittsbalken. Sprach-optimiert (speech-Mapping),
+Text-Overlays uebernimmt das Post-Processing.
 """
 
-import numpy as np
 import moderngl
-from .base import BaseGPUVisualizer
+from .base import (
+    BaseGPUVisualizer,
+    FULLSCREEN_VERTEX_SHADER,
+    LYGIA_MATH_GLSL,
+    LYGIA_NOISE_GLSL,
+    LYGIA_SDF_GLSL,
+    SHADER_COMMON_GLSL,
+    compose_fragment,
+    create_fullscreen_quad,
+)
 
 
 class TypographicGPU(BaseGPUVisualizer):
-    """
-    Minimalistische Podcast-Visualisierung mit symmetrischen Balken.
-    """
+    """Kinetisches Type-Grid fuer Podcasts (SDF-Bloecke, beat-quantisiert)."""
 
     PARAMS = {
-        'bar_width': (3, 1, 10, 1),
-        'bar_spacing': (1, 0, 5, 1),
-        'animation_speed': (0.2, 0.0, 1.0, 0.05),
-        'bar_max_height': (0.3, 0.1, 0.5, 0.05),
-        'wave_count': (4, 1, 12, 1),
-        'indicator_threshold': (0.3, 0.0, 1.0, 0.05),
-        'indicator_radius': (20.0, 5.0, 60.0, 5.0),
-        'progress_y': (30.0, 10.0, 80.0, 5.0),
+        'grid_columns': (32, 8, 64, 1),
+        'block_height': (0.10, 0.03, 0.30, 0.01),
+        'density': (0.6, 0.1, 1.0, 0.05),
+        'animation_speed': (0.6, 0.0, 2.0, 0.05),
+        'beat_jump': (0.5, 0.0, 1.5, 0.05),
+        'baseline_glow': (0.6, 0.0, 1.5, 0.05),
+        'progress_enabled': (1.0, 0.0, 1.0, 1.0),
+        'bg_brightness': (0.12, 0.0, 0.5, 0.01),
+    }
+
+    PARAMS_GROUPS = {
+        "Raster": ["grid_columns", "block_height", "density"],
+        "Bewegung": ["animation_speed", "beat_jump"],
+        "Erscheinungsbild": ["baseline_glow", "progress_enabled", "bg_brightness"],
     }
 
     def _setup(self):
-        """Initialisiere Shader und VBOs."""
-        # --- Rechteck-Shader (Balken, Progress, Indikator) ---
-        self._rect_prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
+        fragment = compose_fragment(
+            """
             uniform vec2 u_resolution;
-
-            in vec2 in_vertex_pos;
-            in vec2 in_rect_pos;
-            in vec2 in_rect_size;
-            in vec3 in_color;
-            in float in_alpha;
-
-            out vec3 v_color;
-            out float v_alpha;
-
-            void main() {
-                vec2 pixel_pos = in_rect_pos + in_vertex_pos * in_rect_size;
-                vec2 ndc = (pixel_pos / u_resolution) * 2.0 - 1.0;
-                ndc.y = -ndc.y;
-                gl_Position = vec4(ndc, 0.0, 1.0);
-                v_color = in_color;
-                v_alpha = in_alpha;
-            }
-            """,
-            fragment_shader="""
-            #version 330
+            uniform float u_time;
+            uniform float u_energy;
+            uniform float u_beat;
+            uniform float u_flow;
+            uniform float u_detail;
+            uniform float u_progress;
+            uniform vec3 u_color;
+            uniform vec3 u_secondary_color;
+            uniform vec3 u_background_color;
+            uniform float u_grid_columns;
+            uniform float u_block_height;
+            uniform float u_density;
+            uniform float u_animation_speed;
+            uniform float u_beat_jump;
+            uniform float u_baseline_glow;
+            uniform float u_progress_enabled;
+            uniform float u_bg_brightness;
             uniform float u_brightness;
-            in vec3 v_color;
-            in float v_alpha;
             out vec4 f_color;
+
+            // Gefuellter, weichkantiger SDF-Block
+            float block(vec2 p, vec2 half_size) {
+                vec2 d = abs(p) - half_size;
+                float sd = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+                return 1.0 - aastep(0.0, sd);
+            }
+
             void main() {
-                f_color = vec4(v_color * u_brightness, v_alpha);
+                vec2 uv = gl_FragCoord.xy / u_resolution;
+                vec2 p = uv * 2.0 - 1.0;
+                p.x *= u_resolution.x / u_resolution.y;
+
+                vec3 col = u_background_color * u_bg_brightness;
+
+                float cols = u_grid_columns;
+                float colWidth = 2.0 * (u_resolution.x / u_resolution.y) / cols;
+
+                // Spaltenindex (glyphen-artige Bloecke pro Spalte)
+                float span = u_resolution.x / u_resolution.y;
+                float xNorm = (p.x + span) / (2.0 * span);   // 0..1
+                float ci = floor(xNorm * cols);
+                float cx = (ci + 0.5) / cols * 2.0 * span - span;
+
+                // Pseudozufaellige Charakteristik je Spalte
+                float rnd = hash12(vec2(ci, 1.0));
+                // Beat-quantisierter Sprung: Bloecke rasten in Stufen ein
+                float step_t = floor(u_time * (1.0 + u_animation_speed * 3.0));
+                float jump = hash12(vec2(ci, step_t)) * u_beat_jump * u_beat;
+
+                // Aktivierte Spalte? -> Dichte + Sprachband. Hohe Detailwerte
+                // (helle Zischlaute) erhoehen die effektive Blockdichte.
+                float density = clamp(u_density + u_detail * 0.25, 0.0, 1.0);
+                float colActive = step(1.0 - density, rnd);
+                float amp = (0.15 + u_flow * 0.7 + jump) * colActive;
+
+                // Symmetrische Bloecke ober-/unterhalb der Mittellinie
+                float hh = u_block_height * (0.4 + amp * 2.0);
+                float bx = abs(p.x - cx);
+                float colMask = 1.0 - aastep(colWidth * 0.42, bx);
+
+                float upper = block(vec2(0.0, p.y - hh), vec2(colWidth * 0.42, hh)) * colMask;
+                float lower = block(vec2(0.0, p.y + hh), vec2(colWidth * 0.42, hh)) * colMask;
+
+                vec3 blockCol = mix(u_color, u_secondary_color, rnd);
+                col += blockCol * (upper + lower) * (0.7 + u_energy * 0.8);
+
+                // Ruhige, leuchtende Mittellinie
+                float baseline = exp(-p.y * p.y * 900.0);
+                col += mix(u_color, vec3(1.0), 0.3) * baseline * u_baseline_glow;
+
+                // Fortschrittsbalken unten
+                if (u_progress_enabled > 0.5) {
+                    float by = uv.y;                       // 0 unten .. 1 oben
+                    float barBand = smoothstep(0.045, 0.04, by) * smoothstep(0.02, 0.025, by);
+                    float filled = step(uv.x, u_progress);
+                    col += u_color * barBand * (0.2 + filled * 0.8);
+                }
+
+                col = max(col, 0.0) * u_brightness;
+                f_color = vec4(col, 1.0);
             }
             """,
+            includes=(LYGIA_MATH_GLSL, LYGIA_NOISE_GLSL, LYGIA_SDF_GLSL, SHADER_COMMON_GLSL),
         )
-
-        # --- Line-Shader (Mittellinie) ---
-        self._line_prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
-            uniform vec2 u_resolution;
-            in vec2 in_pos;
-            in vec3 in_color;
-            in float in_alpha;
-            out vec3 v_color;
-            out float v_alpha;
-            void main() {
-                vec2 ndc = (in_pos / u_resolution) * 2.0 - 1.0;
-                ndc.y = -ndc.y;
-                gl_Position = vec4(ndc, 0.0, 1.0);
-                v_color = in_color;
-                v_alpha = in_alpha;
-            }
-            """,
-            fragment_shader="""
-            #version 330
-            uniform float u_brightness;
-            in vec3 v_color;
-            in float v_alpha;
-            out vec4 f_color;
-            void main() { f_color = vec4(v_color * u_brightness, v_alpha); }
-            """,
+        self.prog = self.ctx.program(
+            vertex_shader=FULLSCREEN_VERTEX_SHADER,
+            fragment_shader=fragment,
         )
-
-        # Quad-VBO
-        quad = np.array([[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]], dtype=np.float32)
-        self._quad_vbo = self.ctx.buffer(quad.tobytes())
-
-        max_rects = 2000
-        self._rect_data = np.zeros((max_rects, 8), dtype=np.float32)
-        self._rect_vbo = self.ctx.buffer(reserve=max_rects * 8 * 4, dynamic=True)
-        self._rect_vao = self.ctx.vertex_array(
-            self._rect_prog,
-            [
-                (self._quad_vbo, "2f", "in_vertex_pos"),
-                (self._rect_vbo, "2f 2f 3f 1f /i", "in_rect_pos", "in_rect_size", "in_color", "in_alpha"),
-            ],
-        )
-
-        self._line_vbo = self.ctx.buffer(reserve=100 * 6 * 4, dynamic=True)
-        self._line_vao = self.ctx.vertex_array(
-            self._line_prog,
-            [(self._line_vbo, "2f 3f 1f", "in_pos", "in_color", "in_alpha")],
-        )
+        self.prog["u_resolution"].value = (self.width, self.height)
+        self.vao, self.vbo = create_fullscreen_quad(self.ctx, self.prog)
 
     def render(self, features: dict, time: float):
-        """Rendert symmetrische Balken, Mittellinie und Indikatoren."""
-        frame_idx = int(time * features.get("fps", 30))
-        f = self._get_feature_at_frame(features, frame_idx)
-        rms = f["rms"]
-        onset = f["onset"]
-        spectral = f["spectral_centroid"]
-        progress = f.get("progress", time / features.get("duration", 1.0))
+        f = self._features_at_time(features, time)
+        uniforms = self._map_features_to_uniforms(f, mode="speech")
 
-        bar_w = int(self.params["bar_width"])
-        spacing = int(self.params["bar_spacing"])
-        anim_speed = self.params["animation_speed"]
-        wave_count = int(self.params.get("wave_count", 4))
-        bar_max_h = float(self.params.get("bar_max_height", 0.3))
-        indicator_threshold = float(self.params.get("indicator_threshold", 0.3))
-        indicator_radius = float(self.params.get("indicator_radius", 20.0))
-        progress_y = float(self.params.get("progress_y", 30.0))
-
-        num_bars = self.width // (bar_w + spacing)
-        num_bars = min(num_bars, len(self._rect_data) // 2)
-        wave_y = self.height / 2.0
-        max_h = self.height * bar_max_h
-
-        # Farben ueber color_mode-System
-        primary = self._chroma_to_color(f["chroma"])
-        h, s, v = self._rgb_to_hsv(*primary)
+        color = self._chroma_to_color(uniforms["u_chroma"])
+        h, s, v = self._rgb_to_hsv(*color)
         secondary = self._hsv_to_rgb((h + 0.5) % 1.0, s, v)
-        bg_color = self.params.get('background_color')
-        if bg_color and isinstance(bg_color, str) and bg_color.startswith('#'):
-            bg_rgb = self._hex_to_rgb(bg_color)
+
+        bg = self.params.get("background_color")
+        if isinstance(bg, str) and bg.startswith("#"):
+            try:
+                bg_rgb = self._hex_to_rgb(bg)
+            except Exception:
+                bg_rgb = (0.03, 0.03, 0.05)
         else:
-            bg_rgb = (0.2, 0.2, 0.2)
+            bg_rgb = (0.03, 0.03, 0.05)
 
-        rect_idx = 0
+        duration = features.get("duration", 1.0) or 1.0
+        progress = f.get("progress", min(1.0, time / duration))
 
-        # --- Balken ---
-        for i in range(num_bars):
-            phase = (i / num_bars) * np.pi * wave_count
-            t_off = frame_idx * anim_speed
-            wave = np.sin(phase + t_off) * rms
-            wave += np.sin(phase * 2.5 + t_off * 1.3) * 0.25
-            wave = max(-1.0, min(1.0, wave))
-            bar_h = abs(wave) * max_h
+        self.prog["u_resolution"].value = (self.width, self.height)
+        self.prog["u_time"].value = time
+        self.prog["u_energy"].value = uniforms["u_energy"]
+        self.prog["u_beat"].value = uniforms["u_beat"]
+        self.prog["u_flow"].value = uniforms["u_flow"]
+        self.prog["u_detail"].value = uniforms["u_detail"]
+        self.prog["u_progress"].value = float(progress)
+        self.prog["u_color"].value = color
+        self.prog["u_secondary_color"].value = secondary
+        self.prog["u_background_color"].value = bg_rgb
+        self.prog["u_grid_columns"].value = float(self.params["grid_columns"])
+        self.prog["u_block_height"].value = float(self.params["block_height"])
+        self.prog["u_density"].value = float(self.params["density"])
+        self.prog["u_animation_speed"].value = float(self.params["animation_speed"])
+        self.prog["u_beat_jump"].value = float(self.params["beat_jump"])
+        self.prog["u_baseline_glow"].value = float(self.params["baseline_glow"])
+        self.prog["u_progress_enabled"].value = float(self.params["progress_enabled"])
+        self.prog["u_bg_brightness"].value = float(self.params["bg_brightness"])
+        self.prog["u_brightness"].value = float(self.params.get("brightness", 1.0))
 
-            # Farbverlauf Primary -> Secondary
-            if i < num_bars // 2:
-                ratio = i / (num_bars // 2) if num_bars // 2 > 0 else 0
-            else:
-                ratio = (i - num_bars // 2) / (num_bars // 2) if num_bars // 2 > 0 else 0
-            if i < num_bars // 2:
-                color = (
-                    primary[0] * ratio + secondary[0] * (1 - ratio),
-                    primary[1] * ratio + secondary[1] * (1 - ratio),
-                    primary[2] * ratio + secondary[2] * (1 - ratio),
-                )
-            else:
-                color = (
-                    secondary[0] * ratio + primary[0] * (1 - ratio),
-                    secondary[1] * ratio + primary[1] * (1 - ratio),
-                    secondary[2] * ratio + primary[2] * (1 - ratio),
-                )
-
-            x = i * (bar_w + spacing) + bar_w / 2.0
-
-            # Oberer Balken
-            self._rect_data[rect_idx] = [
-                x, wave_y - bar_h / 2.0,
-                bar_w / 2.0, bar_h / 2.0,
-                color[0], color[1], color[2], 1.0
-            ]
-            rect_idx += 1
-
-            # Unterer Balken
-            self._rect_data[rect_idx] = [
-                x, wave_y + bar_h / 2.0,
-                bar_w / 2.0, bar_h / 2.0,
-                color[0], color[1], color[2], 1.0
-            ]
-            rect_idx += 1
-
-        # --- Mittellinie ---
-        line_color = (max(0.0, primary[0] - 0.4), max(0.0, primary[1] - 0.4), max(0.0, primary[2] - 0.4))
-        line_verts = np.array([
-            [0.0, wave_y, *line_color, 1.0],
-            [self.width, wave_y, *line_color, 1.0],
-        ], dtype=np.float32)
-
-        # --- Beat-Indikator (Ring) ---
-        if onset > indicator_threshold:
-            radius = indicator_radius + onset * 30.0
-            self._rect_data[rect_idx] = [
-                self.width / 2.0, wave_y,
-                radius, radius,
-                primary[0], primary[1], primary[2], 0.6
-            ]
-            rect_idx += 1
-
-        # --- Fortschrittsbalken ---
-        bar_y = self.height - progress_y
-        bar_width = self.width * 0.6
-        bar_x = (self.width - bar_width) / 2.0
-
-        # Hintergrund
-        self._rect_data[rect_idx] = [
-            bar_x + bar_width / 2.0, bar_y + 3.0,
-            bar_width / 2.0, 3.0,
-            bg_rgb[0], bg_rgb[1], bg_rgb[2], 1.0
-        ]
-        rect_idx += 1
-
-        # Füllung
-        progress_width = bar_width * progress
-        if progress_width > 0:
-            self._rect_data[rect_idx] = [
-                bar_x + progress_width / 2.0, bar_y + 3.0,
-                progress_width / 2.0, 3.0,
-                primary[0], primary[1], primary[2], 1.0
-            ]
-            rect_idx += 1
-
-        # --- Rendern ---
-        self.ctx.enable(moderngl.BLEND)
-        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-
-        brightness = self.params.get("brightness", 1.0)
-        self._rect_prog["u_brightness"].value = brightness
-        self._line_prog["u_brightness"].value = brightness
-
-        # Linien-Width aus Parameter
-        line_width_val = self.params.get("line_width", 0.003)
-        self.ctx.line_width = max(1.0, line_width_val * 400.0)
-
-        # Mittellinie
-        self._line_prog["u_resolution"].value = (self.width, self.height)
-        self._line_vbo.write(line_verts.tobytes())
-        self._line_vao.render(mode=moderngl.LINES, vertices=2)
-
-        # Rechtecke
-        if rect_idx > 0:
-            self._rect_prog["u_resolution"].value = (self.width, self.height)
-            self._rect_vbo.write(self._rect_data[:rect_idx].tobytes())
-            self._rect_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=rect_idx)
-
-        self.ctx.line_width = 1.0
-        self.ctx.disable(moderngl.BLEND)
+        self.vao.render(mode=moderngl.TRIANGLE_STRIP)

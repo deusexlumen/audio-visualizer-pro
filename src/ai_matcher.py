@@ -71,15 +71,18 @@ class SmartMatcher:
     }
 
     # Visualizer-Kategorien für die Score-Berechnung
-    SPEECH_VISUALS = {'typographic', 'voice_flow', 'speech_focus'}
+    SPEECH_VISUALS = {'typographic', 'voice_flow', 'speech_focus', 'aurora_voice'}
     MUSIC_VISUALS = {
         'pulsing_core', 'spectrum_bars', 'chroma_field', 'particle_swarm',
         'neon_oscilloscope', 'sacred_mandala', 'liquid_blobs',
         'neon_wave_circle', 'frequency_flower',
         'lumina_core', 'voice_flow', 'spectrum_genesis',
-        'speech_focus', 'bass_temple', 'orchestral_swell',
+        'speech_focus', 'bass_temple', 'orchestral_swell', 'nebula_drift',
     }
-    HYBRID_VISUALS = {'neon_wave_circle', 'pulsing_core', 'liquid_blobs', 'frequency_flower'}
+    HYBRID_VISUALS = {
+        'neon_wave_circle', 'pulsing_core', 'liquid_blobs', 'frequency_flower',
+        'spectrum_genesis', 'nebula_drift',
+    }
 
     # Parameter-Profile pro Visualizer für schnelle Default-Vorschläge
     VISUAL_DEFAULTS = {
@@ -99,6 +102,8 @@ class SmartMatcher:
         'lumina_core': {'core_intensity': 1.2, 'ring_count': 4, 'noise_scale': 2.0, 'glow_strength': 0.8},
         'spectrum_genesis': {'bar_count': 64, 'wave_intensity': 1.0, 'glow_radius': 1.0, 'beat_flash': 0.5},
         'orchestral_swell': {'swell_intensity': 1.0, 'particle_count': 64, 'dynamics_response': 1.2},
+        'aurora_voice': {'band_count': 4, 'flow_speed': 0.15, 'voice_response': 0.7, 'glow_strength': 0.8},
+        'nebula_drift': {'nebula_scale': 2.2, 'nebula_density': 0.8, 'beat_pulse': 0.6, 'particle_count': 40},
     }
 
     # Visualizer-Beschreibungen für die Reason-Texte
@@ -119,6 +124,8 @@ class SmartMatcher:
         'lumina_core': 'Subtiler Leuchtkern für elegante Visuals',
         'spectrum_genesis': 'Fein aufgelöstes Spektrum für detailreiche Musik',
         'orchestral_swell': 'Orchestrale Dynamik für filmische Stimmungen',
+        'aurora_voice': 'Ruhige Aurora-Bänder für lange Sprach-Inhalte',
+        'nebula_drift': 'Treibende Nebelwolken mit Sternen für Ambient bis EDM',
     }
 
     def __init__(self):
@@ -273,6 +280,13 @@ class SmartMatcher:
             + 0.25 * (1.0 - rhythm_strength)
             + 0.20 * (1.0 - energy)
         )
+        # Aurora Voice: ruhige Sprach-Baender, ideal fuer lange, gleichmaessige Rede
+        scores['aurora_voice'] = (
+            0.35 * voice_band_mean
+            + 0.30 * (1.0 - rhythm_strength)
+            + 0.20 * (1.0 - speed)
+            + 0.15 * (1.0 - dynamics)
+        )
 
         # Musik-Visualizer
         scores['spectrum_bars'] = (
@@ -365,6 +379,14 @@ class SmartMatcher:
             + 0.20 * (1.0 - speed)
             + 0.15 * energy
             + 0.10 * tonal_clarity
+        )
+        # Nebula Drift: atmosphaerischer Nebel, gut fuer Ambient/EDM mit Beat
+        scores['nebula_drift'] = (
+            0.30 * energy
+            + 0.20 * beat_strength
+            + 0.20 * timbre_richness
+            + 0.15 * dynamics
+            + 0.15 * high_freq
         )
 
         # Kategorie-Gewichtung anwenden

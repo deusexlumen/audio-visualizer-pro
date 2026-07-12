@@ -116,8 +116,12 @@ class TestSmartMatcher:
         )
         result = matcher.match(features)
 
-        # Kontinuierliche Scores koennen auch frequency_flower kurz vorne liegen
-        assert result.visualizer in ['neon_wave_circle', 'pulsing_core', 'frequency_flower']
+        # Kontinuierliche Scores: mehrere Hybrid-Visualizer koennen vorne liegen
+        # (inkl. der Signature-Hybrid spectrum_genesis und nebula_drift)
+        assert result.visualizer in [
+            'neon_wave_circle', 'pulsing_core', 'frequency_flower',
+            'liquid_blobs', 'spectrum_genesis', 'nebula_drift',
+        ]
 
     def test_rank_visualizers_returns_top_three(self):
         matcher = SmartMatcher()

@@ -1,13 +1,13 @@
-[![Version](https://img.shields.io/badge/SOTA-v2.7.0-blue)](https://github.com/deusexlumen/audio-visualizer-pro)
+[![Version](https://img.shields.io/badge/SOTA-v2.8.0-blue)](https://github.com/deusexlumen/audio-visualizer-pro)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/tests-232%20passed-brightgreen)](https://github.com/deusexlumen/audio-visualizer-pro)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-# Audio Visualizer Pro v2.7.0
+# Audio Visualizer Pro v2.8.0
 
 **Professionelles Audio-Visualisierungs-System mit GPU-Beschleunigung und KI-Unterstützung**
 
-Erstelle atemberaubende Musikvideos, Podcast-Visuals und kreative Projekte mit 16 GPU-beschleunigten Visualizern, HDR-Rendering, KI-gestützter Zitat-Extraktion und professionellem Video-Encoding.
+Erstelle atemberaubende Musikvideos, Podcast-Visuals und kreative Projekte mit 18 GPU-beschleunigten Visualizern, HDR-Rendering, KI-gestützter Zitat-Extraktion und professionellem Video-Encoding.
 
 ---
 
@@ -17,7 +17,7 @@ Audio Visualizer Pro ist ein modulares System zur Erstellung hochwertiger Audio-
 
 ### Kernfunktionen
 
-- **🎨 16 GPU-Visualizer**: Shader-basierte Visualisierung mit ModernGL (10 Classic + 6 Signature Pro)
+- **🎨 18 GPU-Visualizer**: Shader-basierte Visualisierung mit ModernGL (10 Classic + 8 Signature Pro)
 - **🌈 HDR-Pipeline**: Float16-Rendering mit ACES-Tonemapping, Dithering und 4x-MSAA — kein Banding, keine harten Clips
 - **✨ Premium-Post-FX**: Echter HDR-Bloom, Belichtung, Vignette, chromatische Aberration, luminanzabhängiges Film-Grain, 3D-LUTs (.cube)
 - **🤖 KI-Integration**: Automatische Transkription und Zitat-Extraktion mit Gemini Flash-Lite
@@ -88,15 +88,17 @@ python main.py render dein_audio.mp3 --visual neon_wave_circle \
 | `liquid_blobs` | Flüssige MetaBall-Animation | Deep House, Liquid DnB |
 | `neon_wave_circle` | Konzentrische Neon-Ringe | Trance, Progressive |
 | `frequency_flower` | Organische Blumen-Petal Animation | Indie, Folk, Acoustic |
-### Signature Pro Visualizer (6) — Neu in v2.0+
+### Signature Pro Visualizer (8) — Neu in v2.0+
 | Name | Beschreibung | Ideal für |
 |------|--------------|-----------|
 | `lumina_core` | Intelligenter Hybrid-Visualizer | Allrounder |
 | `voice_flow` | Sprach-optimierte Visualisierung | Podcasts, Interviews |
-| `spectrum_genesis` | Evolvierendes Spektrum-Design | Elektronische Musik |
+| `spectrum_genesis` | Evolvierendes Spektrum-Design (Peak-Hold, Reflexion) | Elektronische Musik |
 | `speech_focus` | Fokus auf Sprachfrequenzen | Hörbücher, Vorträge |
 | `bass_temple` | Bass-zentrierte Tempel-Architektur | Bass Music, Trap |
 | `orchestral_swell` | Orchestrale Wellenbewegungen | Filmmusik, Klassik |
+| `aurora_voice` | Ruhige Aurora-Bänder, kein Beat-Blitzen | Lange Podcasts, Hörbücher |
+| `nebula_drift` | Treibende Nebelwolken + Sternenfeld | Ambient, Big-Room-EDM |
 
 ---
 
@@ -135,7 +137,7 @@ Die KI analysiert Audio-Eigenschaften und empfiehlt:
 │  → Bloom, Exposure, ACES-Tonemap, LUTs, Vignette, CA, Grain │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 2: GPU Visualization (Float16 HDR + 4x MSAA)         │
-│  → ModernGL Shader, 16 Visualizer, Live-Vorschau            │
+│  → ModernGL Shader, 18 Visualizer, Live-Vorschau            │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 1: Audio Analysis                                    │
 │  → librosa Features, Beat Detection, Voice Clarity          │
@@ -255,7 +257,7 @@ audio-visualizer-pro/
 
 #### 2024-2025 — Foundation & Core Features
 - ✅ GPU-basiertes Rendering mit ModernGL/OpenGL
-- ✅ 16 GPU-Visualizer implementiert (10 Classic + 6 Signature Pro)
+- ✅ 18 GPU-Visualizer implementiert (10 Classic + 8 Signature Pro)
 - ✅ PyQt6 Premium UI mit Live-Preview (DearPyGui-Vorgänger abgelöst)
 - ✅ Gemini KI-Integration (Transkription & Zitat-Extraktion)
 - ✅ Test-Suite: 232 Tests, headless-sichere GPU-Tests
