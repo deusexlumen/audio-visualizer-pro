@@ -1,4 +1,5 @@
 [![Version](https://img.shields.io/badge/SOTA-v3.1.0-blue)](https://github.com/deusexlumen/audio-visualizer-pro)
+[![Release](https://img.shields.io/badge/Download-Windows--Installer-success)](https://github.com/deusexlumen/audio-visualizer-pro/releases/latest)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/tests-282%20passed-brightgreen)](https://github.com/deusexlumen/audio-visualizer-pro)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -31,6 +32,15 @@ Audio Visualizer Pro ist ein modulares System zur Erstellung hochwertiger Audio-
 ---
 
 ## 🚀 Schnellstart
+
+### Windows: fertiger Installer (kein Python nötig)
+
+**[⬇ Neuestes Release herunterladen](https://github.com/deusexlumen/audio-visualizer-pro/releases/latest)**
+— `AudioVisualizerPro-Setup-<version>.exe` ausführen, kein Administrator nötig
+(Per-User-Install). FFmpeg wird bei Bedarf automatisch nachgeladen. Details:
+[docs/INSTALLATION.md](docs/INSTALLATION.md).
+
+### Aus dem Quellcode (Entwickler)
 ### Voraussetzungen
 ```bash
 # Python 3.10+ erforderlich
