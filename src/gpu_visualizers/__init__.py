@@ -85,8 +85,10 @@ def _discover_visualizer_modules():
     """Entdeckt Module im Paket und liefert deren Import-Pfade."""
     package_path = Path(__file__).parent
     modules = []
+    # Infrastruktur-Module ohne eigenstaendigen Visualizer werden nicht entdeckt
+    _skip = {"base", "composite", "blocks"}
     for _, module_name, is_pkg in pkgutil.iter_modules([str(package_path)]):
-        if is_pkg or module_name.startswith("_") or module_name == "base":
+        if is_pkg or module_name.startswith("_") or module_name in _skip:
             continue
         modules.append(f"{__package__}.{module_name}")
     return modules
@@ -136,14 +138,62 @@ def _discover_visualizers():
     return discovered
 
 
+def recipe_dirs() -> list:
+    """Verzeichnisse mit Studio-Rezepten: gebuendelt + benutzerspezifisch."""
+    import os
+    dirs = [Path(__file__).parent.parent.parent / "config" / "recipes"]
+    # Nutzer-Verzeichnis (beschreibbar, auch bei read-only Installation)
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        dirs.append(Path(appdata) / "AudioVisualizerPro" / "recipes")
+    else:
+        dirs.append(Path.home() / ".audio-visualizer-pro" / "recipes")
+    return dirs
+
+
+def _discover_recipe_visualizers() -> dict:
+    """Laedt alle *.json-Rezepte und erzeugt dynamische Visualizer-Klassen."""
+    import json
+    discovered = {}
+    try:
+        from config.schemas import RecipeSchema
+        from .composite import make_recipe_visualizer_class
+    except Exception as e:
+        logger.warning(f"[Rezepte] Rezept-Unterstuetzung nicht verfuegbar: {e}")
+        return discovered
+
+    for d in recipe_dirs():
+        if not d.exists():
+            continue
+        for path in sorted(d.glob("*.json")):
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                recipe = RecipeSchema(**data)
+                cls = make_recipe_visualizer_class(recipe.model_dump())
+                discovered[recipe.name] = cls
+            except Exception as e:
+                logger.warning(
+                    f"[Rezepte] '{path.name}' konnte nicht geladen werden "
+                    f"und wird uebersprungen: {e}"
+                )
+    return discovered
+
+
 def refresh_registry():
-    """Baut die gemischte Registry aus manuellen und dynamisch entdeckten Eintraegen neu auf."""
+    """Baut die gemischte Registry aus manuellen, entdeckten und Rezept-Eintraegen neu auf."""
     VISUALIZER_MAP.clear()
     VISUALIZER_MAP.update(_MANUAL_VISUALIZER_MAP)
     discovered = _discover_visualizers()
     for name, cls in discovered.items():
         if name not in VISUALIZER_MAP:
             VISUALIZER_MAP[name] = cls
+    # Studio-Rezepte zuletzt (koennen eigene Namen mitbringen)
+    for name, cls in _discover_recipe_visualizers().items():
+        if name not in VISUALIZER_MAP:
+            VISUALIZER_MAP[name] = cls
+        else:
+            logger.warning(f"[Rezepte] Name '{name}' bereits vergeben, Rezept uebersprungen.")
 
 
 def validate_visualizer_class(cls) -> list[str]:

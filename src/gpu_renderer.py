@@ -415,7 +415,10 @@ class GPUBatchRenderer:
                 if encode_error[0] is not None:
                     raise RuntimeError(f"Encode-Thread-Fehler: {encode_error[0]}")
 
-                # Bei voller Queue blockieren, aber Abbruch regelmaessig pruefen
+                # Bei voller Queue blockieren, aber Abbruch UND Encoder-Tod
+                # regelmaessig pruefen — sonst deadlockt der Producer, wenn der
+                # Encode-Thread stirbt (z.B. Broken Pipe) und die Queue nicht
+                # mehr geleert wird.
                 while True:
                     try:
                         frame_queue.put(pixels, timeout=0.1)
@@ -424,6 +427,12 @@ class GPUBatchRenderer:
                         if cancel_event is not None and cancel_event.is_set():
                             logger.info("[GPU] Render abgebrochen durch User (Queue voll).")
                             return False
+                        if encode_error[0] is not None:
+                            raise RuntimeError(f"Encode-Thread-Fehler: {encode_error[0]}")
+                        if encode_done.is_set():
+                            raise RuntimeError(
+                                "Encode-Thread unerwartet beendet (Queue laeuft voll)."
+                            )
                 return not (cancel_event is not None and cancel_event.is_set())
 
             # === PBO-Doppelpufferung fuer den Readback ===

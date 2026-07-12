@@ -39,6 +39,7 @@ class ParamsPanel(QWidget):
         self.combo_viz.addItems(list_visualizers())
         self.combo_viz.setCurrentText(self.state.visualizer_type)
         self.combo_viz.currentTextChanged.connect(self._on_visualizer_changed)
+        self._viz_box_layout = viz_layout
         viz_layout.addWidget(self.combo_viz)
 
         # Wizard-Button fuer benutzerdefinierte Visualizer
@@ -435,6 +436,15 @@ class ParamsPanel(QWidget):
                     widget.setValue(float(value))
             finally:
                 widget.blockSignals(False)
+
+    def refresh_visualizers(self):
+        """Aktualisiert die Visualizer-Auswahl (z.B. nach neuem Studio-Rezept)."""
+        current = self.combo_viz.currentText()
+        self.combo_viz.blockSignals(True)
+        self.combo_viz.clear()
+        self.combo_viz.addItems(list_visualizers())
+        self.combo_viz.setCurrentText(current)
+        self.combo_viz.blockSignals(False)
 
     def _on_visualizer_changed(self, text: str):
         """Wird von der ComboBox aufgerufen; leitet den Wechsel ueber den State."""

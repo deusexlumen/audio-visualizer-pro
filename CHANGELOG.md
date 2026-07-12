@@ -5,6 +5,32 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
+## [3.0.0] — 2026-07-12
+
+Visualizer-Studio (Phase 6 des Ausbauplans v3.0): eigene Visualizer aus
+Bausteinen zusammenklicken — ohne Code.
+
+### Added
+- **Baustein-Bibliothek** (`src/gpu_visualizers/blocks.py`): GLSL-Bausteine
+  (Ring, Kern-Glow, Welle, Balken, Partikel, Nebelfeld) mit Parameter-Specs
+- **Rezept-Format** (`RecipeSchema`): deklaratives JSON aus Ebenen (Baustein +
+  Mischmodus + Parameter + Audio-Verknüpfungen), Nutzer-Rezepte in `%APPDATA%`
+- **`CompositeVisualizer`** (`src/gpu_visualizers/composite.py`): baut aus einem
+  Rezept einmalig einen Fragment-Shader; keine Python-Code-Generierung. Rezepte
+  werden automatisch als vollwertige Visualizer registriert (Dropdown, CLI,
+  Timeline, Schema-Validierung)
+- **Studio-Tab in der GUI** (`src/gui/studio_panel.py`): Ebenen hinzufügen/
+  entfernen/verschieben, Parameter per Regler, Live-Vorschau, als Visualizer
+  speichern — sofort in der Auswahl verfügbar
+- **KI-Rezept-Assistent**: `Gemini.suggest_recipe` erzeugt aus einer
+  Textbeschreibung einen editierbaren Rezept-Entwurf (günstig, text-only, gecacht)
+
+### Fixed
+- **Render-Deadlock behoben**: Stirbt der Encode-Thread (z.B. Broken Pipe) und
+  läuft die Frame-Queue voll, blockierte der Producer bisher endlos, wenn kein
+  Cancel-Event gesetzt war. Der Producer prüft jetzt zusätzlich auf
+  Encoder-Fehler/-Ende und bricht mit klarer Meldung ab.
+
 ## [2.9.0] — 2026-07-12
 
 Szenen-Timeline & Voll-KI-Modus (Phase 5 des Ausbauplans v3.0): Visualizer

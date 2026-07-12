@@ -7,13 +7,14 @@ from PyQt6.QtWidgets import QMessageBox
 from src.gui.main_window import MainWindow
 
 
-def test_main_window_has_three_tabs(qtbot):
+def test_main_window_has_tabs(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window.right_tabs.count() == 3
+    assert window.right_tabs.count() == 4
     assert window.right_tabs.tabText(0) == "Parameter"
     assert window.right_tabs.tabText(1) == "KI"
     assert window.right_tabs.tabText(2) == "Zitate"
+    assert window.right_tabs.tabText(3) == "Studio"
 
 
 def test_render_button_shows_error_without_audio(qtbot):

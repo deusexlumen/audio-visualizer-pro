@@ -58,6 +58,22 @@ def require_gpu():
         pytest.skip("Keine GPU/OpenGL verfuegbar")
 
 
+@pytest.fixture(scope="session")
+def shared_gl_context():
+    """EIN OpenGL-Kontext fuer die gesamte Session.
+
+    Mehrfaches Erzeugen/Freigeben von Standalone-Kontexten mitten in der Session
+    kann auf Windows/WGL die Currency aktiver Kontexte zerstoeren ("cannot create
+    texture/program"). Ein einziger geteilter Kontext vermeidet diesen Churn.
+    """
+    if not gpu_available():
+        pytest.skip("Keine GPU/OpenGL verfuegbar")
+    import moderngl
+    ctx = moderngl.create_standalone_context()
+    yield ctx
+    ctx.release()
+
+
 @pytest.fixture
 def dummy_audio_features() -> AudioFeatures:
     """Erzeugt valide AudioFeatures für schnelle Tests.

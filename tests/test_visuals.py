@@ -32,15 +32,17 @@ def dummy_features():
 
 @pytest.fixture(scope="module")
 def gl_context():
-    """Erzeugt einen ModernGL Standalone-Context fuer alle Tests.
-
-    Ueberspringt die Tests, wenn keine GPU/OpenGL verfuegbar ist
-    (z.B. headless CI), statt mit einem kryptischen Fehler abzubrechen.
-    """
+    """Erzeugt einen ModernGL Standalone-Context fuer alle Tests des Moduls."""
     try:
         ctx = moderngl.create_standalone_context()
     except Exception as e:
         pytest.skip(f"Keine GPU/OpenGL verfuegbar: {e}")
+    # Kontext explizit aktiv setzen: vorherige Test-Module koennen auf
+    # Windows/WGL die Currency verloren haben ("cannot create texture").
+    try:
+        ctx.__enter__()
+    except Exception:
+        pass
     yield ctx
     ctx.release()
 

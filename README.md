@@ -1,9 +1,9 @@
-[![Version](https://img.shields.io/badge/SOTA-v2.9.0-blue)](https://github.com/deusexlumen/audio-visualizer-pro)
+[![Version](https://img.shields.io/badge/SOTA-v3.0.0-blue)](https://github.com/deusexlumen/audio-visualizer-pro)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-251%20passed-brightgreen)](https://github.com/deusexlumen/audio-visualizer-pro)
+[![Tests](https://img.shields.io/badge/tests-266%20passed-brightgreen)](https://github.com/deusexlumen/audio-visualizer-pro)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-# Audio Visualizer Pro v2.9.0
+# Audio Visualizer Pro v3.0.0
 
 **Professionelles Audio-Visualisierungs-System mit GPU-Beschleunigung und KI-Unterstützung**
 
@@ -25,7 +25,7 @@ Audio Visualizer Pro ist ein modulares System zur Erstellung hochwertiger Audio-
 - **🎬 Multi-Codec**: H.264, HEVC, ProRes Encoding via FFmpeg
 - **🎵 Beat-Sync**: Synchronisierte Zitat-Einblendungen und Visual-Effekte
 - **🔌 Plugin-System**: Einfache Erweiterung um eigene Visualizer
-- **🧪 251 Tests**: Umfassende Testabdeckung, GPU-Tests laufen headless-sicher
+- **🧪 266 Tests**: Umfassende Testabdeckung, GPU-Tests laufen headless-sicher
 
 ---
 

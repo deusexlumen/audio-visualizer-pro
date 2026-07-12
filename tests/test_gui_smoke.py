@@ -7,4 +7,4 @@ def test_main_window_opens(qtbot):
     qtbot.addWidget(window)
     assert window.preview_widget is not None
     assert window.right_tabs is not None
-    assert window.right_tabs.count() == 3
+    assert window.right_tabs.count() == 4

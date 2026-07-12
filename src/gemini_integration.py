@@ -1545,6 +1545,78 @@ Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
             logger.warning(f"[Gemini] Timeline-Generierung fehlgeschlagen: {e}")
             return []
 
+    def suggest_recipe(self, description: str, available_blocks: list,
+                       use_cache: bool = True) -> list:
+        """Schlaegt aus einer Textbeschreibung Studio-Ebenen vor (billig, text-only).
+
+        Args:
+            description: Freitext, z.B. "warmer Podcast-Look mit sanften Wellen".
+            available_blocks: Erlaubte Baustein-Schluessel.
+            use_cache: Gecachtes Ergebnis nutzen, wenn vorhanden.
+
+        Returns:
+            Liste von Ebenen-Dicts (block, blend, params, mappings) — leer bei Fehler.
+        """
+        sig = f"{self.model}|{PROMPT_VERSION}|{description}"
+        if use_cache:
+            cached = load_json_result(None, "recipe", sig)
+            if cached is not None:
+                return cached
+
+        blocks_desc = ", ".join(available_blocks)
+        prompt = f"""
+        Entwirf einen Musik-Visualizer aus Bausteinen (Ebenen).
+        Beschreibung des Nutzers: "{description}"
+
+        Verfuegbare Bausteine: {blocks_desc}.
+        Erlaubte Mischmodi: add, screen, max.
+        Moegliche Audio-Quellen fuer Verknuepfungen: u_energy, u_beat, u_impact,
+        u_flow, u_beat_intensity, u_detail.
+
+        Gib NUR ein JSON-Array von Ebenen zurueck. Jede Ebene:
+        - "block": einer der erlaubten Bausteine
+        - "blend": "add" | "screen" | "max"
+        - "mappings": Array von {{"target": <param>, "source": <audio>, "gain": <float>}}
+        Nutze 1-4 Ebenen. Keine Erklaerungen, nur JSON.
+        """
+        try:
+            response = self._call_gemini_with_retry(
+                lambda: self.client.models.generate_content(
+                    model=self.model, contents=[prompt],
+                    config={"response_mime_type": "application/json", "temperature": 0.4},
+                )
+            )
+            data = self._parse_json_response(response.text)
+            if not isinstance(data, list):
+                return []
+            allowed = set(available_blocks)
+            layers = []
+            for item in data:
+                if not isinstance(item, dict) or item.get("block") not in allowed:
+                    continue
+                blend = item.get("blend", "add")
+                if blend not in ("add", "screen", "max"):
+                    blend = "add"
+                mappings = []
+                for m in item.get("mappings", []) or []:
+                    if isinstance(m, dict) and m.get("target") and m.get("source"):
+                        mappings.append({
+                            "target": str(m["target"]), "source": str(m["source"]),
+                            "gain": float(m.get("gain", 0.3)),
+                            "offset": 0.0, "smooth": 0.2,
+                        })
+                layers.append({
+                    "block": item["block"], "blend": blend,
+                    "transform": {"offset_x": 0.0, "offset_y": 0.0, "scale": 1.0, "rotation_speed": 0.0},
+                    "params": {}, "mappings": mappings,
+                })
+            if use_cache and layers:
+                save_json_result(None, "recipe", sig, layers)
+            return layers
+        except Exception as e:
+            logger.warning(f"[Gemini] Rezept-Vorschlag fehlgeschlagen: {e}")
+            return []
+
     def generate_background_prompt(self, audio_features: dict) -> str:
         """
         Generiert einen Bildgenerierungs-Prompt basierend auf Audio-Analyse.

@@ -249,6 +249,62 @@ class TimelineSchema(BaseModel):
         return self
 
 
+class LayerTransformSchema(BaseModel):
+    """Transformation einer Studio-Ebene (Verschiebung, Skalierung, Rotation)."""
+    offset_x: float = Field(default=0.0, ge=-1.0, le=1.0)
+    offset_y: float = Field(default=0.0, ge=-1.0, le=1.0)
+    scale: float = Field(default=1.0, ge=0.1, le=4.0)
+    rotation_speed: float = Field(default=0.0, ge=-3.0, le=3.0)
+
+
+class LayerMappingSchema(BaseModel):
+    """Audio-Mapping: verknuepft eine Audio-Groesse mit einem Baustein-Parameter."""
+    target: str                       # Parametername des Bausteins
+    source: str                       # Audio-Uniform (u_energy, ...)
+    gain: float = Field(default=0.3, ge=-4.0, le=4.0)
+    offset: float = Field(default=0.0, ge=-4.0, le=4.0)
+    smooth: float = Field(default=0.2, ge=0.0, le=0.95)
+
+
+class RecipeLayerSchema(BaseModel):
+    """Eine Ebene eines Studio-Rezepts: ein Baustein mit Params und Mappings."""
+    block: str
+    blend: Literal["add", "screen", "max"] = "add"
+    transform: LayerTransformSchema = Field(default_factory=LayerTransformSchema)
+    params: Dict[str, float] = Field(default_factory=dict)
+    mappings: List[LayerMappingSchema] = Field(default_factory=list)
+
+    @field_validator("block")
+    @classmethod
+    def validate_block(cls, v: str) -> str:
+        try:
+            from src.gpu_visualizers.blocks import BLOCK_LIBRARY
+            if v not in BLOCK_LIBRARY:
+                raise ValueError(
+                    f"Unbekannter Baustein '{v}'. Verfuegbar: {', '.join(BLOCK_LIBRARY)}"
+                )
+        except ImportError:
+            pass
+        return v
+
+
+class RecipeSchema(BaseModel):
+    """Deklaratives Rezept fuer einen datengetriebenen Studio-Visualizer."""
+    name: str = Field(..., pattern=r"^[a-z][a-z0-9_]*$")
+    display_name: str = ""
+    description: str = ""
+    mode_hint: Literal["music", "speech", "hybrid"] = "music"
+    layers: List[RecipeLayerSchema] = Field(default_factory=list)
+    color: ColorConfig = Field(default_factory=ColorConfig)
+    version: int = 1
+
+    @model_validator(mode="after")
+    def default_display_name(self):
+        if not self.display_name:
+            self.display_name = self.name.replace("_", " ").title()
+        return self
+
+
 class ProjectConfigSchema(BaseModel):
     """Vollstaendiges Schema fuer Projekt-Konfiguration."""
     audio_file: str

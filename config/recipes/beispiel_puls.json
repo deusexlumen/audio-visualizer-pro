@@ -1,0 +1,26 @@
+{
+  "name": "beispiel_puls",
+  "display_name": "Beispiel: Puls",
+  "description": "Kern-Glow mit reaktivem Ring — Beispielrezept fuer das Studio.",
+  "mode_hint": "music",
+  "version": 1,
+  "color": { "primary": "#5E81EA", "secondary": "#4ECDC4", "background": "#0A0A14" },
+  "layers": [
+    {
+      "block": "core_glow",
+      "blend": "add",
+      "params": { "size": 0.22, "intensity": 1.6 },
+      "mappings": [
+        { "target": "size", "source": "u_energy", "gain": 0.12, "smooth": 0.3 }
+      ]
+    },
+    {
+      "block": "ring",
+      "blend": "screen",
+      "params": { "radius": 0.4, "width": 0.02 },
+      "mappings": [
+        { "target": "radius", "source": "u_beat_intensity", "gain": 0.15, "smooth": 0.2 }
+      ]
+    }
+  ]
+}

@@ -100,10 +100,14 @@ class MainWindow(QMainWindow):
         self.params_panel = ParamsPanel(self.state)
         self.ki_panel = KIPanel(self.state, gemini=self.gemini, gemini_error=self.gemini_error)
         self.quotes_panel = QuotesPanel(self.state, gemini=self.gemini)
+        from src.gui.studio_panel import StudioPanel
+        self.studio_panel = StudioPanel(self.state, gemini=self.gemini)
+        self.studio_panel.recipe_saved.connect(self._on_recipe_saved)
 
         self.right_tabs.addTab(self._make_scrollable(self.params_panel), "Parameter")
         self.right_tabs.addTab(self._make_scrollable(self.ki_panel), "KI")
         self.right_tabs.addTab(self._make_scrollable(self.quotes_panel), "Zitate")
+        self.right_tabs.addTab(self.studio_panel, "Studio")
         splitter.addWidget(self.right_tabs)
 
         splitter.setSizes([260, 620, 320])
@@ -568,6 +572,13 @@ class MainWindow(QMainWindow):
         self._quote_extract_worker.quotes_error.connect(self.quotes_panel.on_extract_error)
         self._quote_extract_worker.finished.connect(lambda: self._cleanup_worker("_quote_extract_worker"))
         self._quote_extract_worker.start()
+
+    def _on_recipe_saved(self, name: str):
+        """Nach dem Speichern eines Studio-Rezepts: Auswahl aktualisieren + wechseln."""
+        self.params_panel.refresh_visualizers()
+        self.state.visualizer_type = name
+        self.params_panel.combo_viz.setCurrentText(name)
+        self._set_status(f"Neuer Visualizer '{name}' gespeichert.", "ok")
 
     def _start_full_ai(self):
         from src.gui.workers import FullAIWorker
