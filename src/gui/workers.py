@@ -283,6 +283,7 @@ class QuoteExtractWorker(QThread):
         audio_path: str,
         audio_duration: float | None = None,
         max_quotes: int | None = None,
+        use_cache: bool = True,
         parent=None,
     ):
         super().__init__(parent)
@@ -290,6 +291,7 @@ class QuoteExtractWorker(QThread):
         self.audio_path = audio_path
         self.audio_duration = audio_duration
         self.max_quotes = max_quotes
+        self.use_cache = use_cache
 
     def run(self):
         try:
@@ -297,8 +299,27 @@ class QuoteExtractWorker(QThread):
                 audio_path=self.audio_path,
                 audio_duration=self.audio_duration,
                 max_quotes=self.max_quotes,
+                use_cache=self.use_cache,
             )
             quotes = future.result(timeout=120)
             self.quotes_ready.emit(quotes)
         except Exception as e:
             self.quotes_error.emit(str(e), traceback.format_exc())
+
+
+class TranscribeWorker(QThread):
+    transcribe_ready = pyqtSignal(str)
+    transcribe_error = pyqtSignal(str, str)
+
+    def __init__(self, gemini, audio_path: str, parent=None):
+        super().__init__(parent)
+        self.gemini = gemini
+        self.audio_path = audio_path
+
+    def run(self):
+        try:
+            future = self.gemini.transcribe_audio_async(audio_path=self.audio_path)
+            transcript = future.result(timeout=300)
+            self.transcribe_ready.emit(transcript)
+        except Exception as e:
+            self.transcribe_error.emit(str(e), traceback.format_exc())

@@ -5,6 +5,30 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
+## [2.7.0] — 2026-07-12
+
+KI-Härtung (Phase 3 des Ausbauplans v3.0): verlässliche, kostentransparente
+Gemini-Integration.
+
+### Added
+- **Konfigurierbare Modell-ID** (`config/settings.json`, `src/app_settings.py`):
+  Auflösung `GEMINI_MODEL`-env → settings.json → Default. Ungültige/veraltete
+  IDs werden beim ersten Aufruf erkannt und per `models.list()` durch ein
+  passendes Modell ersetzt (Präferenzliste) — die App crasht nie mehr an einer
+  toten Modell-ID
+- **Kosten-Tracking** (`src/ai_costs.py`): Session-Ledger über Token-Verbrauch
+  und geschätzte USD-Kosten (Preistabelle in settings.json), Anzeige im KI-Panel
+- **Result-Caching** für Zitate: identische Anfragen kosten keinen weiteren
+  API-Aufruf; „Cache ignorieren"-Checkbox erzwingt Neuanfrage
+- **Transkription in der GUI**: „Transkribieren"-Button + Viewer mit Kopieren/
+  Speichern im Zitate-Tab (nutzt den bestehenden Transkript-Cache)
+
+### Changed
+- **Typisierte Retry-Logik**: Statt String-Matching wird der HTTP-Status des
+  google-genai-`APIError` ausgewertet (Retry bei 408/429/5xx, `Retry-After`
+  wird beachtet); Auth-/Berechtigungsfehler (401/403) brechen sofort mit klarer
+  Meldung ab
+
 ## [2.6.2] — 2026-07-12
 
 CI, Test-Lücken und reproduzierbare Installation (Phase 2 des Ausbauplans v3.0).

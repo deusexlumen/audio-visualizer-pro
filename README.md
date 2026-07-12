@@ -1,9 +1,9 @@
-[![Version](https://img.shields.io/badge/SOTA-v2.6.2-blue)](https://github.com/deusexlumen/audio-visualizer-pro)
+[![Version](https://img.shields.io/badge/SOTA-v2.7.0-blue)](https://github.com/deusexlumen/audio-visualizer-pro)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-217%20passed-brightgreen)](https://github.com/deusexlumen/audio-visualizer-pro)
+[![Tests](https://img.shields.io/badge/tests-232%20passed-brightgreen)](https://github.com/deusexlumen/audio-visualizer-pro)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-# Audio Visualizer Pro v2.6.2
+# Audio Visualizer Pro v2.7.0
 
 **Professionelles Audio-Visualisierungs-System mit GPU-Beschleunigung und KI-Unterstützung**
 
@@ -20,12 +20,12 @@ Audio Visualizer Pro ist ein modulares System zur Erstellung hochwertiger Audio-
 - **🎨 16 GPU-Visualizer**: Shader-basierte Visualisierung mit ModernGL (10 Classic + 6 Signature Pro)
 - **🌈 HDR-Pipeline**: Float16-Rendering mit ACES-Tonemapping, Dithering und 4x-MSAA — kein Banding, keine harten Clips
 - **✨ Premium-Post-FX**: Echter HDR-Bloom, Belichtung, Vignette, chromatische Aberration, luminanzabhängiges Film-Grain, 3D-LUTs (.cube)
-- **🤖 KI-Integration**: Automatische Transkription und Zitat-Extraktion mit Gemini 3.1 Flash-Lite
+- **🤖 KI-Integration**: Automatische Transkription und Zitat-Extraktion mit Gemini Flash-Lite
 - **🖥️ PyQt6-GUI**: Dark-Studio-Oberfläche mit Wellenform-Timeline, Live-Vorschau, Drag & Drop und Projekt-Dateien (.avproj)
 - **🎬 Multi-Codec**: H.264, HEVC, ProRes Encoding via FFmpeg
 - **🎵 Beat-Sync**: Synchronisierte Zitat-Einblendungen und Visual-Effekte
 - **🔌 Plugin-System**: Einfache Erweiterung um eigene Visualizer
-- **🧪 217 Tests**: Umfassende Testabdeckung, GPU-Tests laufen headless-sicher
+- **🧪 232 Tests**: Umfassende Testabdeckung, GPU-Tests laufen headless-sicher
 
 ---
 
@@ -102,7 +102,7 @@ python main.py render dein_audio.mp3 --visual neon_wave_circle \
 
 ## 🤖 KI-Features
 ### Automatisierte Zitat-Extraktion
-Nutzt Gemini 3.1 Flash-Lite für:
+Nutzt Gemini Flash-Lite für:
 - **Audio-Transkription**: Wandelt Sprache zu Text mit Zeitstempeln
 - **Key-Zitat-Erkennung**: Identifiziert die wichtigsten Passagen
 - **Beat-Sync**: Synchronisiert Zitate mit musikalischen Highlights
@@ -182,7 +182,7 @@ python main.py render audio.mp3 --visual particle_swarm \
 
 ## 🧪 Testing
 ```bash
-# Alle Tests ausführen (217 Tests)
+# Alle Tests ausführen (232 Tests)
 pytest tests/ -v
 # Spezifische Test-Suiten
 pytest tests/test_gpu_renderer.py -v        # GPU Rendering
@@ -231,7 +231,7 @@ audio-visualizer-pro/
 │   ├── render_common.py        # Gemeinsame Renderer-Hilfen
 │   ├── types.py                # Pydantic Models
 │   └── visualizer_wizard.py    # Generator fuer eigene Visualizer
-├── tests/                      # Test Suite (217 Tests)
+├── tests/                      # Test Suite (232 Tests)
 └── cognitive_core/             # Evo-Agent Framework
 ```
 
@@ -258,7 +258,7 @@ audio-visualizer-pro/
 - ✅ 16 GPU-Visualizer implementiert (10 Classic + 6 Signature Pro)
 - ✅ PyQt6 Premium UI mit Live-Preview (DearPyGui-Vorgänger abgelöst)
 - ✅ Gemini KI-Integration (Transkription & Zitat-Extraktion)
-- ✅ Test-Suite: 217 Tests, headless-sichere GPU-Tests
+- ✅ Test-Suite: 232 Tests, headless-sichere GPU-Tests
 - ✅ Post-Processing Pipeline (Bloom, Grain, Vignette, LUTs, Chromatic Aberration)
 - ✅ SDF-basiertes Text-Rendering für Quote Overlays
 - ✅ Multi-Codec Support (H.264, HEVC, ProRes)
@@ -353,7 +353,7 @@ Als Ein-Personen-Projekt mit Fokus auf **Stabilität und Einfachheit** werden fo
 **Entwicklungs-Geschwindigkeit:**
 - Realistische Feature-Umsetzung: 1-2 größere Features pro Quartal
 - Fokus auf Qualität statt Quantität
-- Alle Änderungen werden umfassend getestet (217 Tests)
+- Alle Änderungen werden umfassend getestet (232 Tests)
 - Dokumentation hat gleiche Priorität wie Code
 
 **Warum dieser Ansatz?**

@@ -30,7 +30,8 @@ class TestGeminiIntegration:
             
             gemini = GeminiIntegration(api_key="test-key-123")
             assert gemini.api_key == "test-key-123"
-            assert gemini.model == "gemini-3.1-flash-lite"
+            # Standard-Modell kommt jetzt aus config/settings.json (konfigurierbar)
+            assert gemini.model == "gemini-flash-lite-latest"
 
     def test_transcribe_audio(self):
         """Sollte Audio transkribieren und Text zurückgeben."""
@@ -276,13 +277,44 @@ class TestGeminiIntegration:
             gemini.shutdown()
 
     def test_model_name(self):
-        """Das Standard-Modell soll gemini-3.1-flash-lite sein."""
+        """Das Standard-Modell kommt aus settings.json (konfigurierbar)."""
         with patch('src.gemini_integration.genai') as mock_genai:
             from src.gemini_integration import GeminiIntegration
             mock_genai.Client.return_value = Mock()
 
             gemini = GeminiIntegration(api_key="test-key")
-            assert gemini.model == "gemini-3.1-flash-lite"
+            assert gemini.model == "gemini-flash-lite-latest"
+
+    def test_model_env_override(self):
+        """GEMINI_MODEL in der Umgebung ueberschreibt das Standard-Modell."""
+        from src import app_settings
+        with patch.dict(os.environ, {"GEMINI_MODEL": "gemini-custom-xyz"}):
+            app_settings.load_settings(force_reload=True)
+            with patch('src.gemini_integration.genai') as mock_genai:
+                from src.gemini_integration import GeminiIntegration
+                mock_genai.Client.return_value = Mock()
+                gemini = GeminiIntegration(api_key="test-key")
+                assert gemini.model == "gemini-custom-xyz"
+        app_settings.load_settings(force_reload=True)
+
+    def test_model_fallback_bei_ungueltiger_id(self):
+        """Ungueltige Modell-ID -> Ersatz aus models.list() nach Praeferenz."""
+        with patch('src.gemini_integration.genai') as mock_genai:
+            from src.gemini_integration import GeminiIntegration
+            mock_client = Mock()
+            # models.get schlaegt fehl (404), models.list liefert Kandidaten
+            mock_client.models.get.side_effect = Exception("404 not found")
+            m1 = Mock(); m1.name = "models/gemini-2.5-flash-lite"
+            m1.supported_actions = ["generateContent"]
+            m2 = Mock(); m2.name = "models/gemini-2.5-flash"
+            m2.supported_actions = ["generateContent"]
+            mock_client.models.list.return_value = [m2, m1]
+            mock_genai.Client.return_value = mock_client
+
+            gemini = GeminiIntegration(api_key="test-key")
+            resolved = gemini._ensure_model()
+            # Praeferenz 'flash-lite' vor 'flash'
+            assert "flash-lite" in resolved
 
     def test_validate_optimized_result_clamps_and_filters(self):
         """Das Ergebnis soll validiert, gecuttet und auf gueltige Werte reduziert werden."""

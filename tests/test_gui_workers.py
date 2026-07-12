@@ -1,6 +1,9 @@
 from unittest.mock import patch, MagicMock
 from PyQt6.QtCore import QCoreApplication
-from src.gui.workers import PreviewWorker, RenderWorker, AIOptimizeWorker, QuoteExtractWorker
+from src.gui.workers import (
+    PreviewWorker, RenderWorker, AIOptimizeWorker, QuoteExtractWorker,
+    TranscribeWorker,
+)
 
 
 def test_preview_worker_emits_ready(qtbot):
@@ -86,7 +89,23 @@ def test_quote_extract_worker_emits_quotes_ready(qtbot):
         audio_path="/tmp/test.wav",
         audio_duration=120.0,
         max_quotes=5,
+        use_cache=True,
     )
+
+
+def test_transcribe_worker_emits_ready(qtbot):
+    app = QCoreApplication.instance() or QCoreApplication([])
+    gemini = MagicMock()
+    gemini.transcribe_audio_async.return_value = _mock_future("Das ist ein Transkript.")
+
+    worker = TranscribeWorker(gemini=gemini, audio_path="/tmp/test.wav")
+
+    captured = []
+    worker.transcribe_ready.connect(captured.append)
+    worker.run()
+
+    assert captured == ["Das ist ein Transkript."]
+    gemini.transcribe_audio_async.assert_called_once_with(audio_path="/tmp/test.wav")
 
 
 def _mock_error_future(error):

@@ -4,7 +4,8 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QCheckBox, QComboBox, QSlider,
-    QColorDialog, QGroupBox, QGridLayout, QInputDialog,
+    QColorDialog, QGroupBox, QGridLayout, QInputDialog, QTextEdit,
+    QFileDialog, QApplication,
 )
 
 from src.app_logging import get_logger
@@ -48,11 +49,47 @@ class QuotesPanel(QWidget):
         btn_row.addWidget(self.btn_demo)
         extract_layout.addLayout(btn_row)
 
+        self.chk_no_cache = QCheckBox("Cache ignorieren (neu anfragen)")
+        self.chk_no_cache.setToolTip(
+            "Erzwingt einen neuen Gemini-Aufruf statt gecachte Ergebnisse zu nutzen."
+        )
+        extract_layout.addWidget(self.chk_no_cache)
+
         self.lbl_status = QLabel("")
         self.lbl_status.setWordWrap(True)
         extract_layout.addWidget(self.lbl_status)
 
         layout.addWidget(extract_box)
+
+        # --- Transkription ---
+        trans_box = QGroupBox("Transkription")
+        trans_layout = QVBoxLayout(trans_box)
+
+        trans_btn_row = QHBoxLayout()
+        self.btn_transcribe = QPushButton("Transkribieren")
+        self.btn_transcribe.clicked.connect(self._on_transcribe)
+        trans_btn_row.addWidget(self.btn_transcribe)
+
+        self.btn_copy_transcript = QPushButton("Kopieren")
+        self.btn_copy_transcript.clicked.connect(self._on_copy_transcript)
+        self.btn_copy_transcript.setEnabled(False)
+        trans_btn_row.addWidget(self.btn_copy_transcript)
+
+        self.btn_save_transcript = QPushButton("Speichern")
+        self.btn_save_transcript.clicked.connect(self._on_save_transcript)
+        self.btn_save_transcript.setEnabled(False)
+        trans_btn_row.addWidget(self.btn_save_transcript)
+        trans_layout.addLayout(trans_btn_row)
+
+        self.txt_transcript = QTextEdit()
+        self.txt_transcript.setReadOnly(True)
+        self.txt_transcript.setMaximumHeight(140)
+        self.txt_transcript.setPlaceholderText(
+            "Noch kein Transkript. 'Transkribieren' erzeugt eins (gecacht)."
+        )
+        trans_layout.addWidget(self.txt_transcript)
+
+        layout.addWidget(trans_box)
 
         # --- Liste ---
         list_box = QGroupBox("Zitat-Liste")
@@ -139,6 +176,7 @@ class QuotesPanel(QWidget):
         has_features = self.state.features is not None
         has_gemini = self.gemini is not None
         self.btn_extract.setEnabled(has_audio and has_features and has_gemini)
+        self.btn_transcribe.setEnabled(has_audio and has_gemini)
         if not has_gemini:
             self.lbl_status.setText("KI nicht verfügbar. Prüfe API-Key.")
 
@@ -235,4 +273,50 @@ class QuotesPanel(QWidget):
             "audio_path": self.state.audio_path,
             "audio_duration": getattr(self.state.features, "duration", None),
             "max_quotes": None,
+            "use_cache": not self.chk_no_cache.isChecked(),
         }
+
+    # --- Transkription ---
+
+    def _on_transcribe(self):
+        if not self.state.audio_path or self.gemini is None:
+            return
+        self.btn_transcribe.setEnabled(False)
+        self.btn_transcribe.setText("⏳ Transkribiere...")
+        self.lbl_status.setText("Transkription laeuft (kann dauern)...")
+
+    def get_transcribe_request(self) -> dict:
+        return {"gemini": self.gemini, "audio_path": self.state.audio_path}
+
+    def on_transcribe_finished(self, transcript: str):
+        self.btn_transcribe.setEnabled(True)
+        self.btn_transcribe.setText("Transkribieren")
+        self.txt_transcript.setPlainText(transcript)
+        has_text = bool(transcript.strip())
+        self.btn_copy_transcript.setEnabled(has_text)
+        self.btn_save_transcript.setEnabled(has_text)
+        self.lbl_status.setText("Transkript fertig." if has_text else "Kein Text erkannt.")
+
+    def on_transcribe_error(self, msg: str, tb: str = ""):
+        if tb:
+            logger.error(f"[Transkript] Fehler:\n{tb}")
+        self.btn_transcribe.setEnabled(True)
+        self.btn_transcribe.setText("Transkribieren")
+        self.lbl_status.setText(f"Transkriptions-Fehler: {msg}")
+
+    def _on_copy_transcript(self):
+        QApplication.clipboard().setText(self.txt_transcript.toPlainText())
+        self.lbl_status.setText("Transkript in Zwischenablage kopiert.")
+
+    def _on_save_transcript(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Transkript speichern", "transkript.txt", "Textdateien (*.txt)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self.txt_transcript.toPlainText())
+            self.lbl_status.setText(f"Transkript gespeichert: {path}")
+        except OSError as e:
+            self.lbl_status.setText(f"Speichern fehlgeschlagen: {e}")

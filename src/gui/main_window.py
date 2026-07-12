@@ -55,6 +55,7 @@ class MainWindow(QMainWindow):
         self._analyze_worker: AnalyzeWorker | None = None
         self._ai_optimize_worker: AIOptimizeWorker | None = None
         self._quote_extract_worker: QuoteExtractWorker | None = None
+        self._transcribe_worker = None
         self._render_worker: RenderWorker | None = None
         self._intro_worker: IntroWorker | None = None
 
@@ -409,6 +410,7 @@ class MainWindow(QMainWindow):
         self.state.changed.connect(self._on_state_changed)
         self.ki_panel.optimize_requested.connect(self._start_ai_optimize)
         self.quotes_panel.btn_extract.clicked.connect(self._start_quote_extract)
+        self.quotes_panel.btn_transcribe.clicked.connect(self._start_transcribe)
         self.btn_render.clicked.connect(self._on_render_clicked)
         self.btn_cancel.clicked.connect(self._on_cancel_clicked)
         self.btn_preview.clicked.connect(self._start_preview)
@@ -556,12 +558,31 @@ class MainWindow(QMainWindow):
             audio_path=req["audio_path"],
             audio_duration=req["audio_duration"],
             max_quotes=req.get("max_quotes"),
+            use_cache=req.get("use_cache", True),
             parent=self,
         )
         self._quote_extract_worker.quotes_ready.connect(self.quotes_panel.on_extract_finished)
         self._quote_extract_worker.quotes_error.connect(self.quotes_panel.on_extract_error)
         self._quote_extract_worker.finished.connect(lambda: self._cleanup_worker("_quote_extract_worker"))
         self._quote_extract_worker.start()
+
+    def _start_transcribe(self):
+        from src.gui.workers import TranscribeWorker
+
+        if self._transcribe_worker and self._transcribe_worker.isRunning():
+            return
+        req = self.quotes_panel.get_transcribe_request()
+        if not req or not req.get("audio_path") or not req.get("gemini"):
+            return
+        self._transcribe_worker = TranscribeWorker(
+            gemini=req["gemini"],
+            audio_path=req["audio_path"],
+            parent=self,
+        )
+        self._transcribe_worker.transcribe_ready.connect(self.quotes_panel.on_transcribe_finished)
+        self._transcribe_worker.transcribe_error.connect(self.quotes_panel.on_transcribe_error)
+        self._transcribe_worker.finished.connect(lambda: self._cleanup_worker("_transcribe_worker"))
+        self._transcribe_worker.start()
 
     def _on_preview_ready(self, img):
         if self.sender() is not self._preview_worker:

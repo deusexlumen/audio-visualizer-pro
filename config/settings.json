@@ -1,0 +1,15 @@
+{
+  "gemini_model": "gemini-flash-lite-latest",
+  "imagen_model": "imagen-4.0-generate-001",
+  "model_preference": ["flash-lite", "flash"],
+  "pricing_usd_per_million_tokens": {
+    "gemini-flash-lite-latest": { "input": 0.10, "output": 0.40 },
+    "gemini-2.5-flash-lite": { "input": 0.10, "output": 0.40 },
+    "gemini-2.5-flash": { "input": 0.30, "output": 2.50 },
+    "default": { "input": 0.15, "output": 0.60 }
+  },
+  "pricing_usd_per_image": {
+    "imagen-4.0-generate-001": 0.04,
+    "default": 0.04
+  }
+}

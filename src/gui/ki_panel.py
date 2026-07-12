@@ -67,8 +67,23 @@ class KIPanel(QWidget):
         self.lbl_colors.setWordWrap(True)
         opt_layout.addWidget(self.lbl_colors)
 
+        self.lbl_cost = QLabel("")
+        self.lbl_cost.setWordWrap(True)
+        self.lbl_cost.setToolTip("Geschaetzte KI-Kosten dieser Sitzung.")
+        opt_layout.addWidget(self.lbl_cost)
+
         layout.addWidget(opt_box)
         layout.addStretch()
+
+        self._update_cost_label()
+
+    def _update_cost_label(self):
+        """Aktualisiert die Anzeige der geschaetzten KI-Kosten."""
+        try:
+            from src.ai_costs import get_cost_ledger
+            self.lbl_cost.setText(get_cost_ledger().summary())
+        except Exception:
+            self.lbl_cost.setText("")
 
     def _connect_signals(self):
         self.state.changed.connect(self._on_state_changed)
@@ -162,6 +177,7 @@ class KIPanel(QWidget):
         self.btn_optimize.setText("Komplett optimieren")
         self._apply_optimize_result(result)
         self.lbl_status.setText("Parameter optimiert!")
+        self._update_cost_label()
 
     def on_optimize_error(self, msg: str, tb: str = ""):
         if tb:

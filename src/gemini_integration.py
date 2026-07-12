@@ -1,7 +1,7 @@
 """
 Gemini Integration für Audio Visualizer Pro.
 
-Nutzt Gemini 3.1 Flash-Lite für:
+Nutzt ein konfigurierbares Gemini-Modell (Standard: Flash-Lite) für:
 - Audio-Transkription
 - Key-Zitat-Extraktion direkt aus Audio (mit Zeitstempeln)
 """
@@ -19,15 +19,29 @@ from pathlib import Path
 import numpy as np
 
 from .app_logging import get_logger
-from .quote_cache import save_upload_id, load_upload_id, save_transcript, load_transcript
+from .app_settings import load_settings
+from .ai_costs import get_cost_ledger
+from .quote_cache import (
+    save_upload_id, load_upload_id, save_transcript, load_transcript,
+    save_json_result, load_json_result,
+)
 from .types import Quote
 
 logger = get_logger(__name__)
+
+# Version der Prompt-/Schema-Logik. Bei Prompt-Aenderungen erhoehen, damit
+# alte gecachte KI-Ergebnisse verworfen werden.
+PROMPT_VERSION = 1
 
 try:
     from google import genai
 except ImportError:
     genai = None
+
+try:
+    from google.genai import errors as genai_errors
+except ImportError:
+    genai_errors = None
 
 
 # =============================================================================
@@ -322,7 +336,7 @@ def _compress_audio_for_upload(input_path: str, output_path: str) -> bool:
 
 class GeminiIntegration:
     """
-    Wrapper für Gemini 3.1 Flash-Lite API.
+    Wrapper für die Gemini-API (Modell konfigurierbar via settings.json/env).
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -341,37 +355,151 @@ class GeminiIntegration:
             )
 
         self.client = genai.Client(api_key=self.api_key)
-        self.model = "gemini-3.1-flash-lite"
+
+        # Modell konfigurierbar (env/settings.json), nie hartcodiert.
+        # Die tatsaechliche Validierung passiert lazy beim ersten Call, damit
+        # __init__ keinen Netzwerk-Zugriff macht.
+        self._settings = load_settings()
+        self._configured_model = self._settings.gemini_model
+        self._active_model: Optional[str] = None
+        self._model_validated = False
+
         # ThreadPool fuer non-blocking API-Calls (verhindert Render-Loop-Stalls)
         self._executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="gemini_"
         )
 
+    @property
+    def model(self) -> str:
+        """Das aktuell aktive Modell (nach Lazy-Validierung, sonst konfiguriert)."""
+        return self._active_model or self._configured_model
+
+    def _ensure_model(self) -> str:
+        """Validiert die konfigurierte Modell-ID einmalig und waehlt bei
+        Bedarf ein passendes Ersatzmodell.
+
+        Faellt eine veraltete/ungueltige ID auf, wird per models.list() das
+        neueste passende Modell gewaehlt (Praeferenz aus settings.json).
+        Wirft nie — im Zweifel bleibt die konfigurierte ID bestehen.
+        """
+        if self._model_validated:
+            return self.model
+
+        self._model_validated = True
+        candidate = self._configured_model
+        try:
+            self.client.models.get(model=candidate)
+            self._active_model = candidate
+            return candidate
+        except Exception as e:
+            logger.warning(
+                f"[Gemini] Modell '{candidate}' nicht verfuegbar ({e}). "
+                f"Suche Ersatz..."
+            )
+
+        replacement = self._pick_fallback_model()
+        if replacement:
+            logger.warning(f"[Gemini] Nutze Ersatzmodell '{replacement}'.")
+            self._active_model = replacement
+        else:
+            # Kein Ersatz gefunden — konfigurierte ID beibehalten, Call darf
+            # dann mit einer klaren API-Fehlermeldung scheitern.
+            self._active_model = candidate
+        return self.model
+
+    def _pick_fallback_model(self) -> Optional[str]:
+        """Waehlt aus models.list() das neueste Modell nach Praeferenzliste."""
+        try:
+            models = list(self.client.models.list())
+        except Exception as e:
+            logger.warning(f"[Gemini] models.list() fehlgeschlagen: {e}")
+            return None
+
+        # Nur Modelle, die generateContent unterstuetzen
+        def supports_generate(m) -> bool:
+            actions = getattr(m, "supported_actions", None) or \
+                getattr(m, "supported_generation_methods", None)
+            if not actions:
+                return True  # unbekannt -> nicht ausschliessen
+            return any("generateContent" in a or "generate_content" in a for a in actions)
+
+        names = [
+            getattr(m, "name", "").replace("models/", "")
+            for m in models if supports_generate(m)
+        ]
+        names = [n for n in names if n]
+
+        for pref in self._settings.model_preference:
+            matches = [n for n in names if pref in n]
+            if matches:
+                # 'latest'-Alias bevorzugen, sonst laengsten (meist neuesten) Namen
+                latest = [n for n in matches if "latest" in n]
+                return latest[0] if latest else sorted(matches)[-1]
+        return names[0] if names else None
+
     # -------------------------------------------------------------------------
     # Retry-Wrapper fuer alle Gemini API-Calls
     # -------------------------------------------------------------------------
 
-    @staticmethod
-    def _is_retryable_error(error: Exception) -> bool:
-        """Prueft, ob ein Fehler retry-bar ist (429, 503, Rate-Limit, etc.)."""
-        error_str = str(error).lower()
-        retry_indicators = [
-            "429", "503", "408", "504",
-            "too many requests", "rate limit", "quota",
-            "unavailable", "high demand", "overloaded",
-            "deadline exceeded", "timeout", "temporary",
-            "connection", "reset", "refused",
-        ]
-        return any(ind in error_str for ind in retry_indicators)
+    # HTTP-Status-Codes, bei denen sich ein Retry lohnt (transiente Fehler)
+    _RETRYABLE_CODES = {408, 409, 429, 500, 502, 503, 504}
+    # Codes, die auf ein Konto-/Auth-Problem hindeuten (kein Retry sinnvoll)
+    _AUTH_CODES = {401, 403}
 
-    def _call_gemini_with_retry(self, call_fn, max_retries: int = 5, base_delay: float = 2.0):
+    def _error_code(self, error: Exception) -> Optional[int]:
+        """Extrahiert den HTTP-Status aus einem genai-APIError, falls vorhanden."""
+        if genai_errors is not None and isinstance(error, genai_errors.APIError):
+            code = getattr(error, "code", None)
+            if isinstance(code, int):
+                return code
+        return None
+
+    def _is_retryable_error(self, error: Exception) -> bool:
+        """Prueft, ob ein Fehler retry-bar ist.
+
+        Bevorzugt den typisierten HTTP-Status des SDKs; faellt nur bei
+        Transport-Fehlern ohne Status auf String-Heuristik zurueck.
+        """
+        code = self._error_code(error)
+        if code is not None:
+            return code in self._RETRYABLE_CODES
+
+        # Kein API-Status -> Transport-/Verbindungsfehler heuristisch behandeln
+        error_str = str(error).lower()
+        transport_indicators = [
+            "timeout", "timed out", "deadline exceeded",
+            "connection", "reset", "refused", "temporarily",
+            "unavailable", "broken pipe",
+        ]
+        return any(ind in error_str for ind in transport_indicators)
+
+    def _retry_after_seconds(self, error: Exception) -> Optional[float]:
+        """Liest einen 'Retry-After'-Hinweis aus der Fehlerantwort, falls vorhanden."""
+        response = getattr(error, "response", None)
+        headers = getattr(response, "headers", None)
+        if not headers:
+            return None
+        raw = headers.get("Retry-After") or headers.get("retry-after")
+        if not raw:
+            return None
+        try:
+            return float(raw)
+        except (ValueError, TypeError):
+            return None
+
+    def _call_gemini_with_retry(self, call_fn, max_retries: int = 5,
+                                 base_delay: float = 2.0, track_cost: bool = True):
         """
         Fuehrt einen Gemini API-Call mit Exponential Backoff aus.
+
+        Validiert vor dem ersten Call die Modell-ID und erfasst — sofern das
+        Ergebnis usage_metadata traegt — die Kosten im Session-Ledger.
 
         Args:
             call_fn: Callable, die den API-Call durchfuehrt (keine Argumente).
             max_retries: Maximale Anzahl Versuche (inkl. erster Versuch).
             base_delay: Basis-Wartezeit in Sekunden (verdoppelt sich pro Retry).
+            track_cost: Ob die Token-Kosten des Ergebnisses erfasst werden sollen.
 
         Returns:
             Das Ergebnis von call_fn().
@@ -379,21 +507,36 @@ class GeminiIntegration:
         Raises:
             RuntimeError: Wenn alle Versuche fehlschlagen.
         """
+        # Modell-ID einmalig validieren (kann self.model auf ein Ersatzmodell setzen)
+        self._ensure_model()
+
         last_error = None
         for attempt in range(1, max_retries + 1):
             try:
-                return call_fn()
+                result = call_fn()
+                if track_cost:
+                    self._track_cost(result)
+                return result
             except Exception as e:
                 last_error = e
+                code = self._error_code(e)
+
+                # Auth-/Kontingent-Fehler: kein Retry, klare Meldung
+                if code in self._AUTH_CODES:
+                    raise RuntimeError(
+                        "Gemini-Zugriff verweigert (Auth/Berechtigung). "
+                        "Bitte GEMINI_API_KEY pruefen."
+                    ) from e
+
                 if not self._is_retryable_error(e):
-                    # Nicht retry-barer Fehler -> sofort weiterwerfen
                     raise
 
                 if attempt < max_retries:
-                    wait_time = base_delay * (2 ** (attempt - 1))  # 2s, 4s, 8s, 16s
+                    wait_time = self._retry_after_seconds(e) or base_delay * (2 ** (attempt - 1))
+                    kind = "Kontingent (429)" if code == 429 else f"Fehler{f' ({code})' if code else ''}"
                     logger.warning(
-                        f"[Gemini] Retry {attempt}/{max_retries} nach Fehler: {e}. "
-                        f"Warte {wait_time}s..."
+                        f"[Gemini] Retry {attempt}/{max_retries} nach {kind}: {e}. "
+                        f"Warte {wait_time:.0f}s..."
                     )
                     time.sleep(wait_time)
                 else:
@@ -403,6 +546,22 @@ class GeminiIntegration:
             f"Gemini API nach {max_retries} Versuchen nicht erreichbar. "
             f"Letzter Fehler: {last_error}"
         )
+
+    def _track_cost(self, response) -> None:
+        """Erfasst Token-Verbrauch eines Antwort-Objekts im Kosten-Ledger."""
+        usage = getattr(response, "usage_metadata", None)
+        if usage is None:
+            return
+        try:
+            prompt_tokens = getattr(usage, "prompt_token_count", 0) or 0
+            output_tokens = (
+                getattr(usage, "candidates_token_count", 0)
+                or getattr(usage, "total_token_count", 0) - prompt_tokens
+                or 0
+            )
+            get_cost_ledger().record(self.model, int(prompt_tokens), int(max(0, output_tokens)))
+        except Exception as e:
+            logger.debug(f"[Gemini] Kosten konnten nicht erfasst werden: {e}")
 
     @staticmethod
     def _load_default_config() -> dict:
@@ -435,10 +594,12 @@ class GeminiIntegration:
         return self._executor.submit(self.transcribe_audio, audio_path)
 
     def extract_quotes_async(self, audio_path: str, audio_duration: float = None,
-                              max_quotes: int = None) -> concurrent.futures.Future:
+                              max_quotes: int = None,
+                              use_cache: bool = True) -> concurrent.futures.Future:
         """Asynchrone Zitat-Extraktion. Gibt ein Future zurueck."""
         return self._executor.submit(
-            self.extract_quotes, audio_path, audio_duration, max_quotes
+            self.extract_quotes, audio_path, audio_duration, max_quotes,
+            None, use_cache
         )
 
     def optimize_all_settings_async(self, visualizer_type: str, current_params: dict,
@@ -610,7 +771,8 @@ class GeminiIntegration:
             raise RuntimeError(f"Unerwarteter Fehler bei der Transkription: {e}") from e
 
     def extract_quotes(self, audio_path: str, audio_duration: float = None,
-                        max_quotes: int = None, progress_callback=None) -> List[Quote]:
+                        max_quotes: int = None, progress_callback=None,
+                        use_cache: bool = True) -> List[Quote]:
         """
         Extrahiert Key-Zitate direkt aus einer Audio-Datei.
 
@@ -647,6 +809,24 @@ class GeminiIntegration:
                     max_quotes = min(10, max(5, int(audio_duration / 90)))
             elif max_quotes is None:
                 max_quotes = 5
+
+            # Result-Cache pruefen (spart Upload + API-Call bei identischer Eingabe)
+            cache_sig = f"{self.model}|{PROMPT_VERSION}|{max_quotes}"
+            if use_cache:
+                cached = load_json_result(str(audio_path), "quotes", cache_sig)
+                if cached is not None:
+                    logger.info("[Gemini] Gecachte Zitate verwendet.")
+                    if progress_callback:
+                        progress_callback(f"{len(cached)} Zitate (Cache)")
+                    return [
+                        Quote(
+                            text=q.get("text", ""),
+                            start_time=float(q.get("start_time", 0.0)),
+                            end_time=float(q.get("end_time", 0.0)),
+                            confidence=float(q.get("confidence", 0.5)),
+                        )
+                        for q in cached
+                    ]
 
             if progress_callback:
                 progress_callback("Audio wird vorbereitet...")
@@ -758,6 +938,18 @@ class GeminiIntegration:
 
             if progress_callback:
                 progress_callback(f"{len(quotes)} Zitate extrahiert")
+
+            # Ergebnis cachen (weitere Klicks ohne Parameteraenderung sind gratis)
+            if use_cache:
+                save_json_result(str(audio_path), "quotes", cache_sig, [
+                    {
+                        "text": q.text,
+                        "start_time": q.start_time,
+                        "end_time": q.end_time,
+                        "confidence": q.confidence,
+                    }
+                    for q in quotes
+                ])
 
             return quotes
         except (FileNotFoundError, RuntimeError):

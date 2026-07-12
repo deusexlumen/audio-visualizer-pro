@@ -117,6 +117,53 @@ def clear_quotes_cache(audio_path: str) -> None:
         f = cache_dir / f"{h}{suffix}"
         if f.exists():
             f.unlink()
+    # Generische Result-Caches desselben Audios ebenfalls loeschen
+    for f in cache_dir.glob(f"{h}_res_*.json"):
+        try:
+            f.unlink()
+        except OSError:
+            pass
+
+
+def _result_key(*parts) -> str:
+    """Baut einen kurzen, stabilen Schluessel aus beliebigen Bestandteilen."""
+    hasher = hashlib.md5()
+    for p in parts:
+        hasher.update(str(p).encode("utf-8"))
+    return hasher.hexdigest()[:16]
+
+
+def save_json_result(audio_path: str, kind: str, signature: str, data) -> None:
+    """Cacht ein beliebiges JSON-serialisierbares KI-Ergebnis.
+
+    Der Schluessel bindet Audio-Hash, Ergebnis-Art (z.B. 'quotes', 'optimize')
+    und eine Signatur (Modell + Prompt-Version + Parameter), damit ein Ergebnis
+    nur bei identischen Eingaben wiederverwendet wird.
+    """
+    cache_dir = _get_cache_dir()
+    h = get_audio_hash(audio_path) if audio_path else "noaudio"
+    key = _result_key(kind, signature)
+    cache_file = cache_dir / f"{h}_res_{kind}_{key}.json"
+    try:
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except (OSError, TypeError) as e:  # nicht serialisierbar / kein Schreibzugriff
+        return
+
+
+def load_json_result(audio_path: str, kind: str, signature: str):
+    """Laedt ein gecachtes KI-Ergebnis oder None, wenn keins existiert."""
+    cache_dir = _get_cache_dir()
+    h = get_audio_hash(audio_path) if audio_path else "noaudio"
+    key = _result_key(kind, signature)
+    cache_file = cache_dir / f"{h}_res_{kind}_{key}.json"
+    if not cache_file.exists():
+        return None
+    try:
+        with open(cache_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 def save_upload_id(audio_path: str, upload_id: str) -> None:
