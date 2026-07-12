@@ -52,6 +52,10 @@ excludes = [
     "PyQt6.QtDataVisualization", "PyQt6.QtRemoteObjects", "PyQt6.QtSerialPort",
     "PyQt6.QtWebSockets", "PyQt6.QtOpenGL", "PyQt6.QtPrintSupport",
     "matplotlib", "IPython", "notebook", "tkinter",
+    # librosa.segment.agglomerative braucht sklearn.cluster, aber sklearn's
+    # array_api_compat-Hook buendelt spekulativ optionale Backends mit (~900 MB!).
+    # Diese Backends werden nie genutzt (sklearn faellt klaglos auf numpy zurueck).
+    "torch", "torchvision", "torchaudio", "cv2", "tensorflow", "jax", "jaxlib",
 ]
 
 a = Analysis(
