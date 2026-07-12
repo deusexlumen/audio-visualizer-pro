@@ -77,7 +77,7 @@ begin
       Response := MsgBox(
         'Auch gespeicherte Nutzerdaten loeschen (Studio-Rezepte, Cache, Logs, ' +
         'heruntergeladenes FFmpeg)?' #13#13 +
-        AppDataDir #13 + LocalAppDataDir,
+        AppDataDir + #13 + LocalAppDataDir,
         mbConfirmation, MB_YESNO
       );
       if Response = IDYES then
