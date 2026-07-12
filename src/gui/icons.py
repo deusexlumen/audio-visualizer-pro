@@ -5,15 +5,14 @@ ersetzt ihn durch die gewuenschte Farbe und rendert das SVG in mehreren
 Aufloesungen in ein QIcon.
 """
 
-from pathlib import Path
-
 from PyQt6.QtCore import QByteArray, Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap, QPainter
 from PyQt6.QtSvg import QSvgRenderer
 
 from src.gui.styles import Theme
+from src.paths import resource_path
 
-_ICON_DIR = Path(__file__).resolve().parents[2] / "assets" / "icons"
+_ICON_DIR = resource_path("assets", "icons")
 _cache: dict = {}
 
 

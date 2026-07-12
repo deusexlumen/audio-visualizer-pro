@@ -21,6 +21,8 @@ import numpy as np
 from .app_logging import get_logger
 from .app_settings import load_settings
 from .ai_costs import get_cost_ledger
+from .ffmpeg_locator import get_ffmpeg_path
+from .paths import resource_path
 from .quote_cache import (
     save_upload_id, load_upload_id, save_transcript, load_transcript,
     save_json_result, load_json_result,
@@ -321,7 +323,7 @@ def _compress_audio_for_upload(input_path: str, output_path: str) -> bool:
     """
     try:
         cmd = [
-            "ffmpeg", "-y", "-i", input_path,
+            get_ffmpeg_path(), "-y", "-i", input_path,
             "-ar", "16000",      # 16kHz Sample-Rate (genug fuer Sprache)
             "-ac", "1",          # Mono
             "-b:a", "32k",       # 32 kbps Bitrate
@@ -566,7 +568,7 @@ class GeminiIntegration:
     @staticmethod
     def _load_default_config() -> dict:
         """Laedt die Default-Config als Fallback bei API/Parsing-Fehlern."""
-        default_path = Path(__file__).parent.parent / "config" / "default.json"
+        default_path = resource_path("config", "default.json")
         try:
             with open(default_path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)

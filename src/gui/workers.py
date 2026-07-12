@@ -385,3 +385,19 @@ class TranscribeWorker(QThread):
             self.transcribe_ready.emit(transcript)
         except Exception as e:
             self.transcribe_error.emit(str(e), traceback.format_exc())
+
+
+class FFmpegDownloadWorker(QThread):
+    """Laedt FFmpeg im Hintergrund herunter (First-Run, siehe src.ffmpeg_locator)."""
+
+    download_progress = pyqtSignal(int, int)  # bytes_done, bytes_total
+    download_ready = pyqtSignal(str)           # Pfad zur ffmpeg.exe
+    download_error = pyqtSignal(str, str)
+
+    def run(self):
+        from src.ffmpeg_locator import download_ffmpeg
+        try:
+            path = download_ffmpeg(progress_callback=self.download_progress.emit)
+            self.download_ready.emit(path)
+        except Exception as e:
+            self.download_error.emit(str(e), traceback.format_exc())

@@ -140,15 +140,10 @@ def _discover_visualizers():
 
 def recipe_dirs() -> list:
     """Verzeichnisse mit Studio-Rezepten: gebuendelt + benutzerspezifisch."""
-    import os
-    dirs = [Path(__file__).parent.parent.parent / "config" / "recipes"]
-    # Nutzer-Verzeichnis (beschreibbar, auch bei read-only Installation)
-    appdata = os.environ.get("APPDATA")
-    if appdata:
-        dirs.append(Path(appdata) / "AudioVisualizerPro" / "recipes")
-    else:
-        dirs.append(Path.home() / ".audio-visualizer-pro" / "recipes")
-    return dirs
+    from ..paths import resource_path, user_config_dir
+    # Nutzer-Verzeichnis zuletzt (beschreibbar, auch bei read-only Installation) —
+    # Aufrufer wie studio_panel.py speichern neue Rezepte in recipe_dirs()[-1].
+    return [resource_path("config", "recipes"), user_config_dir("recipes")]
 
 
 def _discover_recipe_visualizers() -> dict:

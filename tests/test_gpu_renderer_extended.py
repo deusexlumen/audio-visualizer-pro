@@ -74,7 +74,7 @@ class TestMuxAudio:
 
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
-        assert cmd[0] == 'ffmpeg'
+        assert 'ffmpeg' in cmd[0].lower()
         assert '-c:v' in cmd
         assert 'copy' in cmd
         assert '-c:a' in cmd

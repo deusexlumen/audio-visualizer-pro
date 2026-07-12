@@ -18,6 +18,7 @@ import numpy as np
 
 from .analyzer import AudioAnalyzer
 from .app_logging import get_logger
+from .ffmpeg_locator import get_ffmpeg_path, get_ffprobe_path
 from .gpu_bloom import BloomPass, load_cube_lut
 from .render_common import build_features_dict
 from .types import AudioFeatures, Quote
@@ -739,7 +740,7 @@ class GPUBatchRenderer:
         pattern = os.path.join(temp_dir, "frame_%05d.png")
 
         cmd = [
-            "ffmpeg", "-y", "-i", video_path,
+            get_ffmpeg_path(), "-y", "-i", video_path,
             "-vf", f"fps={fps},scale={width}:{height}",
             "-pix_fmt", "rgb24",
             pattern
@@ -785,7 +786,7 @@ class GPUBatchRenderer:
         # Video-Dauer ermitteln für Loop
         try:
             result = subprocess.run(
-                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                [get_ffprobe_path(), "-v", "error", "-show_entries", "format=duration",
                  "-of", "default=noprint_wrappers=1:nokey=1", video_path],
                 capture_output=True, text=True, timeout=10
             )
@@ -796,7 +797,7 @@ class GPUBatchRenderer:
             pass
 
         cmd = [
-            "ffmpeg", "-y", "-ss", str(time_sec), "-i", video_path,
+            get_ffmpeg_path(), "-y", "-ss", str(time_sec), "-i", video_path,
             "-vframes", "1",
             "-vf", f"scale={width}:{height}",
             "-pix_fmt", "rgb24",
@@ -854,7 +855,7 @@ class GPUBatchRenderer:
             extra_args = ["-movflags", "+faststart"]
         
         cmd = [
-            "ffmpeg",
+            get_ffmpeg_path(),
             "-y",
             "-f", "rawvideo",
             "-vcodec", "rawvideo",
@@ -914,7 +915,7 @@ class GPUBatchRenderer:
         """Prueft ob FFmpeg einen bestimmten Encoder unterstuetzt."""
         try:
             result = subprocess.run(
-                ["ffmpeg", "-encoders"],
+                [get_ffmpeg_path(), "-encoders"],
                 capture_output=True, text=True, timeout=10
             )
             return encoder_name in result.stdout
@@ -930,7 +931,7 @@ class GPUBatchRenderer:
         try:
             result = subprocess.run(
                 [
-                    "ffmpeg", "-y",
+                    get_ffmpeg_path(), "-y",
                     "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.1",
                     "-c:v", encoder_name,
                     "-frames:v", "1",
@@ -1501,7 +1502,7 @@ class GPUBatchRenderer:
             output_path: Pfad fuer die finale Ausgabedatei.
         """
         cmd = [
-            "ffmpeg",
+            get_ffmpeg_path(),
             "-y",
             "-i", video_path,
             "-i", audio_path,

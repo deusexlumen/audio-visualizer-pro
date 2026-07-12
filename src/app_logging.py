@@ -13,9 +13,10 @@ Verwendung:
 
 import logging
 import logging.handlers
-from pathlib import Path
 
-LOG_DIR = Path("logs")
+from .paths import user_data_dir
+
+LOG_DIR = user_data_dir("logs")
 LOG_FILE = LOG_DIR / "app.log"
 
 _configured = False

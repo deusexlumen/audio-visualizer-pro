@@ -12,12 +12,13 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
+from .paths import user_data_dir
 from .types import Quote
 
 
 def _get_cache_dir() -> Path:
     """Gibt das Cache-Verzeichnis fuer Zitate zurueck."""
-    cache_dir = Path(__file__).parent.parent / ".cache" / "quotes"
+    cache_dir = user_data_dir("cache", "quotes")
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
 

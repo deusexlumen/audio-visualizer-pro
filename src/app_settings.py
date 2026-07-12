@@ -9,16 +9,16 @@ im Code hartcodiert sein sollen.
 
 import json
 import os
-from pathlib import Path
 from typing import Dict, List
 
 from pydantic import BaseModel, Field
 
 from .app_logging import get_logger
+from .paths import resource_path
 
 logger = get_logger(__name__)
 
-_SETTINGS_PATH = Path(__file__).parent.parent / "config" / "settings.json"
+_SETTINGS_PATH = resource_path("config", "settings.json")
 
 
 class TokenPrice(BaseModel):

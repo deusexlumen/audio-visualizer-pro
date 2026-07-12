@@ -13,6 +13,8 @@ import threading
 from pathlib import Path
 from typing import Callable, Optional
 
+from .ffmpeg_locator import get_ffmpeg_path, get_ffprobe_path
+
 
 class IntroRendererError(Exception):
     """Fehler beim Intro-Rendering."""
@@ -27,7 +29,7 @@ def get_media_info(path: str) -> dict:
         dict mit duration, width, height, fps, audio_sample_rate
     """
     cmd = [
-        "ffprobe",
+        get_ffprobe_path(),
         "-v", "error",
         "-select_streams", "v:0",
         "-show_entries", "stream=width,height,r_frame_rate,pix_fmt",
@@ -65,7 +67,7 @@ def get_media_info(path: str) -> dict:
 
     # Audio sample rate separat ermitteln (erster Audiostream)
     audio_cmd = [
-        "ffprobe",
+        get_ffprobe_path(),
         "-v", "error",
         "-select_streams", "a:0",
         "-show_entries", "stream=sample_rate",
@@ -216,7 +218,7 @@ def render_with_intro(
     filter_complex, has_audio_output = _build_filter_complex(intro_info, main_info, fade_duration)
 
     cmd = [
-        "ffmpeg", "-y",
+        get_ffmpeg_path(), "-y",
         "-i", str(intro_path),
         "-i", str(main_video_path),
         "-filter_complex", filter_complex,

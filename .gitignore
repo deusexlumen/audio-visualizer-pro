@@ -40,7 +40,12 @@ htmlcov/
 
 # Build directories
 dist/
-build/
+build/*
+!build/avp.spec
+!build/build.py
+!build/installer.iss
+!build/hooks/
+!build/hooks/*.py
 target/
 .gradle/
 

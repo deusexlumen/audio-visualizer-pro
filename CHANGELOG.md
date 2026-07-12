@@ -5,6 +5,39 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
+## [3.1.0] — 2026-07-12
+
+Windows-Distribution (Phase 7 des Ausbauplans v3.0): PyInstaller-Build +
+Inno-Setup-Installer, FFmpeg wird bei Bedarf automatisch nachgeladen.
+
+### Added
+- **`src/paths.py`**: zentrale Pfad-Aufloesung — `resource_path()` fuer
+  gebuendelte, read-only Ressourcen (`sys._MEIPASS`-aware im Frozen-Build),
+  `user_data_dir()`/`user_config_dir()` fuer beschreibbare Nutzerdaten
+  (`%LOCALAPPDATA%`/`%APPDATA%\AudioVisualizerPro`). Cache (Audio-Features,
+  Zitate), Logs und Rezept-Discovery nutzen jetzt diese Pfade statt
+  Repo-relativer/CWD-relativer Pfade — noetig, weil der Install-Ordner im
+  Frozen-Build read-only ist.
+- **`src/ffmpeg_locator.py`**: findet FFmpeg/ffprobe im PATH oder im lokalen
+  App-Datenverzeichnis; `download_ffmpeg()` laedt bei Zustimmung den
+  gyan.dev-Essentials-Build herunter, prueft die Pruefsumme (falls vom Server
+  verfuegbar) und die Archiv-Integritaet. Alle FFmpeg/ffprobe-Aufrufe im
+  Projekt (Renderer, Analyzer, Gemini-Kompression, Intro-Renderer) laufen
+  jetzt darueber statt den String `"ffmpeg"` hart zu codieren.
+- **First-Run-FFmpeg-Dialog** (`src/gui/app.py`): fehlt FFmpeg beim GUI-Start,
+  fragt ein Dialog nach Download-Erlaubnis (~90 MB) und zeigt den Fortschritt
+  in einem `QProgressDialog` (Download laeuft in `FFmpegDownloadWorker`,
+  blockiert die UI nicht).
+- **`build/avp.spec` + `build/build.py`**: PyInstaller-onedir-Spec (Entry
+  `gui.py`), sammelt librosa/numba/soundfile vollstaendig ein, schliesst
+  ungenutzte PyQt6-Module aus (~100 MB Ersparnis), Runtime-Hook leitet den
+  numba-JIT-Cache in ein beschreibbares Verzeichnis um.
+- **`build/installer.iss`**: Inno-Setup-Skript fuer einen Per-User-Installer
+  (kein Admin), Startmenue + optionales Desktop-Icon; Uninstaller fragt vor
+  dem Loeschen von Nutzerdaten (Studio-Rezepte!) nach.
+- **`docs/INSTALLATION.md`**: Endnutzer-Anleitung (Installation, Deinstallation,
+  bekannte Stolpersteine).
+
 ## [3.0.0] — 2026-07-12
 
 Visualizer-Studio (Phase 6 des Ausbauplans v3.0): eigene Visualizer aus

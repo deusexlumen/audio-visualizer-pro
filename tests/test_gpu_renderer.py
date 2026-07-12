@@ -119,7 +119,7 @@ class TestBuildFFmpegCmd:
 
         cmd = renderer._build_ffmpeg_cmd("out.mp4", "h264", "high")
 
-        assert "ffmpeg" in cmd
+        assert "ffmpeg" in cmd[0].lower()
         assert "-c:v" in cmd
         assert "libx264" in cmd
         assert "yuv444p" in cmd

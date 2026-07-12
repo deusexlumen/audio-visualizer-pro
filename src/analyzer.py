@@ -20,6 +20,8 @@ import os
 from pathlib import Path
 from typing import Optional, Callable
 from .app_logging import get_logger
+from .ffmpeg_locator import get_ffmpeg_path
+from .paths import user_data_dir
 from .types import AudioFeatures
 
 logger = get_logger(__name__)
@@ -51,8 +53,8 @@ class EMAFilter:
 class AudioAnalyzer:
     """Audio-Analyse 2.0 mit EMA-Smoothing und erweiterten Features."""
     
-    def __init__(self, cache_dir: str = ".cache/audio_features"):
-        self.cache_dir = Path(cache_dir)
+    def __init__(self, cache_dir: str = None):
+        self.cache_dir = Path(cache_dir) if cache_dir else user_data_dir("cache", "audio_features")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
     # Bei Format-Aenderungen an den gecachten Features hochzaehlen —
@@ -155,7 +157,7 @@ class AudioAnalyzer:
             temp_wav.close()
             try:
                 subprocess.run(
-                    ['ffmpeg', '-y', '-i', str(audio_path), '-ar', '44100', '-ac', '1', temp_wav.name],
+                    [get_ffmpeg_path(), '-y', '-i', str(audio_path), '-ar', '44100', '-ac', '1', temp_wav.name],
                     capture_output=True, check=True
                 )
                 audio_path = temp_wav.name
