@@ -77,6 +77,46 @@ def test_all_visualizers(gl_context, fbo, dummy_features):
         print(f"  OK {name}")
 
 
+@pytest.mark.gpu
+def test_all_visualizers_sichtbar_und_ohne_nan(gl_context, dummy_features):
+    """Visueller Smoke-Test: jeder Visualizer liefert sichtbares Bild ohne NaNs.
+
+    Regressionsnetz fuer Shader-Umbauten: ein komplett schwarzes/eingefrorenes
+    Bild oder NaN-Pixel fallen sofort auf, ohne Referenzbilder zu pflegen.
+    """
+    # GL-Fehlerflag frueherer Tests leeren, sonst schlaegt die Textur-Erzeugung fehl
+    _ = gl_context.error
+
+    # Nicht kleiner waehlen: einige Geometrie-Visualizer erwarten >=100px Kantenlaenge
+    width, height = 256, 144
+    texture = gl_context.texture((width, height), 3, dtype="f2")
+    small_fbo = gl_context.framebuffer(color_attachments=[texture])
+    try:
+        for name in list_visualizers():
+            viz_cls = get_visualizer(name)
+            viz = viz_cls(gl_context, width, height)
+
+            small_fbo.use()
+            gl_context.clear(0.0, 0.0, 0.0)
+            # Mittlerer Zeitpunkt, damit zeitabhaengige Effekte aktiv sind
+            viz.render(dummy_features, 0.5)
+
+            raw = np.frombuffer(
+                small_fbo.read(components=3, dtype="f2"), dtype=np.float16
+            ).astype(np.float32)
+
+            assert not np.isnan(raw).any(), f"{name}: NaN-Pixel im Output"
+            assert not np.isinf(raw).any(), f"{name}: Inf-Pixel im Output"
+            assert float(np.ptp(raw)) > 0.01, (
+                f"{name}: Output ist (nahezu) uniform — Visualizer rendert nichts"
+            )
+    finally:
+        small_fbo.release()
+        texture.release()
+        # Etwaige eigene GL-Fehler nicht an nachfolgende Tests weiterreichen
+        _ = gl_context.error
+
+
 def test_visualizer_registry():
     """Testet das Registry-System."""
     available = list_visualizers()

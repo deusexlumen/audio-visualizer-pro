@@ -35,6 +35,22 @@ def pytest_configure(config):
     )
 
 
+def pytest_sessionstart(session):
+    """Prueft die GPU-Verfuegbarkeit einmalig VOR allen Tests.
+
+    Wichtig: Die Probe erzeugt und released einen OpenGL-Kontext. Passiert das
+    mitten in der Session, verliert ein bereits aktiver Test-Kontext seine
+    Currency und nachfolgende GL-Aufrufe schlagen fehl ("cannot create ...").
+    """
+    gpu_available()
+
+
+def pytest_runtest_setup(item):
+    """Ueberspringt gpu-markierte Tests automatisch ohne OpenGL (z.B. headless CI)."""
+    if item.get_closest_marker("gpu") and not gpu_available():
+        pytest.skip("Keine GPU/OpenGL verfuegbar")
+
+
 @pytest.fixture
 def require_gpu():
     """Ueberspringt den Test, wenn keine GPU/OpenGL verfuegbar ist (z.B. headless CI)."""

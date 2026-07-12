@@ -80,6 +80,62 @@ def test_render_button_starts_render_worker(qtbot, tmp_path, dummy_audio_feature
     assert window._render_worker is mock_worker
 
 
+def test_render_error_reaktiviert_ui(qtbot, tmp_path, dummy_audio_features):
+    """Nach einem Render-Fehler: Dialog, UI entsperrt, Traceback geloggt."""
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    audio = tmp_path / "test.wav"
+    audio.touch()
+    window.state.audio_path = str(audio)
+    window.state.features = dummy_audio_features
+
+    mock_worker = MagicMock()
+    mock_worker.isRunning.return_value = False
+
+    with patch("src.gui.workers.RenderWorker", return_value=mock_worker):
+        qtbot.mouseClick(window.btn_render, Qt.MouseButton.LeftButton)
+    assert not window.btn_render.isEnabled()
+
+    with patch.object(QMessageBox, "critical", return_value=None) as mock_crit, \
+         patch("src.gui.main_window.logger.error") as mock_log:
+        # sender() muss der Worker sein — Handler direkt mit gepatchtem sender aufrufen
+        with patch.object(window, "sender", return_value=mock_worker):
+            window._on_render_error("Encoder kaputt", "Traceback: ...")
+
+    mock_crit.assert_called_once()
+    assert "Encoder kaputt" in mock_crit.call_args[0][2]
+    assert mock_log.called
+    assert window.btn_render.isEnabled()
+    assert not window.btn_cancel.isVisibleTo(window)
+
+
+def test_render_finished_reaktiviert_ui(qtbot, tmp_path, dummy_audio_features):
+    """Nach erfolgreichem Render: UI entsperrt, Erfolgsdialog."""
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    audio = tmp_path / "test.wav"
+    audio.touch()
+    window.state.audio_path = str(audio)
+    window.state.features = dummy_audio_features
+
+    mock_worker = MagicMock()
+    mock_worker.isRunning.return_value = False
+
+    with patch("src.gui.workers.RenderWorker", return_value=mock_worker):
+        qtbot.mouseClick(window.btn_render, Qt.MouseButton.LeftButton)
+    assert not window.btn_render.isEnabled()
+
+    with patch("src.gui.main_window.QMessageBox") as mock_box_cls:
+        mock_box = MagicMock()
+        mock_box_cls.return_value = mock_box
+        window._finish_render("C:/out/video.mp4")
+
+    assert window.btn_render.isEnabled()
+    assert "video.mp4" in window.status_label.text()
+
+
 def test_preview_button_starts_preview_worker(qtbot, tmp_path, dummy_audio_features):
     window = MainWindow()
     qtbot.addWidget(window)

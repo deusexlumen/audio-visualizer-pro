@@ -1,9 +1,9 @@
-[![Version](https://img.shields.io/badge/SOTA-v2.6.1-blue)](https://github.com/deusexlumen/audio-visualizer-pro)
+[![Version](https://img.shields.io/badge/SOTA-v2.6.2-blue)](https://github.com/deusexlumen/audio-visualizer-pro)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/tests-217%20passed-brightgreen)](https://github.com/deusexlumen/audio-visualizer-pro)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-# Audio Visualizer Pro v2.6.1
+# Audio Visualizer Pro v2.6.2
 
 **Professionelles Audio-Visualisierungs-System mit GPU-Beschleunigung und KI-Unterstützung**
 
@@ -46,7 +46,9 @@ brew install ffmpeg
 # Repository klonen
 git clone https://github.com/deusexlumen/audio-visualizer-pro.git
 cd audio-visualizer-pro
-# Abhängigkeiten installieren
+# Abhängigkeiten installieren (exakt gepinnt, empfohlen)
+pip install -r requirements.lock
+# Alternativ (lose Versionsgrenzen, für Entwickler):
 pip install -r requirements.txt
 ```
 ### GUI starten

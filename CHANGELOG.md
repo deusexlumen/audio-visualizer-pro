@@ -5,6 +5,26 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
+## [2.6.2] — 2026-07-12
+
+CI, Test-Lücken und reproduzierbare Installation (Phase 2 des Ausbauplans v3.0).
+
+### Added
+- **GitHub-Actions-CI** (`.github/workflows/ci.yml`): Windows + Ubuntu,
+  `pytest -m "not gpu"` mit gepinnten Abhängigkeiten
+- **`requirements.lock`**: exakt gepinnte Abhängigkeiten (`pip freeze`) für
+  reproduzierbare Installationen und den späteren PyInstaller-Build
+- **Visueller Smoke-Test**: jeder registrierte Visualizer muss ein sichtbares
+  Bild ohne NaN/Inf liefern — Regressionsnetz für Shader-Umbauten
+- **Renderer-Fehlerpfad-Tests** (`tests/test_gpu_renderer_failures.py`):
+  FFmpeg-Tod mitten im Render, Encode-Thread-Schreibfehler
+- Tests für Batch-CLI-Fehlerpfade und Render-UI-Reaktivierung nach Fehler/Erfolg
+
+### Fixed
+- **GPU-Probe zerstörte Context-Currency**: Die OpenGL-Verfügbarkeitsprüfung
+  läuft jetzt einmalig vor allen Tests (`pytest_sessionstart`), statt mitten in
+  der Session den aktiven Test-Kontext zu invalidieren
+
 ## [2.6.1] — 2026-07-12
 
 Fundament-Release (Phase 1 des Ausbauplans v3.0): Robustheit und Repo-Hygiene.
