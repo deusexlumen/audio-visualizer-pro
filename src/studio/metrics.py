@@ -20,6 +20,12 @@ def srgb_to_linear(rgb: np.ndarray) -> np.ndarray:
     )
 
 
+# LUT für sRGB→Linear auf uint8-Pixelwerten. Mathematisch identisch zu
+# srgb_to_linear(uint8/255), vermeidet aber die teure Potenzierung pro
+# Pixel (Perf-Budget Spec §13: ≤ 15 ms pro Sample @854 px).
+_SRGB_TO_LINEAR_LUT = srgb_to_linear(np.arange(256, dtype=np.float32) / 255.0)
+
+
 def to_measure_raster(frame: np.ndarray, long_edge: int = MEASURE_LONG_EDGE) -> np.ndarray:
     """uint8-RGB-Frame -> normalisiertes Messraster (float32, linear).
 
@@ -32,6 +38,9 @@ def to_measure_raster(frame: np.ndarray, long_edge: int = MEASURE_LONG_EDGE) -> 
         new_w, new_h = max(1, round(w * scale)), max(1, round(h * scale))
         img = Image.fromarray(frame).resize((new_w, new_h), Image.Resampling.BOX)
         frame = np.asarray(img)
+    if frame.dtype == np.uint8:
+        # Schnellpfad per LUT (identische Werte, siehe _SRGB_TO_LINEAR_LUT)
+        return _SRGB_TO_LINEAR_LUT[frame]
     return srgb_to_linear(frame.astype(np.float32) / 255.0)
 
 
