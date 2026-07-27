@@ -14,7 +14,7 @@ from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
     QListWidget, QDoubleSpinBox, QGroupBox, QGridLayout, QLineEdit,
-    QMessageBox, QScrollArea, QInputDialog,
+    QMessageBox, QScrollArea, QInputDialog, QToolButton,
 )
 
 from src.app_logging import get_logger
@@ -120,6 +120,41 @@ class StudioPanel(QWidget):
         right.addLayout(save_row)
 
         root.addLayout(right, 1)
+
+        # --- Studio-Badges (Spec §11.2) ---
+        self.mode_badge = QLabel("Modus: —")
+        self.quality_badge = QLabel("Qualität: —")
+        self.solver_trace_toggle = QToolButton()
+        self.solver_trace_toggle.setText("Solver-Trace")
+        self.solver_trace_toggle.setCheckable(True)
+        self.solver_trace_list = QListWidget()
+        self.solver_trace_list.setVisible(False)
+        self.solver_trace_toggle.toggled.connect(
+            self.solver_trace_list.setVisible)
+        layout = self.layout()
+        layout.addWidget(self.mode_badge)
+        layout.addWidget(self.quality_badge)
+        layout.addWidget(self.solver_trace_toggle)
+        layout.addWidget(self.solver_trace_list)
+
+    def update_studio_badges(self, mode_result, verify_metrics=None,
+                             solver_result=None):
+        """Aktualisiert Modus-/Quality-Badge und Solver-Trace (Spec §11.2)."""
+        self.mode_badge.setText(
+            f"Modus: {mode_result.value} "
+            f"(Konfidenz {mode_result.confidence:.2f})"
+        )
+        if verify_metrics:
+            parts = [f"{k}={v:.2f}" for k, v in verify_metrics.items()
+                     if isinstance(v, (int, float))]
+            self.quality_badge.setText("Qualität: " + ", ".join(parts))
+        self.solver_trace_list.clear()
+        if solver_result:
+            for step in solver_result.steps:
+                self.solver_trace_list.addItem(
+                    f"{step['lever']} {step['op']}: "
+                    f"J {step['j_before']:.2f} → {step['j_after']:.2f}"
+                )
 
     # ------------------------------------------------------------------
     # Ebenen-Verwaltung

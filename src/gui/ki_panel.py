@@ -90,7 +90,21 @@ class KIPanel(QWidget):
         layout.addWidget(opt_box)
         layout.addStretch()
 
+        # --- Studio-Preset (Spec §11.2) ---
+        self.studio_preset_button = QPushButton("Studio-Preset anwenden")
+        self._studio_preset_cb = None
+        self.studio_preset_button.clicked.connect(self._on_studio_preset)
+        layout.addWidget(self.studio_preset_button)
+
         self._update_cost_label()
+
+    def set_studio_preset_callback(self, fn):
+        """Registriert den Callback für „Studio-Preset anwenden"."""
+        self._studio_preset_cb = fn
+
+    def _on_studio_preset(self):
+        if self._studio_preset_cb is not None:
+            self._studio_preset_cb(True)
 
     def _update_cost_label(self):
         """Aktualisiert die Anzeige der geschaetzten KI-Kosten."""
