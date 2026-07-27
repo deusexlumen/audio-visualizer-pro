@@ -185,6 +185,7 @@ def run_studio(audio_path, visualizer, features, features_dict, output_path,
                                            constraints.subject_strength),
     )
     commit_error = None
+    renderer = None
     try:
         renderer = GPUBatchRenderer(width=target_w, height=target_h)
         renderer.render(audio_path, visualizer, output_path,
@@ -193,6 +194,14 @@ def run_studio(audio_path, visualizer, features, features_dict, output_path,
                         studio_constraints=mc)
     except Exception as e:  # z.B. gemocktes FFmpeg im Test
         commit_error = str(e)
+    finally:
+        # GL-Kontext freigeben — sonst bricht unter WGL die Currency
+        # nachfolgender Tests/Renders (vgl. tests/conftest.py).
+        if renderer is not None:
+            try:
+                renderer.release()
+            except Exception:
+                pass
 
     # 4) Verify auf Zielauflösung: gleiche Samples + 6 Extras (Spec §9)
     extras = verification_extras(plan, float(features_dict["duration"]))
