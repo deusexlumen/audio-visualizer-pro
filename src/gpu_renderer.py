@@ -1291,12 +1291,34 @@ class GPUBatchRenderer:
             fragment_shader="""
             #version 330
             uniform sampler2D u_texture;
+            uniform sampler2D u_subject_mask;
+            uniform vec2 u_resolution;
             uniform float u_opacity;
+            uniform float u_viz_alpha_cap;        // Default 1.0 = kein Cap
+            uniform float u_viz_alpha_from_luma;  // 0.0 = Bestand, 1.0 = Studio (C14)
+            uniform float u_luma_knee_lo;
+            uniform float u_luma_knee_hi;
+            uniform float u_subject_strength;     // Default 0.0 = keine Maskierung
             in vec2 v_uv;
             out vec4 f_color;
             void main() {
                 vec4 tex = texture(u_texture, v_uv);
-                f_color = vec4(tex.rgb, tex.a * u_opacity);
+                float a_viz = tex.a;
+                // Studio-Pfad (C14): Helligkeit IST die Deckung fuer Emitter auf
+                // Schwarz. Gilt UNABHAENGIG von tex.a — auch alpha=1.0-Stacks
+                // (composite.py) zeichnen grossflaechig Schwarz. Laeuft VOR dem
+                // Cap (Reihenfolge bindend, Spec §3.2.2).
+                if (u_viz_alpha_from_luma > 0.5) {
+                    float luma = dot(tex.rgb, vec3(0.2126, 0.7152, 0.0722));
+                    a_viz = smoothstep(u_luma_knee_lo, u_luma_knee_hi, luma);
+                }
+                // Subjekt-Maske liegt im Bildschirmraum, nicht im Quad-UV-Raum
+                // (der Blit-Quad hat Offset/Scale — v_uv waere falsch).
+                vec2 screen_uv = gl_FragCoord.xy / u_resolution;
+                float subject_mask = texture(u_subject_mask, screen_uv).r;
+                float a_eff = min(a_viz, u_viz_alpha_cap) * u_opacity
+                            * (1.0 - u_subject_strength * subject_mask);
+                f_color = vec4(tex.rgb, a_eff);
             }
             """
         )
@@ -1412,17 +1434,26 @@ class GPUBatchRenderer:
         self._xfade_vao.render(mode=moderngl.TRIANGLE_STRIP)
         return self.viz_fbo_blend.color_attachments[0]
 
-    def _blit_viz_to_fbo(self, source_texture, offset_x=0.0, offset_y=0.0, scale=1.0, opacity=1.0):
-        """Blittet die Visualizer-Textur auf den aktuellen FBO mit Offset und Skalierung."""
+    def _blit_viz_to_fbo(
+        self, source_texture, offset_x=0.0, offset_y=0.0, scale=1.0,
+        opacity=1.0, alpha_cap=1.0, alpha_from_luma=False,
+        luma_knee_lo=0.02, luma_knee_hi=0.25,
+        subject_strength=0.0, subject_mask=None,
+    ):
+        """Blittet die Visualizer-Textur auf den aktuellen FBO.
+
+        Defaults sind bit-identisch zum bisherigen Verhalten. Die Studio-
+        Parameter (C14) aktivieren Luma-Alpha, Cap und Subjekt-Maskierung.
+        """
         if not hasattr(self, '_blit_prog'):
             self._init_blit_shader()
-        
+
         # Quad-Vertices basierend auf Offset und Skalierung berechnen
         x1 = -1.0 * scale + offset_x
         x2 =  1.0 * scale + offset_x
         y1 = -1.0 * scale + offset_y
         y2 =  1.0 * scale + offset_y
-        
+
         vertices = np.array([
             x1, y1, 0.0, 0.0,
             x2, y1, 1.0, 0.0,
@@ -1430,11 +1461,32 @@ class GPUBatchRenderer:
             x2, y2, 1.0, 1.0,
         ], dtype=np.float32)
         self._blit_vbo.write(vertices.tobytes())
-        
+
         self._blit_prog["u_texture"].value = 0
-        self._blit_prog["u_opacity"].value = opacity
         source_texture.use(location=0)
-        
+        # Subjekt-Maske: Default schwarz (= kein Subjekt), Dummy wiederverwenden
+        if subject_mask is not None:
+            subject_mask.use(location=1)
+        else:
+            self._dummy_black_texture.use(location=1)
+
+        prog = self._blit_prog
+        if "u_subject_mask" in prog:
+            prog["u_subject_mask"].value = 1
+        if "u_resolution" in prog:
+            prog["u_resolution"].value = (float(self.width), float(self.height))
+        if "u_viz_alpha_cap" in prog:
+            prog["u_viz_alpha_cap"].value = float(alpha_cap)
+        if "u_viz_alpha_from_luma" in prog:
+            prog["u_viz_alpha_from_luma"].value = 1.0 if alpha_from_luma else 0.0
+        if "u_luma_knee_lo" in prog:
+            prog["u_luma_knee_lo"].value = float(luma_knee_lo)
+        if "u_luma_knee_hi" in prog:
+            prog["u_luma_knee_hi"].value = float(luma_knee_hi)
+        if "u_subject_strength" in prog:
+            prog["u_subject_strength"].value = float(subject_strength)
+        prog["u_opacity"].value = opacity
+
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
         self._blit_vao.render(mode=moderngl.TRIANGLE_STRIP)
