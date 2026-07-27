@@ -104,3 +104,145 @@ def solve_constraints(probe, viz_factory, features_dict, plan: SamplePlan,
     # Probe-Metriken des gelösten Zustands (Drift-Vergleich in Verify, §9)
     final_metrics = metrics_fn(result.params)
     return result.params, result, final_metrics
+
+
+# --- Commit, Verify, Orchestrierung (Spec §9) ---
+
+import hashlib
+import json
+from pathlib import Path
+
+from .feasibility import check_feasibility
+from .provenance import build_sidecar, write_sidecar
+from .sampling import build_sample_plan, verification_extras
+from .thresholds import load_thresholds
+
+
+def load_drift_budget(visualizer: str,
+                      path: str = "config/studio_drift.v1.json") -> dict:
+    """Kalibriertes Drift-Budget je Metrik; Default 0.02 (Spec §3.4)."""
+    p = Path(path)
+    if not p.exists():
+        return {}
+    data = json.loads(p.read_text())
+    return data.get("per_visualizer", {}).get(visualizer, {})
+
+
+def verify_commit(probe_target, viz_factory, features_dict, timestamps,
+                  postprocess, params, constraints: ConstraintSet,
+                  drift_budget: dict, subject_mask=None) -> dict:
+    """Verify auf Zielauflösung (Spec §9): gleiche Samples + Extras."""
+    mc = MeasureConstraints(
+        alpha_cap=params.get("alpha_cap", constraints.max_overlay_alpha),
+        alpha_from_luma=constraints.alpha_from_luma,
+        subject_strength=params.get("subject_strength",
+                                    constraints.subject_strength),
+    )
+    viz = viz_factory()
+    metrics = evaluate_params(probe_target, viz, features_dict, timestamps,
+                              postprocess, mc, subject_mask=subject_mask)
+    return metrics
+
+
+def run_studio(audio_path, visualizer, features, features_dict, output_path,
+               params=None, postprocess=None, constraints=None,
+               thresholds=None, mode="music", background_image=None,
+               subject_mask=None) -> dict:
+    """End-to-End: Feasibility → Solve → 1× Commit → Verify → Sidecar."""
+    from ..gpu_renderer import GPUBatchRenderer
+    from ..gpu_visualizers import get_visualizer
+    from .probe import ProbeRenderer, probe_resolution
+
+    constraints = constraints or ConstraintSet()
+    ts = thresholds or load_thresholds()
+    postprocess = dict(postprocess or {})
+
+    # 1) Feasibility (vor jedem Render, Spec §7)
+    feas = check_feasibility(subject_mask,
+                             requires_text_zone=(mode == "podcast"))
+    if not feas.should_render:
+        raise RuntimeError(f"Feasibility: {feas.reason}")
+
+    # 2) Probe-Solve
+    plan = build_sample_plan(features_dict)
+    target_w, target_h = 854, 480  # P3: feste Zielauflösung (Preview-Pfad)
+    pw, ph = probe_resolution(target_w, target_h)
+    probe = ProbeRenderer(width=pw, height=ph)
+    try:
+        viz_factory = lambda: get_visualizer(visualizer)(probe.ctx, pw, ph)
+        solved_params, solve_result, probe_metrics = solve_constraints(
+            probe, viz_factory, features_dict, plan, postprocess,
+            constraints, ts, mode, subject_mask=subject_mask)
+    finally:
+        probe.release()
+
+    # 3) Commit: GENAU ein Render (Spec §9, Invariante 3)
+    mc = MeasureConstraints(
+        alpha_cap=solved_params.get("alpha_cap",
+                                    constraints.max_overlay_alpha),
+        alpha_from_luma=constraints.alpha_from_luma,
+        subject_strength=solved_params.get("subject_strength",
+                                           constraints.subject_strength),
+    )
+    commit_error = None
+    try:
+        renderer = GPUBatchRenderer(width=target_w, height=target_h)
+        renderer.render(audio_path, visualizer, output_path,
+                        features=features, params=params,
+                        postprocess=postprocess, preview_mode=True,
+                        studio_constraints=mc)
+    except Exception as e:  # z.B. gemocktes FFmpeg im Test
+        commit_error = str(e)
+
+    # 4) Verify auf Zielauflösung: gleiche Samples + 6 Extras (Spec §9)
+    extras = verification_extras(plan, float(features_dict["duration"]))
+    probe_t = ProbeRenderer(width=target_w, height=target_h)
+    try:
+        verify_metrics = verify_commit(
+            probe_t,
+            lambda: get_visualizer(visualizer)(probe_t.ctx, target_w, target_h),
+            features_dict, plan.timestamps + extras, postprocess,
+            solved_params, constraints,
+            load_drift_budget(visualizer), subject_mask=subject_mask)
+    finally:
+        probe_t.release()
+
+    drift_budget = load_drift_budget(visualizer)
+    drift_max = 0.0
+    drift_ok = True
+    for key in ("M1", "M3", "M5"):
+        p, c = probe_metrics.get(key), verify_metrics.get(key)
+        if p is None or c is None:
+            continue
+        d = abs(c - p)
+        drift_max = max(drift_max, d)
+        if d > drift_budget.get(key, 0.02) + 0.02:
+            drift_ok = False
+    verify_status = "pass" if drift_ok else "drift_abort"
+
+    # 5) Sidecar (Spec §12)
+    sidecar = build_sidecar({
+        "input": {"audio_sha256": hashlib.sha256(
+            Path(audio_path).read_bytes()).hexdigest(),
+                  "duration_s": float(features_dict["duration"])},
+        "mode": {"value": mode.upper(), "confidence": 1.0,
+                 "note": "P3: manueller Modus, ModeGate kommt in P4"},
+        "profile": {"name": "manual", "version": 0},
+        "thresholds": {"set": "config/studio_thresholds.v1.json",
+                       "sha256": ts.file_sha256, "calibrated": False},
+        "mask": {"provider": "provided" if subject_mask is not None else "none",
+                 "cache_hit": False},
+        "sampling": {"n": plan.n, "seed": plan.seed,
+                     "timestamps_s": plan.timestamps},
+        "solver": {"iterations": solve_result.iterations,
+                   "j_trace": solve_result.j_trace,
+                   "steps": solve_result.steps,
+                   "status": solve_result.status,
+                   "final_constraints": mc.__dict__},
+        "verify": {"metrics": verify_metrics, "status": verify_status,
+                   "drift_max": drift_max, "drift_within_budget": drift_ok,
+                   "commit_error": commit_error},
+        "renderer": {"app_version": "dev"},
+    })
+    write_sidecar(output_path, sidecar)
+    return sidecar

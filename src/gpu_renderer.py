@@ -163,6 +163,7 @@ class GPUBatchRenderer:
         progress_callback=None,
         cancel_event=None,
         timeline=None,
+        studio_constraints=None,
     ):
         """Rendert ein Video aus Audio-Analyse auf der GPU.
 
@@ -184,6 +185,7 @@ class GPUBatchRenderer:
             viz_scale: Skalierungsfaktor des Visualizers (0.5 bis 2.0).
             progress_callback: Optionaler Callback(frame, total_frames) fuer Fortschritts-Updates.
             cancel_event: Optional threading.Event. Wenn gesetzt, wird die Render-Schleife unterbrochen.
+            studio_constraints: Optionale Studio-MeasureConstraints (Alpha-Cap, Luma-Alpha, Subjekt-Stärke) — nur im Studio-Pfad gesetzt.
         """
         audio_path = str(audio_path)
         output_path = str(output_path)
@@ -495,11 +497,21 @@ class GPUBatchRenderer:
                         self._save_debug(self.viz_fbo, "debug_step3_after_viz.png")
 
                     self.fbo.use()
+                    blit_kwargs = {}
+                    if studio_constraints is not None:
+                        blit_kwargs = {
+                            "alpha_cap": studio_constraints.alpha_cap,
+                            "alpha_from_luma": studio_constraints.alpha_from_luma,
+                            "luma_knee_lo": studio_constraints.luma_knee_lo,
+                            "luma_knee_hi": studio_constraints.luma_knee_hi,
+                            "subject_strength": studio_constraints.subject_strength,
+                        }
                     self._blit_viz_to_fbo(
                         active_viz_tex,
                         offset_x=viz_offset_x,
                         offset_y=viz_offset_y,
                         scale=viz_scale,
+                        **blit_kwargs,
                     )
                     if _DEBUG and i == 0:
                         self._save_debug(self.fbo, "debug_step3b_after_viz_blit.png")
