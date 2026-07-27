@@ -6,9 +6,9 @@ from src.studio.thresholds import ThresholdSet, load_thresholds
 def test_load_thresholds_defaults():
     ts = load_thresholds()
     assert ts.version == "studio-thresholds/1"
-    assert ts.m1_overlay_energy_max == 0.22
+    assert ts.m1_overlay_energy_max == 0.04
     assert ts.m2_coverage_warn == 0.60
-    assert ts.m3_subject_max == 0.10
+    assert ts.m3_subject_max == 0.01
     assert ts.m4_contrast_min == 4.5
     assert ts.m5_music_min == 0.02
     assert ts.m5_podcast_max == 0.09

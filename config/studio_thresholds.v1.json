@@ -1,9 +1,9 @@
 {
   "version": "studio-thresholds/1",
   "thresholds": {
-    "m1_overlay_energy_max": 0.22,
+    "m1_overlay_energy_max": 0.04,
     "m2_coverage_warn": 0.60,
-    "m3_subject_max": 0.10,
+    "m3_subject_max": 0.01,
     "m4_contrast_min": 4.5,
     "m5_music_min": 0.02,
     "m5_podcast_max": 0.09,
@@ -15,9 +15,9 @@
     "hysteresis_hi": 0.60
   },
   "provenance": {
-    "m1_overlay_energy_max": "assumed",
+    "m1_overlay_energy_max": "calibrated@65de6292",
     "m2_coverage_warn": "assumed",
-    "m3_subject_max": "assumed",
+    "m3_subject_max": "calibrated@65de6292",
     "m4_contrast_min": "assumed",
     "m5_music_min": "assumed",
     "m5_podcast_max": "assumed",
@@ -29,7 +29,7 @@
     "set_sha256": "65de62925aa5514ab02c7c4040078321579ddc4e686b41a8bcd2a9fb2d9d4515",
     "construction_labels": true,
     "n_renders": 36,
-    "hinweis": "Konstruktions-Labels (gut/schlecht per alpha_cap), keine menschliche Beurteilung. Trennschärfe zu schwach für operative Schwellen (sens ~0.67); Werte bleiben 'assumed', bis menschliche Labels vorliegen.",
+    "hinweis": "Konstruktions-Labels (gut/schlecht per alpha_cap), keine menschliche Beurteilung. M1/M3 operativ auf max-good der Konstruktionen (aufgerundet) gesetzt — deutlich strenger als die alten Defaults (0.22/0.10), die sich als viel zu locker erwiesen (reale Renders: M1 max 0.058). Bei menschlichen Labels: Harness erneut laufen lassen und Werte gegenprüfen.",
     "sweep_vorschlag": {
       "m1_overlay_energy_max": 0.004,
       "m3_subject_max": 0.003
@@ -38,6 +38,6 @@
       "m1_overlay_energy_max": 0.0354,
       "m3_subject_max": 0.0069
     },
-    "beobachtung": "Operative Defaults (M1<=0.22, M3<=0.10) sind gegenüber realen Renders (M1 max 0.058) sehr locker. 'bad'-Konstruktionen auf dunklen Visualizern messen M1~0 — Metrik trennt Konstruktions-Labels nur schwach."
+    "beobachtung": "'bad'-Konstruktionen auf dunklen Visualizern messen M1~0 — die Sweep-Trennschärfe (sens ~0.67) reicht nicht für die aggressiven Sweep-Werte; max-good ist der konservative, datenbasierte Kompromiss."
   }
 }

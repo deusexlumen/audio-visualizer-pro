@@ -24,17 +24,20 @@ def _metrics_fn_factory(model):
 
 def test_compute_j_ober_untergrenzen(ts):
     # M1 = 2x Schwelle => Beitrag 1.0; M5 music unter min => 0.4 * Anteil
-    j = compute_j({"M1": 0.44, "M5": 0.01}, ts, mode="music")
-    expected = (0.44 - 0.22) / 0.22 + 0.4 * (0.02 - 0.01) / 0.02
+    tau1 = ts.m1_overlay_energy_max
+    j = compute_j({"M1": 2 * tau1, "M5": 0.01}, ts, mode="music")
+    expected = 1.0 + 0.4 * (0.02 - 0.01) / 0.02
     assert j == pytest.approx(expected)
 
 
 def test_compute_j_konform_ist_null(ts):
-    assert compute_j({"M1": 0.1, "M5": 0.05}, ts, mode="music") == 0.0
+    m1_ok = ts.m1_overlay_energy_max * 0.5
+    assert compute_j({"M1": m1_ok, "M5": 0.05}, ts, mode="music") == 0.0
 
 
 def test_compute_j_m2_gewicht_null(ts):
-    j1 = compute_j({"M1": 0.1, "M5": 0.05, "M2": 0.99}, ts, mode="music")
+    m1_ok = ts.m1_overlay_energy_max * 0.5
+    j1 = compute_j({"M1": m1_ok, "M5": 0.05, "M2": 0.99}, ts, mode="music")
     assert j1 == 0.0  # M2 nur Report
 
 
