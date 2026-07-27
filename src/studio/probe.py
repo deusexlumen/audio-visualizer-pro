@@ -11,6 +11,7 @@ Bloom -> Post-Process.
 import numpy as np
 
 from ..gpu_renderer import GPUPreviewRenderer
+from .mask_service import resize_mask
 from .metrics import contribution, to_measure_raster
 from .types import MeasureConstraints
 
@@ -39,61 +40,81 @@ class ProbeRenderer:
     def render_frame(
         self, viz, features_dict, time_s, bg_texture,
         postprocess: dict, constraints: MeasureConstraints,
+        subject_mask: np.ndarray | None = None,
     ) -> np.ndarray:
         """Rendert ein Frame; bei alpha_cap=0 wird der Visualizer-Pass
-        übersprungen (Blit-Alpha 0 — reine Ersparnis, Spec §3.2.2)."""
+        übersprungen (Blit-Alpha 0 — reine Ersparnis, Spec §3.2.2).
+
+        subject_mask: optionale Subjekt-Maske (float, HxW, Quellraum);
+        wird auf Framebuffer-Größe skaliert (resize_mask, nicht-negativer
+        Kernel) und über die Blit-Uniforms injiziert.
+        """
         r = self._r
-        r.fbo.use()
-        r.ctx.clear(0.0, 0.0, 0.0)
-        if bg_texture is not None:
-            r._render_background(bg_texture, 1.0, 0.0)
-        if constraints.alpha_cap > 0.0:
-            r._render_viz_into(viz, r.viz_fbo, features_dict, time_s)
+        mask_tex = None
+        try:
             r.fbo.use()
-            r._blit_viz_to_fbo(
-                r.viz_fbo.color_attachments[0],
-                alpha_cap=constraints.alpha_cap,
-                alpha_from_luma=constraints.alpha_from_luma,
-                luma_knee_lo=constraints.luma_knee_lo,
-                luma_knee_hi=constraints.luma_knee_hi,
-                subject_strength=constraints.subject_strength,
+            r.ctx.clear(0.0, 0.0, 0.0)
+            if bg_texture is not None:
+                r._render_background(bg_texture, 1.0, 0.0)
+            if constraints.alpha_cap > 0.0:
+                r._render_viz_into(viz, r.viz_fbo, features_dict, time_s)
+                if subject_mask is not None:
+                    scaled = resize_mask(subject_mask, r.width, r.height)
+                    mask_tex = r.ctx.texture(
+                        (r.width, r.height), 1,
+                        scaled.astype("f4").tobytes(), dtype="f4",
+                    )
+                r.fbo.use()
+                r._blit_viz_to_fbo(
+                    r.viz_fbo.color_attachments[0],
+                    alpha_cap=constraints.alpha_cap,
+                    alpha_from_luma=constraints.alpha_from_luma,
+                    luma_knee_lo=constraints.luma_knee_lo,
+                    luma_knee_hi=constraints.luma_knee_hi,
+                    subject_strength=constraints.subject_strength,
+                    subject_mask=mask_tex,
+                )
+            pp = dict(postprocess or {})
+            if constraints.grain_free:
+                pp["film_grain"] = 0.0  # C15 Regel 3: M5 nur grain-frei
+            bloom_intensity = pp.get("bloom_intensity", 0.6)
+            if r._bloom is not None and bloom_intensity > 0.0:
+                r._apply_bloom(
+                    intensity=bloom_intensity,
+                    threshold=pp.get("bloom_threshold", 1.0),
+                    radius=pp.get("bloom_radius", 1.0),
+                )
+            r._apply_postprocess(
+                r.fbo.color_attachments[0],
+                contrast=pp.get("contrast", 1.0),
+                saturation=pp.get("saturation", 1.0),
+                brightness=pp.get("brightness", 0.0),
+                warmth=pp.get("warmth", 0.0),
+                film_grain=pp.get("film_grain", 0.0),
+                time=time_s,
+                exposure=pp.get("exposure", 1.0),
+                vignette=pp.get("vignette", 0.0),
+                chromatic_aberration=pp.get("chromatic_aberration", 0.0),
+                lut_path=pp.get("lut"),
+                lut_strength=pp.get("lut_strength", 1.0),
             )
-        pp = dict(postprocess or {})
-        if constraints.grain_free:
-            pp["film_grain"] = 0.0  # C15 Regel 3: M5 nur grain-frei
-        bloom_intensity = pp.get("bloom_intensity", 0.6)
-        if r._bloom is not None and bloom_intensity > 0.0:
-            r._apply_bloom(
-                intensity=bloom_intensity,
-                threshold=pp.get("bloom_threshold", 1.0),
-                radius=pp.get("bloom_radius", 1.0),
+            raw = r.post_fbo.read(components=3)
+            return (
+                np.frombuffer(raw, dtype=np.uint8)
+                .reshape(r.height, r.width, 3)
+                .copy()
             )
-        r._apply_postprocess(
-            r.fbo.color_attachments[0],
-            contrast=pp.get("contrast", 1.0),
-            saturation=pp.get("saturation", 1.0),
-            brightness=pp.get("brightness", 0.0),
-            warmth=pp.get("warmth", 0.0),
-            film_grain=pp.get("film_grain", 0.0),
-            time=time_s,
-            exposure=pp.get("exposure", 1.0),
-            vignette=pp.get("vignette", 0.0),
-            chromatic_aberration=pp.get("chromatic_aberration", 0.0),
-            lut_path=pp.get("lut"),
-            lut_strength=pp.get("lut_strength", 1.0),
-        )
-        raw = r.post_fbo.read(components=3)
-        return (
-            np.frombuffer(raw, dtype=np.uint8)
-            .reshape(r.height, r.width, 3)
-            .copy()
-        )
+        finally:
+            if mask_tex is not None:
+                mask_tex.release()
 
     def render_pair(self, viz, features_dict, time_s, bg_texture,
-                    postprocess, constraints) -> tuple[np.ndarray, np.ndarray]:
+                    postprocess, constraints,
+                    subject_mask=None) -> tuple[np.ndarray, np.ndarray]:
         """(A, B): B mit alpha_cap=0, identisches u_time für beide."""
         a = self.render_frame(viz, features_dict, time_s, bg_texture,
-                              postprocess, constraints)
+                              postprocess, constraints,
+                              subject_mask=subject_mask)
         b_constraints = MeasureConstraints(
             alpha_cap=0.0,
             alpha_from_luma=constraints.alpha_from_luma,
