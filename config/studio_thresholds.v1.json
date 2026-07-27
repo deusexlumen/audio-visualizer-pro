@@ -23,5 +23,21 @@
     "m5_podcast_max": "assumed",
     "luma_knee_lo": "assumed",
     "luma_knee_hi": "assumed"
+  },
+  "calibration_report": {
+    "set": "tests/golden/labels.json",
+    "set_sha256": "65de62925aa5514ab02c7c4040078321579ddc4e686b41a8bcd2a9fb2d9d4515",
+    "construction_labels": true,
+    "n_renders": 36,
+    "hinweis": "Konstruktions-Labels (gut/schlecht per alpha_cap), keine menschliche Beurteilung. Trennschärfe zu schwach für operative Schwellen (sens ~0.67); Werte bleiben 'assumed', bis menschliche Labels vorliegen.",
+    "sweep_vorschlag": {
+      "m1_overlay_energy_max": 0.004,
+      "m3_subject_max": 0.003
+    },
+    "max_good_konstruktion": {
+      "m1_overlay_energy_max": 0.0354,
+      "m3_subject_max": 0.0069
+    },
+    "beobachtung": "Operative Defaults (M1<=0.22, M3<=0.10) sind gegenüber realen Renders (M1 max 0.058) sehr locker. 'bad'-Konstruktionen auf dunklen Visualizern messen M1~0 — Metrik trennt Konstruktions-Labels nur schwach."
   }
 }

@@ -58,10 +58,14 @@ def main():
         print(f"WARNUNG: nur {len(renders)} gelabelte Renders "
               f"(Minimum 20) — Schwellen bleiben 'assumed'.")
     for metric, higher_is_bad in [("M1", True), ("M3", True), ("M4", False)]:
-        values = [r["metrics"][metric] for r in renders]
-        labels = [r["good"] for r in renders]
-        if not values:
+        # None-Werte (z.B. M3 ohne Maske, M4 ohne Quotes) herausfiltern
+        pairs = [(r["metrics"][metric], r["good"]) for r in renders
+                 if r["metrics"].get(metric) is not None]
+        if not pairs:
+            print(f"{metric}: keine Werte — übersprungen.")
             continue
+        values = [v for v, _ in pairs]
+        labels = [g for _, g in pairs]
         best = sweep_threshold(values, labels, higher_is_bad)
         print(f"{metric}: t={best['threshold']:.3f} "
               f"sens={best['sensitivity']:.2f} spec={best['specificity']:.2f}")
