@@ -170,6 +170,15 @@ def run_studio(audio_path, visualizer, features, features_dict, output_path,
     ts = thresholds or load_thresholds()
     postprocess = dict(postprocess or {})
 
+    mask_warnings: list[str] = []
+    if background_image and is_video_background(background_image):
+        # C17: Degradation statt Abbruch — M3 aus, Rest aktiv (Spec §14)
+        subject_mask = None
+        mask_warnings.append(
+            "Video-Hintergrund: Subjekt-Maskierung (M3) deaktiviert, "
+            "übrige Metriken aktiv (Spec §14)."
+        )
+
     # 1) Feasibility (vor jedem Render, Spec §7)
     feas = check_feasibility(subject_mask,
                              requires_text_zone=(mode == "podcast"))
@@ -258,8 +267,13 @@ def run_studio(audio_path, visualizer, features, features_dict, output_path,
         "profile": {"name": "manual", "version": 0},
         "thresholds": {"set": "config/studio_thresholds.v1.json",
                        "sha256": ts.file_sha256, "calibrated": False},
-        "mask": {"provider": "provided" if subject_mask is not None else "none",
-                 "cache_hit": False},
+        "mask": {
+            "provider": ("none:video_background"
+                         if background_image and is_video_background(background_image)
+                         else ("provided" if subject_mask is not None else "none")),
+            "cache_hit": False,
+            "warnings": mask_warnings,
+        },
         "sampling": {"n": plan.n, "seed": plan.seed,
                      "timestamps_s": plan.timestamps},
         "solver": {"iterations": solve_result.iterations,
@@ -283,8 +297,9 @@ def run_studio_auto(audio_path, features, features_dict, output_path,
     """Auto-Flow (Spec §2): ModeGate → Profil → Preset → run_studio.
 
     ``dry_run``: nur Analyse + Solve, kein Commit-Render (Spec §11.3).
-    ``strict``: Masken-Fallback = Fehler statt Warnung; wird aktuell nur
-    im Maskenpfad des Aufrufers ausgewertet (Verdrahtung in P5 Task 2).
+    ``strict``: Masken-Fallback = Fehler statt Warnung; die eigentliche
+    Maskenerzeugung (``get_subject_mask`` mit ``strict``) liegt beim
+    Aufrufer (z.B. ``_run_studio_pipeline`` in main.py).
     """
     from .mode_gate import classify_mode
     from .preset_factory import build_preset

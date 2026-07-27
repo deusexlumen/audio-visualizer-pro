@@ -89,11 +89,7 @@ def _run_studio_pipeline(audio_file, output, visual=None, resolution="1920x1080"
     if background_image:
         from src.studio.engine import is_video_background
         if not is_video_background(background_image):
-            try:
-                mask = get_subject_mask(background_image, strict=strict).mask
-            except TypeError:
-                # strict-Parameter kommt mit P5 Task 2 in mask_service.py
-                mask = get_subject_mask(background_image).mask
+            mask = get_subject_mask(background_image, strict=strict).mask
 
     return run_studio_auto(
         audio_file, features, features_dict, output,

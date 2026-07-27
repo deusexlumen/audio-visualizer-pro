@@ -78,12 +78,15 @@ def _cache_key(image_bytes: bytes, provider: str) -> str:
 
 
 def get_subject_mask(
-    image_path: str, cache_dir: str = DEFAULT_CACHE_DIR
+    image_path: str, cache_dir: str = DEFAULT_CACHE_DIR,
+    strict: bool = False
 ) -> MaskResult:
     """Liefert die Subjekt-Maske eines Hintergrundbilds (gecached).
 
     Provider-Kette: rembg -> OpenCV -> Zentrums-Gauß. Jeder Fallback
     erzeugt eine Warnung; der genutzte Provider steht im Ergebnis.
+    Bei ``strict=True`` und weder rembg noch OpenCV verfügbar: RuntimeError
+    statt Gauß-Fallback (Spec §14).
     """
     p = Path(image_path)
     image_bytes = p.read_bytes()
@@ -100,6 +103,11 @@ def get_subject_mask(
             mask, provider = candidate, name
             break
         warnings.append(f"Provider {name} nicht verfügbar — Fallback")
+    if mask is None and strict:
+        raise RuntimeError(
+            "strict: weder rembg noch OpenCV verfügbar — "
+            "kein Masken-Fallback erlaubt (Spec §14)."
+        )
     if mask is None:
         mask = _center_gauss(img.width, img.height)
         provider = "center_gauss"
