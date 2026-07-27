@@ -56,3 +56,36 @@ def test_solve_senkt_alpha_cap_bei_engem_m1(probe, features_dict):
     assert all(b < a for a, b in zip(result.j_trace, result.j_trace[1:]))
     if result.status == "solved":
         assert params["alpha_cap"] < 1.0
+
+
+def test_run_studio_auto_end_to_end(tmp_path, dummy_audio_features):
+    from unittest.mock import MagicMock, patch
+    from src.gpu_renderer import GPUBatchRenderer
+    from src.render_common import build_features_dict
+    from src.studio.engine import run_studio_auto
+
+    features_dict = build_features_dict(
+        dummy_audio_features, dummy_audio_features.frame_count, 30
+    )
+    audio = tmp_path / "a.mp3"
+    audio.write_bytes(b"fake")
+    out = tmp_path / "out.mp4"
+
+    with patch.object(GPUBatchRenderer, "render",
+                      MagicMock(side_effect=RuntimeError("mock"))), \
+         patch("src.gpu_renderer.subprocess.run") as mock_run, \
+         patch("src.studio.mode_gate.classify_mode") as mock_mode:
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
+        mock_mode.return_value.resolved = "music"
+        mock_mode.return_value.value = "MUSIC"
+        mock_mode.return_value.confidence = 0.9
+        mock_mode.return_value.speech_score = 0.1
+        mock_mode.return_value.hysteresis_applied = False
+        sidecar = run_studio_auto(
+            str(audio), dummy_audio_features, features_dict, str(out),
+            profile_name="music_default",
+        )
+
+    assert sidecar["mode"]["value"] == "MUSIC"
+    assert sidecar["profile"]["name"] == "music_default"
+    assert sidecar["verify"]["status"] in ("pass", "drift_abort")

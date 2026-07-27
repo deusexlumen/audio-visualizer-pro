@@ -255,3 +255,39 @@ def run_studio(audio_path, visualizer, features, features_dict, output_path,
     })
     write_sidecar(output_path, sidecar)
     return sidecar
+
+
+def run_studio_auto(audio_path, features, features_dict, output_path,
+                    profile_name=None, params_override=None,
+                    postprocess_override=None, background_image=None,
+                    subject_mask=None) -> dict:
+    """Auto-Flow (Spec §2): ModeGate → Profil → Preset → run_studio."""
+    from .mode_gate import classify_mode
+    from .preset_factory import build_preset
+    from .profiles import load_profile
+
+    mode_result = classify_mode(features_dict)
+    profile = load_profile(profile_name or f"{mode_result.resolved}_default")
+    preset = build_preset(features, profile)
+
+    params = dict(preset.params)
+    params.update(params_override or {})
+    postprocess = dict(preset.postprocess)
+    postprocess.update(postprocess_override or {})
+
+    sidecar = run_studio(
+        audio_path, preset.visualizer, features, features_dict, output_path,
+        params=params, postprocess=postprocess,
+        constraints=preset.constraints,
+        mode=mode_result.resolved,
+        background_image=background_image, subject_mask=subject_mask,
+    )
+    # Echte ModeGate-Werte statt P3-Platzhalter (Spec §12)
+    sidecar["mode"] = {
+        "value": mode_result.value,
+        "confidence": mode_result.confidence,
+        "speech_score": mode_result.speech_score,
+        "hysteresis_applied": mode_result.hysteresis_applied,
+    }
+    sidecar["profile"] = {"name": profile.name, "version": profile.version}
+    return sidecar
