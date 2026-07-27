@@ -1,0 +1,24 @@
+{
+  "version": "studio-thresholds/1",
+  "thresholds": {
+    "m1_overlay_energy_max": 0.22,
+    "m2_coverage_warn": 0.60,
+    "m3_subject_max": 0.10,
+    "m4_contrast_min": 4.5,
+    "m5_music_min": 0.02,
+    "m5_podcast_max": 0.09,
+    "epsilon": 0.01,
+    "luma_knee_lo": 0.02,
+    "luma_knee_hi": 0.25
+  },
+  "provenance": {
+    "m1_overlay_energy_max": "assumed",
+    "m2_coverage_warn": "assumed",
+    "m3_subject_max": "assumed",
+    "m4_contrast_min": "assumed",
+    "m5_music_min": "assumed",
+    "m5_podcast_max": "assumed",
+    "luma_knee_lo": "assumed",
+    "luma_knee_hi": "assumed"
+  }
+}
