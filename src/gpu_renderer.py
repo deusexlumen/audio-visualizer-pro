@@ -597,7 +597,16 @@ class GPUBatchRenderer:
                             pbo.release()
                         except Exception:
                             pass
-                frame_queue.put(None)
+                # Sentinel mit Timeout setzen: Bei voller Queue und bereits
+                # beendetem Encode-Thread wuerde ein blockierendes put(None)
+                # deadlocken (Fehlerpfad, z.B. Broken Pipe im Encoder).
+                while True:
+                    try:
+                        frame_queue.put(None, timeout=0.1)
+                        break
+                    except queue.Full:
+                        if encode_done.is_set():
+                            break
                 # Warte bis der Encode-Thread fertig ist (stdin schliesst sich)
                 # Bei 31k Frames kann das >10s dauern, besonders bei Software-Encoding
                 encode_done.wait(timeout=300)
