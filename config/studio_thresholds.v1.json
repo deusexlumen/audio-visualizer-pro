@@ -9,7 +9,10 @@
     "m5_podcast_max": 0.09,
     "epsilon": 0.01,
     "luma_knee_lo": 0.02,
-    "luma_knee_hi": 0.25
+    "luma_knee_hi": 0.25,
+    "speech_threshold": 0.55,
+    "hysteresis_lo": 0.50,
+    "hysteresis_hi": 0.60
   },
   "provenance": {
     "m1_overlay_energy_max": "assumed",

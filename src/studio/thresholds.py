@@ -22,6 +22,10 @@ class ThresholdSet(BaseModel):
     epsilon: float
     luma_knee_lo: float
     luma_knee_hi: float
+    # Modus-Weiche (Spec §5) — Defaults, damit ältere JSONs ohne die Felder laden
+    speech_threshold: float = 0.55
+    hysteresis_lo: float = 0.50
+    hysteresis_hi: float = 0.60
     provenance: dict[str, str]
     file_sha256: str
 
