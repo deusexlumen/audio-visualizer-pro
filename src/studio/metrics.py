@@ -75,6 +75,54 @@ def integrity_violations(frame_linear: np.ndarray) -> list[str]:
     luma = frame_linear.mean(axis=-1)
     if float(np.percentile(luma, 99)) < 0.02:
         violations.append("blackframe")
-    if float(np.mean(frame_linear >= 1.0 - 1e-6)) > 0.15:
+    clipped = frame_linear >= 1.0 - 1e-6
+    if float(np.mean(clipped)) > 0.15:
         violations.append("clipping")
     return violations
+
+
+# --- M4: Text-Kontrast (Spec §3.3, Glyphenmaske + Ring, WCAG 2.x) ---
+
+
+def _relative_luminance(rgb_linear: np.ndarray) -> np.ndarray:
+    """WCAG-relative Luminanz auf bereits linearem RGB."""
+    return (
+        0.2126 * rgb_linear[..., 0]
+        + 0.7152 * rgb_linear[..., 1]
+        + 0.0722 * rgb_linear[..., 2]
+    )
+
+
+def text_contrast_wcag(
+    frame_linear: np.ndarray,
+    glyph_mask: np.ndarray,
+    ring_dilate_px: int = 3,
+) -> float:
+    """Kontrast-Ratio Glyphen vs. dilatierter Hintergrund-Ring (WCAG 2.x).
+
+    Vordergrund = p5 der Glyphen-Luminanz (Worst-Case-nah), Hintergrund =
+    Median des Rings um die Glyphen. 0.0 bei leerer Glyphenmaske.
+    """
+    from PIL import ImageFilter
+
+    glyph = np.asarray(glyph_mask, dtype=bool)
+    if not glyph.any():
+        return 0.0
+    kernel = 2 * ring_dilate_px + 1
+    dilated = np.asarray(
+        Image.fromarray(glyph).filter(ImageFilter.MaxFilter(kernel)), dtype=bool
+    )
+    ring = dilated & ~glyph
+    if not ring.any():
+        return 0.0
+    luma = _relative_luminance(frame_linear)
+    fg = float(np.percentile(luma[glyph], 5))
+    bg = float(np.median(luma[ring]))
+    hi, lo = max(fg, bg), min(fg, bg)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def aggregate_text_contrast(per_frame_ratios: list[float]) -> float:
+    """M4-Aggregation: Minimum über alle Sample-Frames (Spec §3.3)."""
+    valid = [r for r in per_frame_ratios if r > 0.0]
+    return min(valid) if valid else 0.0

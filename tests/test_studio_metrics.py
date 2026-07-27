@@ -84,3 +84,34 @@ def test_m6_integrity():
     assert "blackframe" in integrity_violations(black)
     clipped = np.ones((10, 10, 3), dtype=np.float32)
     assert "clipping" in integrity_violations(clipped)
+
+
+from src.studio.metrics import aggregate_text_contrast, text_contrast_wcag
+
+
+def _glyph_mask(h=40, w=40):
+    mask = np.zeros((h, w), dtype=bool)
+    mask[10:30, 10:30] = True  # zentraler Textblock
+    return mask
+
+
+def test_m4_black_on_white():
+    frame = np.ones((40, 40, 3), dtype=np.float32)  # weißer Hintergrund
+    frame[10:30, 10:30] = 0.0                        # schwarze Glyphen
+    ratio = text_contrast_wcag(frame, _glyph_mask())
+    assert ratio == pytest.approx(21.0, abs=0.5)
+
+
+def test_m4_white_on_white():
+    frame = np.ones((40, 40, 3), dtype=np.float32)
+    ratio = text_contrast_wcag(frame, _glyph_mask())
+    assert ratio == pytest.approx(1.0, abs=0.05)
+
+
+def test_m4_empty_mask_returns_zero():
+    frame = np.ones((40, 40, 3), dtype=np.float32)
+    assert text_contrast_wcag(frame, np.zeros((40, 40), dtype=bool)) == 0.0
+
+
+def test_m4_aggregation_is_minimum():
+    assert aggregate_text_contrast([7.0, 4.6, 12.3]) == pytest.approx(4.6)
