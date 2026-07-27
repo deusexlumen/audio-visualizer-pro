@@ -20,6 +20,8 @@ from config.schemas import load_and_validate_config
 from src.app_logging import setup_logging
 from src.types import Quote
 from src.quote_overlay import QuoteOverlayConfig
+# Modulebene, damit Tests `main.GPUBatchRenderer` patchen können
+from src.gpu_renderer import GPUBatchRenderer
 
 setup_logging()
 
@@ -70,6 +72,36 @@ def cli():
     pass
 
 
+def _run_studio_pipeline(audio_file, output, visual=None, resolution="1920x1080",
+                         fps=60, background_image=None, dry_run=False,
+                         strict=False):
+    """Studio-Flow für die CLI: Analyse → run_studio_auto (Spec §11.3)."""
+    from src.analyzer import AudioAnalyzer
+    from src.render_common import build_features_dict
+    from src.studio.engine import run_studio_auto
+    from src.studio.mask_service import get_subject_mask
+
+    analyzer = AudioAnalyzer()
+    features = analyzer.analyze(audio_file, fps=fps)
+    features_dict = build_features_dict(features, features.frame_count, fps)
+
+    mask = None
+    if background_image:
+        from src.studio.engine import is_video_background
+        if not is_video_background(background_image):
+            try:
+                mask = get_subject_mask(background_image, strict=strict).mask
+            except TypeError:
+                # strict-Parameter kommt mit P5 Task 2 in mask_service.py
+                mask = get_subject_mask(background_image).mask
+
+    return run_studio_auto(
+        audio_file, features, features_dict, output,
+        background_image=background_image, subject_mask=mask,
+        dry_run=dry_run, strict=strict,
+    )
+
+
 @cli.command()
 @click.argument('audio_file', type=click.Path(exists=True))
 @click.option('--visual', '-v', default='lumina_core',
@@ -90,11 +122,27 @@ def cli():
 @click.option('--param', '-p', multiple=True, help='Visualizer Parameter (key=value)')
 @click.option('--intro', type=click.Path(exists=True), help='Intro-Video, das vor dem gerenderten Video eingefuegt wird')
 @click.option('--intro-fade', default=1.0, type=float, help='Crossfade-Dauer zwischen Intro und Hauptvideo in Sekunden')
+@click.option('--studio', is_flag=True, help='Studio-Engine: Probe→Solve→1×Render→Verify + Sidecar')
+@click.option('--studio-dry', is_flag=True, help='Nur Analyse + Solve, kein Commit-Render')
+@click.option('--studio-strict', is_flag=True, help='Masken-Fallback = Fehler statt Warnung')
 def render(audio_file, visual, output, config, resolution, fps, preview, preview_duration,
            background_image, background_blur, background_vignette, background_opacity,
-           background_color, codec, quality, param, intro, intro_fade):
+           background_color, codec, quality, param, intro, intro_fade,
+           studio, studio_dry, studio_strict):
     """Rendert Audio-Visualisierung auf der GPU."""
-    
+
+    if studio or studio_dry or studio_strict:
+        sidecar = _run_studio_pipeline(
+            audio_file, output, visual=visual, resolution=resolution,
+            fps=fps, background_image=background_image,
+            dry_run=studio_dry, strict=studio_strict,
+        )
+        status = sidecar.get("verify", {}).get("status")
+        click.echo(f"[Studio] Modus: {sidecar['mode']['value']} | Verify: {status} | Sidecar: {output.replace('.mp4', '.studio.json')}")
+        if status not in ("pass", "dry_run"):
+            raise SystemExit(1)
+        return
+
     _check_ffmpeg()
     
     try:
@@ -210,8 +258,6 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
     if cfg_quote_overlay is not None:
         quote_config = QuoteOverlayConfig(**cfg_quote_overlay.model_dump())
 
-    from src.gpu_renderer import GPUBatchRenderer
-    
     click.echo(f"[GPU] Starte Rendering: {visual} @ {width}x{height} {fps}fps")
     if preview:
         click.echo(f"[GPU] Preview-Modus: {preview_duration}s")

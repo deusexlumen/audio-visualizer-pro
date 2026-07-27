@@ -18,6 +18,14 @@ from .types import MeasureConstraints
 _VIZ_PARAM_LEVERS = ("viz_scale", "glow", "speed", "beat_response",
                      "intensity", "chroma_modulation")
 
+# Video-Endungen für Hintergründe (Spec §14)
+VIDEO_EXTENSIONS = (".mp4", ".mov", ".avi", ".mkv", ".webm", ".gif")
+
+
+def is_video_background(path: str) -> bool:
+    """Erkennt Video-Hintergründe an der Endung (Spec §14)."""
+    return str(path).lower().endswith(VIDEO_EXTENSIONS)
+
 
 def evaluate_params(probe, viz, features_dict, timestamps, postprocess,
                     constraints: MeasureConstraints,
@@ -147,8 +155,13 @@ def verify_commit(probe_target, viz_factory, features_dict, timestamps,
 def run_studio(audio_path, visualizer, features, features_dict, output_path,
                params=None, postprocess=None, constraints=None,
                thresholds=None, mode="music", background_image=None,
-               subject_mask=None) -> dict:
-    """End-to-End: Feasibility → Solve → 1× Commit → Verify → Sidecar."""
+               subject_mask=None, dry_run=False) -> dict:
+    """End-to-End: Feasibility → Solve → 1× Commit → Verify → Sidecar.
+
+    Bei ``dry_run=True`` werden Commit (Schritt 3) und Verify (Schritt 4)
+    übersprungen; das Sidecar protokolliert ``verify.status = "dry_run"``
+    mit den Probe-Metriken des gelösten Zustands (Spec §11.3).
+    """
     from ..gpu_renderer import GPUBatchRenderer
     from ..gpu_visualizers import get_visualizer
     from .probe import ProbeRenderer, probe_resolution
@@ -176,7 +189,6 @@ def run_studio(audio_path, visualizer, features, features_dict, output_path,
     finally:
         probe.release()
 
-    # 3) Commit: GENAU ein Render (Spec §9, Invariante 3)
     mc = MeasureConstraints(
         alpha_cap=solved_params.get("alpha_cap",
                                     constraints.max_overlay_alpha),
@@ -185,49 +197,56 @@ def run_studio(audio_path, visualizer, features, features_dict, output_path,
                                            constraints.subject_strength),
     )
     commit_error = None
-    renderer = None
-    try:
-        renderer = GPUBatchRenderer(width=target_w, height=target_h)
-        renderer.render(audio_path, visualizer, output_path,
-                        features=features, params=params,
-                        postprocess=postprocess, preview_mode=True,
-                        studio_constraints=mc)
-    except Exception as e:  # z.B. gemocktes FFmpeg im Test
-        commit_error = str(e)
-    finally:
-        # GL-Kontext freigeben — sonst bricht unter WGL die Currency
-        # nachfolgender Tests/Renders (vgl. tests/conftest.py).
-        if renderer is not None:
-            try:
-                renderer.release()
-            except Exception:
-                pass
-
-    # 4) Verify auf Zielauflösung: gleiche Samples + 6 Extras (Spec §9)
-    extras = verification_extras(plan, float(features_dict["duration"]))
-    probe_t = ProbeRenderer(width=target_w, height=target_h)
-    try:
-        verify_metrics = verify_commit(
-            probe_t,
-            lambda: get_visualizer(visualizer)(probe_t.ctx, target_w, target_h),
-            features_dict, plan.timestamps + extras, postprocess,
-            solved_params, constraints,
-            load_drift_budget(visualizer), subject_mask=subject_mask)
-    finally:
-        probe_t.release()
-
-    drift_budget = load_drift_budget(visualizer)
     drift_max = 0.0
     drift_ok = True
-    for key in ("M1", "M3", "M5"):
-        p, c = probe_metrics.get(key), verify_metrics.get(key)
-        if p is None or c is None:
-            continue
-        d = abs(c - p)
-        drift_max = max(drift_max, d)
-        if d > drift_budget.get(key, 0.02) + 0.02:
-            drift_ok = False
-    verify_status = "pass" if drift_ok else "drift_abort"
+
+    if dry_run:
+        # Dry-Run: kein Commit-Render, kein Verify (Spec §11.3)
+        verify_status = "dry_run"
+        verify_metrics = probe_metrics
+    else:
+        # 3) Commit: GENAU ein Render (Spec §9, Invariante 3)
+        renderer = None
+        try:
+            renderer = GPUBatchRenderer(width=target_w, height=target_h)
+            renderer.render(audio_path, visualizer, output_path,
+                            features=features, params=params,
+                            postprocess=postprocess, preview_mode=True,
+                            studio_constraints=mc)
+        except Exception as e:  # z.B. gemocktes FFmpeg im Test
+            commit_error = str(e)
+        finally:
+            # GL-Kontext freigeben — sonst bricht unter WGL die Currency
+            # nachfolgender Tests/Renders (vgl. tests/conftest.py).
+            if renderer is not None:
+                try:
+                    renderer.release()
+                except Exception:
+                    pass
+
+        # 4) Verify auf Zielauflösung: gleiche Samples + 6 Extras (Spec §9)
+        extras = verification_extras(plan, float(features_dict["duration"]))
+        probe_t = ProbeRenderer(width=target_w, height=target_h)
+        try:
+            verify_metrics = verify_commit(
+                probe_t,
+                lambda: get_visualizer(visualizer)(probe_t.ctx, target_w, target_h),
+                features_dict, plan.timestamps + extras, postprocess,
+                solved_params, constraints,
+                load_drift_budget(visualizer), subject_mask=subject_mask)
+        finally:
+            probe_t.release()
+
+        drift_budget = load_drift_budget(visualizer)
+        for key in ("M1", "M3", "M5"):
+            p, c = probe_metrics.get(key), verify_metrics.get(key)
+            if p is None or c is None:
+                continue
+            d = abs(c - p)
+            drift_max = max(drift_max, d)
+            if d > drift_budget.get(key, 0.02) + 0.02:
+                drift_ok = False
+        verify_status = "pass" if drift_ok else "drift_abort"
 
     # 5) Sidecar (Spec §12)
     sidecar = build_sidecar({
@@ -260,8 +279,13 @@ def run_studio(audio_path, visualizer, features, features_dict, output_path,
 def run_studio_auto(audio_path, features, features_dict, output_path,
                     profile_name=None, params_override=None,
                     postprocess_override=None, background_image=None,
-                    subject_mask=None) -> dict:
-    """Auto-Flow (Spec §2): ModeGate → Profil → Preset → run_studio."""
+                    subject_mask=None, dry_run=False, strict=False) -> dict:
+    """Auto-Flow (Spec §2): ModeGate → Profil → Preset → run_studio.
+
+    ``dry_run``: nur Analyse + Solve, kein Commit-Render (Spec §11.3).
+    ``strict``: Masken-Fallback = Fehler statt Warnung; wird aktuell nur
+    im Maskenpfad des Aufrufers ausgewertet (Verdrahtung in P5 Task 2).
+    """
     from .mode_gate import classify_mode
     from .preset_factory import build_preset
     from .profiles import load_profile
@@ -281,6 +305,7 @@ def run_studio_auto(audio_path, features, features_dict, output_path,
         constraints=preset.constraints,
         mode=mode_result.resolved,
         background_image=background_image, subject_mask=subject_mask,
+        dry_run=dry_run,
     )
     # Echte ModeGate-Werte statt P3-Platzhalter (Spec §12)
     sidecar["mode"] = {
