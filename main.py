@@ -15,6 +15,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Optional, Any
 
 from config.schemas import load_and_validate_config
 from src.app_logging import setup_logging
@@ -64,6 +65,143 @@ def _check_ffmpeg():
     except Exception:
         click.echo(f"FFmpeg gefunden: {ffmpeg_path}")
     return ffmpeg_path
+
+
+def _resolve_config(
+    config: Optional[str],
+    visual: str,
+    resolution: str,
+    fps: int,
+    background_image: Optional[str],
+    background_blur: float,
+    background_vignette: float,
+    background_opacity: float,
+    background_color: str,
+    codec: str,
+    quality: str,
+    output: str,
+    intro: Optional[str],
+    intro_fade: float,
+    param: tuple,
+) -> dict[str, Any]:
+    """
+    Löst Config-Datei und CLI-Parameter in einen einheitlichen Konfigurations-Dict auf.
+    
+    CLI-Optionen haben Vorrang vor Config-Werten, außer wenn sie explizit den Default
+    beibehalten (z.B. output='output.mp4' oder intro_fade=1.0).
+    """
+    # CLI-Parameter parsen (key=value)
+    cli_params = {}
+    for p in param:
+        if '=' not in p:
+            raise click.BadParameter(f"Parameter muss key=value sein: {p}")
+        key, value = p.split('=', 1)
+        if value.lower() in ('true', 'yes', '1'):
+            value = True
+        elif value.lower() in ('false', 'no', '0'):
+            value = False
+        else:
+            try:
+                value = int(value)
+            except ValueError:
+                try:
+                    value = float(value)
+                except ValueError:
+                    pass
+        cli_params[key] = value
+
+    # Defaults aus CLI-Argumenten
+    cfg_visual_type = visual
+    cfg_resolution = resolution
+    cfg_fps = fps
+    cfg_background_image = background_image
+    cfg_background_blur = background_blur
+    cfg_background_vignette = background_vignette
+    cfg_background_opacity = background_opacity
+    cfg_background_color = background_color
+    cfg_codec = codec
+    cfg_quality = quality
+    cfg_postprocess = None
+    cfg_quotes = None
+    cfg_quote_overlay = None
+    cfg_output = output
+    cfg_intro_video = intro
+    cfg_intro_fade = intro_fade
+    cfg_params = {}
+
+    if config:
+        try:
+            cfg = load_and_validate_config(config)
+            cfg_visual_type = cfg.visual.type
+            cfg_resolution = f"{cfg.visual.resolution[0]}x{cfg.visual.resolution[1]}"
+            cfg_fps = cfg.visual.fps
+            cfg_background_image = cfg.background_image or cfg_background_image
+            cfg_background_blur = cfg.background_blur
+            cfg_background_vignette = cfg.background_vignette
+            cfg_background_opacity = cfg.background_opacity
+            cfg_background_color = getattr(cfg, 'background_color', None) or cfg_background_color
+            cfg_postprocess = cfg.postprocess.model_dump() if cfg.postprocess else None
+            cfg_output = cfg.output_file
+            if intro is None and cfg.intro_video is not None:
+                cfg_intro_video = cfg.intro_video
+            cfg_intro_fade = intro_fade if intro_fade != 1.0 else cfg.intro_fade_duration
+            cfg_params = cfg.visual.params.model_dump()
+            if cfg.quotes:
+                cfg_quotes = [
+                    Quote(
+                        text=q.text,
+                        start_time=q.start_time,
+                        end_time=q.end_time,
+                        confidence=q.confidence,
+                    )
+                    for q in cfg.quotes
+                ]
+            cfg_quote_overlay = cfg.quote_overlay
+        except Exception as e:
+            raise click.BadParameter(f"Ungueltige Config-Datei '{config}': {e}")
+
+    # Merge: Config-Params als Basis, CLI-Params überschreiben
+    params = {}
+    params.update(cfg_params)
+    params.update(cli_params)
+
+    # Quote-Overlay-Config bauen
+    quote_config = None
+    if cfg_quote_overlay is not None:
+        quote_config = QuoteOverlayConfig(**cfg_quote_overlay.model_dump())
+
+    # Auflösung in width/height auflösen
+    try:
+        width, height = map(int, cfg_resolution.split('x'))
+    except ValueError:
+        raise click.BadParameter(
+            f"Ungueltige Aufloesung: '{cfg_resolution}'. "
+            f"Format: BREITExHOEHE (z.B. 1920x1080)"
+        )
+
+    # Output: CLI gewinnt nur wenn nicht Default
+    final_output = output if output != 'output.mp4' else cfg_output
+
+    return {
+        "visual": cfg_visual_type,
+        "width": width,
+        "height": height,
+        "fps": cfg_fps,
+        "background_image": cfg_background_image,
+        "background_blur": cfg_background_blur,
+        "background_vignette": cfg_background_vignette,
+        "background_opacity": cfg_background_opacity,
+        "background_color": cfg_background_color,
+        "codec": cfg_codec,
+        "quality": cfg_quality,
+        "output": final_output,
+        "intro": cfg_intro_video,
+        "intro_fade": cfg_intro_fade,
+        "params": params,
+        "postprocess": cfg_postprocess,
+        "quotes": cfg_quotes,
+        "quote_config": quote_config,
+    }
 
 
 @click.group()
@@ -141,119 +279,44 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
 
     _check_ffmpeg()
     
-    try:
-        width, height = map(int, resolution.split('x'))
-    except ValueError:
-        raise click.BadParameter(
-            f"Ungueltige Aufloesung: '{resolution}'. "
-            f"Format: BREITExHOEHE (z.B. 1920x1080)"
-        )
+    # Config + CLI-Parameter auflösen
+    resolved = _resolve_config(
+        config=config,
+        visual=visual,
+        resolution=resolution,
+        fps=fps,
+        background_image=background_image,
+        background_blur=background_blur,
+        background_vignette=background_vignette,
+        background_opacity=background_opacity,
+        background_color=background_color,
+        codec=codec,
+        quality=quality,
+        output=output,
+        intro=intro,
+        intro_fade=intro_fade,
+        param=param,
+    )
     
-    # Parameter parsen (CLI hat Vorrang vor Config)
-    cli_params = {}
-    for p in param:
-        if '=' not in p:
-            raise click.BadParameter(f"Parameter muss key=value sein: {p}")
-        key, value = p.split('=', 1)
-        # Typ-Inferenz
-        if value.lower() in ('true', 'yes', '1'):
-            value = True
-        elif value.lower() in ('false', 'no', '0'):
-            value = False
-        else:
-            try:
-                value = int(value)
-            except ValueError:
-                try:
-                    value = float(value)
-                except ValueError:
-                    pass
-        cli_params[key] = value
-
-    # Config-File laden und validieren (optional)
-    cfg_visual_type = visual
-    cfg_resolution = resolution
-    cfg_fps = fps
-    cfg_background_image = background_image
-    cfg_background_blur = background_blur
-    cfg_background_vignette = background_vignette
-    cfg_background_opacity = background_opacity
-    cfg_background_color = background_color
-    cfg_codec = codec
-    cfg_quality = quality
-    cfg_postprocess = None
-    cfg_quotes = None
-    cfg_quote_overlay = None
-    cfg_output = output
-    cfg_intro_video = intro
-    cfg_intro_fade = intro_fade
-
-    if config:
-        try:
-            cfg = load_and_validate_config(config)
-            cfg_visual_type = cfg.visual.type
-            cfg_resolution = f"{cfg.visual.resolution[0]}x{cfg.visual.resolution[1]}"
-            cfg_fps = cfg.visual.fps
-            cfg_background_image = cfg.background_image or cfg_background_image
-            cfg_background_blur = cfg.background_blur
-            cfg_background_vignette = cfg.background_vignette
-            cfg_background_opacity = cfg.background_opacity
-            cfg_background_color = getattr(cfg, 'background_color', None) or cfg_background_color
-            cfg_postprocess = cfg.postprocess.model_dump() if cfg.postprocess else None
-            cfg_output = cfg.output_file
-            if intro is None and cfg.intro_video is not None:
-                cfg_intro_video = cfg.intro_video
-            # CLI-Wert gewinnt nur, wenn er explizit vom Default abweicht
-            cfg_intro_fade = intro_fade if intro_fade != 1.0 else cfg.intro_fade_duration
-            if cfg.quotes:
-                cfg_quotes = [
-                    Quote(
-                        text=q.text,
-                        start_time=q.start_time,
-                        end_time=q.end_time,
-                        confidence=q.confidence,
-                    )
-                    for q in cfg.quotes
-                ]
-            cfg_quote_overlay = cfg.quote_overlay
-        except Exception as e:
-            raise click.BadParameter(f"Ungueltige Config-Datei '{config}': {e}")
-
-    # CLI-Optionen ueberschreiben Config-Werte
-    visual = cfg_visual_type
-    resolution = cfg_resolution
-    fps = cfg_fps
-    background_image = cfg_background_image
-    background_blur = cfg_background_blur
-    background_vignette = cfg_background_vignette
-    background_opacity = cfg_background_opacity
-    background_color = cfg_background_color
-    codec = cfg_codec
-    quality = cfg_quality
-    output = output if output != 'output.mp4' else cfg_output
-    intro = cfg_intro_video
-    intro_fade = cfg_intro_fade
-
-    try:
-        width, height = map(int, resolution.split('x'))
-    except ValueError:
-        raise click.BadParameter(
-            f"Ungueltige Aufloesung: '{resolution}'. "
-            f"Format: BREITExHOEHE (z.B. 1920x1080)"
-        )
-
-    # Config-Parameter als Basis, CLI-Parameter ueberschreiben
-    params = {}
-    if config:
-        cfg_params = cfg.visual.params.model_dump()
-        params.update(cfg_params)
-    params.update(cli_params)
-
-    # Quote-Overlay-Config aus Config bauen (falls vorhanden)
-    quote_config = None
-    if cfg_quote_overlay is not None:
-        quote_config = QuoteOverlayConfig(**cfg_quote_overlay.model_dump())
-
+    visual = resolved["visual"]
+    width = resolved["width"]
+    height = resolved["height"]
+    fps = resolved["fps"]
+    background_image = resolved["background_image"]
+    background_blur = resolved["background_blur"]
+    background_vignette = resolved["background_vignette"]
+    background_opacity = resolved["background_opacity"]
+    background_color = resolved["background_color"]
+    codec = resolved["codec"]
+    quality = resolved["quality"]
+    output = resolved["output"]
+    intro = resolved["intro"]
+    intro_fade = resolved["intro_fade"]
+    params = resolved["params"]
+    cfg_postprocess = resolved["postprocess"]
+    cfg_quotes = resolved["quotes"]
+    quote_config = resolved["quote_config"]
+    
     click.echo(f"[GPU] Starte Rendering: {visual} @ {width}x{height} {fps}fps")
     if preview:
         click.echo(f"[GPU] Preview-Modus: {preview_duration}s")

@@ -25,4 +25,4 @@ Im Kimi Direct Mode wird A/B-Testing durch manuelle Validierung ersetzt:
 1. Mutant wird in `memory/temp_mutant.md` geschrieben
 2. Kimi evaluiert den Mutant gegen die Fehlerursache
 3. Bei Erfolg: StrReplaceFile auf das Original-Skill
-4. Kein automatischer Sandbox-Execution-Loop nötig
+4. Kein automatischer Sandbox-Execution-Loop nötig.
