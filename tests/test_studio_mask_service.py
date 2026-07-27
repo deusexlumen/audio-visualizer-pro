@@ -67,3 +67,29 @@ def test_resize_mask_bleibt_in_wertebereich():
     out = resize_mask(mask, 100, 100)
     assert out.dtype == np.float32
     assert out.min() >= 0.0 and out.max() <= 1.0
+
+
+def test_resize_geometrische_paritaet_zum_hintergrund():
+    # Der Hintergrund-Pfad resized hart auf Zielgröße (LANCZOS). Die Maske
+    # muss auf dieselbe Zielgröße/Aspect kommen — Geometrie identisch,
+    # Filterwahl egal (Spec §6.2).
+    from src.studio.mask_service import resize_mask
+    mask = np.zeros((48, 64), dtype=np.float32)
+    mask[12:36, 16:48] = 1.0  # zentrales Rechteck (25%-75% je Achse)
+    out = resize_mask(mask, 160, 90)
+    assert out.shape == (90, 160)
+    # Rechteck liegt an denselben relativen Koordinaten
+    assert out[45, 80] > 0.9           # Zentrum bleibt Subjekt
+    assert out[5, 5] < 0.1             # Ecke bleibt frei
+    # Flächenanteil grob erhalten (25 % ± 3 %)
+    assert (out > 0.5).mean() == pytest.approx(0.25, abs=0.03)
+
+
+def test_resize_keine_ueberschwinger_an_kanten():
+    # LANCZOS würde an harten Kanten über 1.0/unter 0.0 schießen;
+    # der nicht-negative Kernel darf das nicht (Kanten-Härtung, Spec §6.2).
+    mask = np.zeros((48, 64), dtype=np.float32)
+    mask[:, 32:] = 1.0  # harte vertikale Kante
+    out = resize_mask(mask, 160, 90)
+    assert out.max() <= 1.0
+    assert out.min() >= 0.0
