@@ -21,3 +21,11 @@ def test_set_hash_stable(tmp_path):
     h1 = set_hash(str(p))
     assert len(h1) == 64
     assert h1 == set_hash(str(p))
+
+
+def test_effective_label_prefers_human():
+    from tools.calibrate_thresholds import effective_label
+    assert effective_label({"good": False, "human_label": "good"}) == (True, "human")
+    assert effective_label({"good": True, "human_label": "bad"}) == (False, "human")
+    assert effective_label({"good": True, "human_label": None}) == (True, "construction")
+    assert effective_label({"good": False}) == (False, "construction")

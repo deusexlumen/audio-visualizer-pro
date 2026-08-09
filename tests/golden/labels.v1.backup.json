@@ -1,0 +1,510 @@
+{
+  "version": "golden-set/1",
+  "construction_labels": true,
+  "renders": [
+    {
+      "id": "spectrum_bars_cap03",
+      "good": true,
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.004812732804566622,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0026682200065503516
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "spectrum_bars_cap03_mask",
+      "good": true,
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0025898704770952463,
+        "M3": 0.001496579769688348,
+        "M4": null,
+        "M5": 0.0026682200065503516
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "spectrum_bars_cap06",
+      "good": true,
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.019281988342603047,
+        "M3": null,
+        "M4": null,
+        "M5": 0.009078580575684706
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "spectrum_bars_cap06_mask",
+      "good": true,
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.01203510413567225,
+        "M3": 0.006901312153786421,
+        "M4": null,
+        "M5": 0.009078580575684706
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "spectrum_bars_cap10",
+      "good": false,
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.04098368436098099,
+        "M3": null,
+        "M4": null,
+        "M5": 0.017762889464696247
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+    },
+    {
+      "id": "spectrum_bars_cap10_mask",
+      "good": false,
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.029220296690861385,
+        "M3": 0.016603818784157436,
+        "M4": null,
+        "M5": 0.017762889464696247
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "lumina_core_cap03",
+      "good": true,
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.01166843498746554,
+        "M3": null,
+        "M4": null,
+        "M5": 0.011294298882906636
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "lumina_core_cap03_mask",
+      "good": true,
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0006276288186199963,
+        "M3": 0.0012213407705227535,
+        "M4": null,
+        "M5": 0.011294298882906636
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "lumina_core_cap06",
+      "good": true,
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.035377975553274155,
+        "M3": null,
+        "M4": null,
+        "M5": 0.022674032719805837
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "lumina_core_cap06_mask",
+      "good": true,
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0030275792038689056,
+        "M3": 0.005905339183906714,
+        "M4": null,
+        "M5": 0.022674032719805837
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "lumina_core_cap10",
+      "good": false,
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.05819798012574514,
+        "M3": null,
+        "M4": null,
+        "M5": 0.023392419330775738
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+    },
+    {
+      "id": "lumina_core_cap10_mask",
+      "good": false,
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.00926437508314848,
+        "M3": 0.018034742524226505,
+        "M4": null,
+        "M5": 0.023392419330775738
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "voice_flow_cap03",
+      "good": true,
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0030085042429467044,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0013134877275054653
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "voice_flow_cap03_mask",
+      "good": true,
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0010419810423627496,
+        "M3": 0.0009319454353923599,
+        "M4": null,
+        "M5": 0.0013134877275054653
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "voice_flow_cap06",
+      "good": true,
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.00885385243842999,
+        "M3": null,
+        "M4": null,
+        "M5": 0.003962943252796928
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "voice_flow_cap06_mask",
+      "good": true,
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0036663143740346036,
+        "M3": 0.003371685277670622,
+        "M4": null,
+        "M5": 0.003962943252796928
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "voice_flow_cap10",
+      "good": false,
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.014945564170678457,
+        "M3": null,
+        "M4": null,
+        "M5": 0.00636339377767096
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+    },
+    {
+      "id": "voice_flow_cap10_mask",
+      "good": false,
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0074575673788785934,
+        "M3": 0.007171541918069124,
+        "M4": null,
+        "M5": 0.00636339377767096
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "speech_focus_cap03",
+      "good": true,
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 6.478974228230072e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.697704520775005e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "speech_focus_cap03_mask",
+      "good": true,
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 4.2016662860078213e-07,
+        "M3": 2.994735931830898e-07,
+        "M4": null,
+        "M5": 6.697704520775005e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "speech_focus_cap06",
+      "good": true,
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 6.486378841448944e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.697762243372078e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "speech_focus_cap06_mask",
+      "good": true,
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 4.205780044230778e-07,
+        "M3": 2.996706503684739e-07,
+        "M4": null,
+        "M5": 6.697762243372078e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "speech_focus_cap10",
+      "good": false,
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 6.486378841448944e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.697762243372078e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+    },
+    {
+      "id": "speech_focus_cap10_mask",
+      "good": false,
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 4.205780044230778e-07,
+        "M3": 2.996706503684739e-07,
+        "M4": null,
+        "M5": 6.697762243372078e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "neon_wave_circle_cap03",
+      "good": true,
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0005610650405287743,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0004197282833047211
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "neon_wave_circle_cap03_mask",
+      "good": true,
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 8.119011181406677e-05,
+        "M3": 0.00010743794943361233,
+        "M4": null,
+        "M5": 0.0004197282833047211
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "neon_wave_circle_cap06",
+      "good": true,
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.00220524954299132,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0014856849641849597
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "neon_wave_circle_cap06_mask",
+      "good": true,
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0003788062798169752,
+        "M3": 0.0004927268698035429,
+        "M4": null,
+        "M5": 0.0014856849641849597
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "neon_wave_circle_cap10",
+      "good": false,
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.004605285357683897,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0030262720926354327
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+    },
+    {
+      "id": "neon_wave_circle_cap10_mask",
+      "good": false,
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0010897848599900801,
+        "M3": 0.0014430575926477711,
+        "M4": null,
+        "M5": 0.0030262720926354327
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "pulsing_core_cap03",
+      "good": true,
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0031222408482184014,
+        "M3": null,
+        "M4": null,
+        "M5": 0.002224419731646776
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "pulsing_core_cap03_mask",
+      "good": true,
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.00017431270680390298,
+        "M3": 0.00037010609715556103,
+        "M4": null,
+        "M5": 0.002224419731646776
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "pulsing_core_cap06",
+      "good": true,
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.00820317134882013,
+        "M3": null,
+        "M4": null,
+        "M5": 0.005807802837807685
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+    },
+    {
+      "id": "pulsing_core_cap06_mask",
+      "good": true,
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.000718136919507136,
+        "M3": 0.0015306392063697178,
+        "M4": null,
+        "M5": 0.005807802837807685
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+    },
+    {
+      "id": "pulsing_core_cap10",
+      "good": false,
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.014599378841618696,
+        "M3": null,
+        "M4": null,
+        "M5": 0.008755674702115357
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+    },
+    {
+      "id": "pulsing_core_cap10_mask",
+      "good": false,
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0017872682074084878,
+        "M3": 0.0038088856575389705,
+        "M4": null,
+        "M5": 0.008755674702115357
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+    }
+  ]
+}

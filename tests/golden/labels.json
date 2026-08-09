@@ -1,510 +1,3895 @@
 {
-  "version": "golden-set/1",
+  "version": "golden-set/2",
   "construction_labels": true,
+  "human_labels_pending": true,
   "renders": [
     {
-      "id": "spectrum_bars_cap03",
+      "id": "music_severance__spectrum_bars_cap03",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "spectrum_bars",
       "alpha_cap": 0.3,
       "mask": false,
       "metrics": {
-        "M1": 0.004812732804566622,
+        "M1": 0.007367223811646302,
         "M3": null,
         "M4": null,
-        "M5": 0.0026682200065503516
+        "M5": 0.007495437127848466
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/spectrum_bars_cap03.png"
     },
     {
-      "id": "spectrum_bars_cap03_mask",
+      "id": "music_severance__spectrum_bars_cap03_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "spectrum_bars",
       "alpha_cap": 0.3,
       "mask": true,
       "metrics": {
-        "M1": 0.0025898704770952463,
-        "M3": 0.001496579769688348,
+        "M1": 0.0032914665061980486,
+        "M3": 0.002152626635506749,
         "M4": null,
-        "M5": 0.0026682200065503516
+        "M5": 0.007495437127848466
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/spectrum_bars_cap03_mask.png"
     },
     {
-      "id": "spectrum_bars_cap06",
+      "id": "music_severance__spectrum_bars_cap06",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "spectrum_bars",
       "alpha_cap": 0.6,
       "mask": false,
       "metrics": {
-        "M1": 0.019281988342603047,
+        "M1": 0.03133005648851395,
         "M3": null,
         "M4": null,
-        "M5": 0.009078580575684706
+        "M5": 0.028211258351802826
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/spectrum_bars_cap06.png"
     },
     {
-      "id": "spectrum_bars_cap06_mask",
+      "id": "music_severance__spectrum_bars_cap06_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "spectrum_bars",
       "alpha_cap": 0.6,
       "mask": true,
       "metrics": {
-        "M1": 0.01203510413567225,
-        "M3": 0.006901312153786421,
+        "M1": 0.015546569911142191,
+        "M3": 0.010412408659855524,
         "M4": null,
-        "M5": 0.009078580575684706
+        "M5": 0.028211258351802826
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/spectrum_bars_cap06_mask.png"
     },
     {
-      "id": "spectrum_bars_cap10",
+      "id": "music_severance__spectrum_bars_cap10",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "spectrum_bars",
       "alpha_cap": 1.0,
       "mask": false,
       "metrics": {
-        "M1": 0.04098368436098099,
+        "M1": 0.06957107906540234,
         "M3": null,
         "M4": null,
-        "M5": 0.017762889464696247
+        "M5": 0.05828535929322243
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_severance/spectrum_bars_cap10.png"
     },
     {
-      "id": "spectrum_bars_cap10_mask",
+      "id": "music_severance__spectrum_bars_cap10_mask",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "spectrum_bars",
       "alpha_cap": 1.0,
       "mask": true,
       "metrics": {
-        "M1": 0.029220296690861385,
-        "M3": 0.016603818784157436,
+        "M1": 0.03980531543493271,
+        "M3": 0.02776004436115424,
         "M4": null,
-        "M5": 0.017762889464696247
+        "M5": 0.05828535929322243
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/spectrum_bars_cap10_mask.png"
     },
     {
-      "id": "lumina_core_cap03",
+      "id": "music_severance__lumina_core_cap03",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "lumina_core",
       "alpha_cap": 0.3,
       "mask": false,
       "metrics": {
-        "M1": 0.01166843498746554,
+        "M1": 0.013099698660274347,
         "M3": null,
         "M4": null,
-        "M5": 0.011294298882906636
+        "M5": 0.007830664670715729
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/lumina_core_cap03.png"
     },
     {
-      "id": "lumina_core_cap03_mask",
+      "id": "music_severance__lumina_core_cap03_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "lumina_core",
       "alpha_cap": 0.3,
       "mask": true,
       "metrics": {
-        "M1": 0.0006276288186199963,
-        "M3": 0.0012213407705227535,
+        "M1": 0.0008390787988901138,
+        "M3": 0.0016313386925806601,
         "M4": null,
-        "M5": 0.011294298882906636
+        "M5": 0.007830664670715729
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/lumina_core_cap03_mask.png"
     },
     {
-      "id": "lumina_core_cap06",
+      "id": "music_severance__lumina_core_cap06",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "lumina_core",
       "alpha_cap": 0.6,
       "mask": false,
       "metrics": {
-        "M1": 0.035377975553274155,
+        "M1": 0.034964606165885925,
         "M3": null,
         "M4": null,
-        "M5": 0.022674032719805837
+        "M5": 0.017716683447360992
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/lumina_core_cap06.png"
     },
     {
-      "id": "lumina_core_cap06_mask",
+      "id": "music_severance__lumina_core_cap06_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "lumina_core",
       "alpha_cap": 0.6,
       "mask": true,
       "metrics": {
-        "M1": 0.0030275792038689056,
-        "M3": 0.005905339183906714,
+        "M1": 0.004001648630946875,
+        "M3": 0.0077750966884195805,
         "M4": null,
-        "M5": 0.022674032719805837
+        "M5": 0.017716683447360992
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/lumina_core_cap06_mask.png"
     },
     {
-      "id": "lumina_core_cap10",
+      "id": "music_severance__lumina_core_cap10",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "lumina_core",
       "alpha_cap": 1.0,
       "mask": false,
       "metrics": {
-        "M1": 0.05819798012574514,
+        "M1": 0.05682992562651634,
         "M3": null,
         "M4": null,
-        "M5": 0.023392419330775738
+        "M5": 0.021417733592291672
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_severance/lumina_core_cap10.png"
     },
     {
-      "id": "lumina_core_cap10_mask",
+      "id": "music_severance__lumina_core_cap10_mask",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "lumina_core",
       "alpha_cap": 1.0,
       "mask": true,
       "metrics": {
-        "M1": 0.00926437508314848,
-        "M3": 0.018034742524226505,
+        "M1": 0.01117547694593668,
+        "M3": 0.02162332522372405,
         "M4": null,
-        "M5": 0.023392419330775738
+        "M5": 0.021417733592291672
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/lumina_core_cap10_mask.png"
     },
     {
-      "id": "voice_flow_cap03",
+      "id": "music_severance__voice_flow_cap03",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "voice_flow",
       "alpha_cap": 0.3,
       "mask": false,
       "metrics": {
-        "M1": 0.0030085042429467044,
+        "M1": 0.00311080653530856,
         "M3": null,
         "M4": null,
-        "M5": 0.0013134877275054653
+        "M5": 0.0019576125778257847
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/voice_flow_cap03.png"
     },
     {
-      "id": "voice_flow_cap03_mask",
+      "id": "music_severance__voice_flow_cap03_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "voice_flow",
       "alpha_cap": 0.3,
       "mask": true,
       "metrics": {
-        "M1": 0.0010419810423627496,
-        "M3": 0.0009319454353923599,
+        "M1": 0.0010779652123649914,
+        "M3": 0.0009581426274962723,
         "M4": null,
-        "M5": 0.0013134877275054653
+        "M5": 0.0019576125778257847
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/voice_flow_cap03_mask.png"
     },
     {
-      "id": "voice_flow_cap06",
+      "id": "music_severance__voice_flow_cap06",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "voice_flow",
       "alpha_cap": 0.6,
       "mask": false,
       "metrics": {
-        "M1": 0.00885385243842999,
+        "M1": 0.009817928075790405,
         "M3": null,
         "M4": null,
-        "M5": 0.003962943252796928
+        "M5": 0.006135774155457814
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/voice_flow_cap06.png"
     },
     {
-      "id": "voice_flow_cap06_mask",
+      "id": "music_severance__voice_flow_cap06_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "voice_flow",
       "alpha_cap": 0.6,
       "mask": true,
       "metrics": {
-        "M1": 0.0036663143740346036,
-        "M3": 0.003371685277670622,
+        "M1": 0.0038792932561288276,
+        "M3": 0.003521722974255681,
         "M4": null,
-        "M5": 0.003962943252796928
+        "M5": 0.006135774155457814
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/voice_flow_cap06_mask.png"
     },
     {
-      "id": "voice_flow_cap10",
+      "id": "music_severance__voice_flow_cap10",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "voice_flow",
       "alpha_cap": 1.0,
       "mask": false,
       "metrics": {
-        "M1": 0.014945564170678457,
+        "M1": 0.01731947933634122,
         "M3": null,
         "M4": null,
-        "M5": 0.00636339377767096
+        "M5": 0.010287569059679905
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_severance/voice_flow_cap10.png"
     },
     {
-      "id": "voice_flow_cap10_mask",
+      "id": "music_severance__voice_flow_cap10_mask",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "voice_flow",
       "alpha_cap": 1.0,
       "mask": true,
       "metrics": {
-        "M1": 0.0074575673788785934,
-        "M3": 0.007171541918069124,
+        "M1": 0.008106741278121868,
+        "M3": 0.007692402849594752,
         "M4": null,
-        "M5": 0.00636339377767096
+        "M5": 0.010287569059679905
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/voice_flow_cap10_mask.png"
     },
     {
-      "id": "speech_focus_cap03",
+      "id": "music_severance__speech_focus_cap03",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "speech_focus",
       "alpha_cap": 0.3,
       "mask": false,
       "metrics": {
-        "M1": 6.478974228230072e-07,
+        "M1": 1.5123366665648064e-06,
         "M3": null,
         "M4": null,
-        "M5": 6.697704520775005e-05
+        "M5": 6.718750228174031e-05
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/speech_focus_cap03.png"
     },
     {
-      "id": "speech_focus_cap03_mask",
+      "id": "music_severance__speech_focus_cap03_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "speech_focus",
       "alpha_cap": 0.3,
       "mask": true,
       "metrics": {
-        "M1": 4.2016662860078213e-07,
-        "M3": 2.994735931830898e-07,
+        "M1": 9.749314623756315e-07,
+        "M3": 6.145300422607155e-07,
         "M4": null,
-        "M5": 6.697704520775005e-05
+        "M5": 6.718750228174031e-05
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/speech_focus_cap03_mask.png"
     },
     {
-      "id": "speech_focus_cap06",
+      "id": "music_severance__speech_focus_cap06",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "speech_focus",
       "alpha_cap": 0.6,
       "mask": false,
       "metrics": {
-        "M1": 6.486378841448944e-07,
+        "M1": 1.5908600895879015e-06,
         "M3": null,
         "M4": null,
-        "M5": 6.697762243372078e-05
+        "M5": 6.72670115212289e-05
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/speech_focus_cap06.png"
     },
     {
-      "id": "speech_focus_cap06_mask",
+      "id": "music_severance__speech_focus_cap06_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "speech_focus",
       "alpha_cap": 0.6,
       "mask": true,
       "metrics": {
-        "M1": 4.205780044230778e-07,
-        "M3": 2.996706503684739e-07,
+        "M1": 1.028573213564717e-06,
+        "M3": 6.440337472213287e-07,
         "M4": null,
-        "M5": 6.697762243372078e-05
+        "M5": 6.72670115212289e-05
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/speech_focus_cap06_mask.png"
     },
     {
-      "id": "speech_focus_cap10",
+      "id": "music_severance__speech_focus_cap10",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "speech_focus",
       "alpha_cap": 1.0,
       "mask": false,
       "metrics": {
-        "M1": 6.486378841448944e-07,
+        "M1": 1.5908600895879015e-06,
         "M3": null,
         "M4": null,
-        "M5": 6.697762243372078e-05
+        "M5": 6.72670115212289e-05
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_severance/speech_focus_cap10.png"
     },
     {
-      "id": "speech_focus_cap10_mask",
+      "id": "music_severance__speech_focus_cap10_mask",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "speech_focus",
       "alpha_cap": 1.0,
       "mask": true,
       "metrics": {
-        "M1": 4.205780044230778e-07,
-        "M3": 2.996706503684739e-07,
+        "M1": 1.028573213564717e-06,
+        "M3": 6.440337472213287e-07,
         "M4": null,
-        "M5": 6.697762243372078e-05
+        "M5": 6.72670115212289e-05
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/speech_focus_cap10_mask.png"
     },
     {
-      "id": "neon_wave_circle_cap03",
+      "id": "music_severance__neon_wave_circle_cap03",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "neon_wave_circle",
       "alpha_cap": 0.3,
       "mask": false,
       "metrics": {
-        "M1": 0.0005610650405287743,
+        "M1": 0.0007122448296286166,
         "M3": null,
         "M4": null,
-        "M5": 0.0004197282833047211
+        "M5": 0.0006838377060679098
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/neon_wave_circle_cap03.png"
     },
     {
-      "id": "neon_wave_circle_cap03_mask",
+      "id": "music_severance__neon_wave_circle_cap03_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "neon_wave_circle",
       "alpha_cap": 0.3,
       "mask": true,
       "metrics": {
-        "M1": 8.119011181406677e-05,
-        "M3": 0.00010743794943361233,
+        "M1": 0.00011863588588312268,
+        "M3": 0.0001445629241061397,
         "M4": null,
-        "M5": 0.0004197282833047211
+        "M5": 0.0006838377060679098
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/neon_wave_circle_cap03_mask.png"
     },
     {
-      "id": "neon_wave_circle_cap06",
+      "id": "music_severance__neon_wave_circle_cap06",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "neon_wave_circle",
       "alpha_cap": 0.6,
       "mask": false,
       "metrics": {
-        "M1": 0.00220524954299132,
+        "M1": 0.002762558093915383,
         "M3": null,
         "M4": null,
-        "M5": 0.0014856849641849597
+        "M5": 0.0026390840454647937
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/neon_wave_circle_cap06.png"
     },
     {
-      "id": "neon_wave_circle_cap06_mask",
+      "id": "music_severance__neon_wave_circle_cap06_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "neon_wave_circle",
       "alpha_cap": 0.6,
       "mask": true,
       "metrics": {
-        "M1": 0.0003788062798169752,
-        "M3": 0.0004927268698035429,
+        "M1": 0.0005559356941375881,
+        "M3": 0.0006700402203326424,
         "M4": null,
-        "M5": 0.0014856849641849597
+        "M5": 0.0026390840454647937
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/neon_wave_circle_cap06_mask.png"
     },
     {
-      "id": "neon_wave_circle_cap10",
+      "id": "music_severance__neon_wave_circle_cap10",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "neon_wave_circle",
       "alpha_cap": 1.0,
       "mask": false,
       "metrics": {
-        "M1": 0.004605285357683897,
+        "M1": 0.005836618132889271,
         "M3": null,
         "M4": null,
-        "M5": 0.0030262720926354327
+        "M5": 0.005752004527797301
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_severance/neon_wave_circle_cap10.png"
     },
     {
-      "id": "neon_wave_circle_cap10_mask",
+      "id": "music_severance__neon_wave_circle_cap10_mask",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "neon_wave_circle",
       "alpha_cap": 1.0,
       "mask": true,
       "metrics": {
-        "M1": 0.0010897848599900801,
-        "M3": 0.0014430575926477711,
+        "M1": 0.0015602319423730175,
+        "M3": 0.0019303429095695417,
         "M4": null,
-        "M5": 0.0030262720926354327
+        "M5": 0.005752004527797301
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/neon_wave_circle_cap10_mask.png"
     },
     {
-      "id": "pulsing_core_cap03",
+      "id": "music_severance__pulsing_core_cap03",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "pulsing_core",
       "alpha_cap": 0.3,
       "mask": false,
       "metrics": {
-        "M1": 0.0031222408482184014,
+        "M1": 0.0046515080612152815,
         "M3": null,
         "M4": null,
-        "M5": 0.002224419731646776
+        "M5": 0.0015249380958266556
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/pulsing_core_cap03.png"
     },
     {
-      "id": "pulsing_core_cap03_mask",
+      "id": "music_severance__pulsing_core_cap03_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "pulsing_core",
       "alpha_cap": 0.3,
       "mask": true,
       "metrics": {
-        "M1": 0.00017431270680390298,
-        "M3": 0.00037010609715556103,
+        "M1": 0.0002809417201206088,
+        "M3": 0.000593890833746021,
         "M4": null,
-        "M5": 0.002224419731646776
+        "M5": 0.0015249380958266556
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.3 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/pulsing_core_cap03_mask.png"
     },
     {
-      "id": "pulsing_core_cap06",
+      "id": "music_severance__pulsing_core_cap06",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "pulsing_core",
       "alpha_cap": 0.6,
       "mask": false,
       "metrics": {
-        "M1": 0.00820317134882013,
+        "M1": 0.011733135829369227,
         "M3": null,
         "M4": null,
-        "M5": 0.005807802837807685
+        "M5": 0.004641310156633456
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_severance/pulsing_core_cap06.png"
     },
     {
-      "id": "pulsing_core_cap06_mask",
+      "id": "music_severance__pulsing_core_cap06_mask",
       "good": true,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "pulsing_core",
       "alpha_cap": 0.6,
       "mask": true,
       "metrics": {
-        "M1": 0.000718136919507136,
-        "M3": 0.0015306392063697178,
+        "M1": 0.0011490064401489992,
+        "M3": 0.0024340379362305007,
         "M4": null,
-        "M5": 0.005807802837807685
+        "M5": 0.004641310156633456
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=0.6 ≤ 0.6 → good; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/pulsing_core_cap06_mask.png"
     },
     {
-      "id": "pulsing_core_cap10",
+      "id": "music_severance__pulsing_core_cap10",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "pulsing_core",
       "alpha_cap": 1.0,
       "mask": false,
       "metrics": {
-        "M1": 0.014599378841618696,
+        "M1": 0.019840089604258537,
         "M3": null,
         "M4": null,
-        "M5": 0.008755674702115357
+        "M5": 0.007906539365649223
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske keine."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_severance/pulsing_core_cap10.png"
     },
     {
-      "id": "pulsing_core_cap10_mask",
+      "id": "music_severance__pulsing_core_cap10_mask",
       "good": false,
+      "human_label": null,
+      "audio": "music_severance",
+      "mode": "music",
       "visualizer": "pulsing_core",
       "alpha_cap": 1.0,
       "mask": true,
       "metrics": {
-        "M1": 0.0017872682074084878,
-        "M3": 0.0038088856575389705,
+        "M1": 0.002874283275256554,
+        "M3": 0.006068819668143988,
         "M4": null,
-        "M5": 0.008755674702115357
+        "M5": 0.007906539365649223
       },
-      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 → bad; Maske Zentrums-Gauß."
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_severance/pulsing_core_cap10_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__spectrum_bars_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.00569674411478142,
+        "M3": null,
+        "M4": null,
+        "M5": 0.004605388967320323
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/spectrum_bars_cap03.png"
+    },
+    {
+      "id": "music_dunkelheit__spectrum_bars_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0027959076687693596,
+        "M3": 0.0017567817121744156,
+        "M4": null,
+        "M5": 0.004605388967320323
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/spectrum_bars_cap03_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__spectrum_bars_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.022533840499818325,
+        "M3": null,
+        "M4": null,
+        "M5": 0.015992665352920692
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/spectrum_bars_cap06.png"
+    },
+    {
+      "id": "music_dunkelheit__spectrum_bars_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.013206730596721172,
+        "M3": 0.00821681646630168,
+        "M4": null,
+        "M5": 0.015992665352920692
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/spectrum_bars_cap06_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__spectrum_bars_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.047311488538980484,
+        "M3": null,
+        "M4": null,
+        "M5": 0.030588145678242046
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_dunkelheit/spectrum_bars_cap10.png"
+    },
+    {
+      "id": "music_dunkelheit__spectrum_bars_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.03256618045270443,
+        "M3": 0.02004026093830665,
+        "M4": null,
+        "M5": 0.030588145678242046
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/spectrum_bars_cap10_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__lumina_core_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.010678207812209925,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0017199332360178232
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/lumina_core_cap03.png"
+    },
+    {
+      "id": "music_dunkelheit__lumina_core_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0005674397689290345,
+        "M3": 0.0011030964863797028,
+        "M4": null,
+        "M5": 0.0017199332360178232
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/lumina_core_cap03_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__lumina_core_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.032445733125011124,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0049701526295393705
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/lumina_core_cap06.png"
+    },
+    {
+      "id": "music_dunkelheit__lumina_core_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.002717376841853062,
+        "M3": 0.005301015451550484,
+        "M4": null,
+        "M5": 0.0049701526295393705
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/lumina_core_cap06_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__lumina_core_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.054467211167017617,
+        "M3": null,
+        "M4": null,
+        "M5": 0.008291847382982572
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_dunkelheit/lumina_core_cap10.png"
+    },
+    {
+      "id": "music_dunkelheit__lumina_core_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.008437938677767912,
+        "M3": 0.0164306266233325,
+        "M4": null,
+        "M5": 0.008291847382982572
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/lumina_core_cap10_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__voice_flow_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0028721620328724384,
+        "M3": null,
+        "M4": null,
+        "M5": 0.003472869585190589
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/voice_flow_cap03.png"
+    },
+    {
+      "id": "music_dunkelheit__voice_flow_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0009813496144488454,
+        "M3": 0.0008855261645900706,
+        "M4": null,
+        "M5": 0.003472869585190589
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/voice_flow_cap03_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__voice_flow_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.008100016818692287,
+        "M3": null,
+        "M4": null,
+        "M5": 0.011085005632291237
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/voice_flow_cap06.png"
+    },
+    {
+      "id": "music_dunkelheit__voice_flow_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.003410124530394872,
+        "M3": 0.003184766275808215,
+        "M4": null,
+        "M5": 0.011085005632291237
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/voice_flow_cap06_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__voice_flow_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.013292355152467886,
+        "M3": null,
+        "M4": null,
+        "M5": 0.01977434824220836
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_dunkelheit/voice_flow_cap10.png"
+    },
+    {
+      "id": "music_dunkelheit__voice_flow_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.006834138495226701,
+        "M3": 0.006676177339007457,
+        "M4": null,
+        "M5": 0.01977434824220836
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/voice_flow_cap10_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__speech_focus_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 7.035138006964795e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.692883228727926e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/speech_focus_cap03.png"
+    },
+    {
+      "id": "music_dunkelheit__speech_focus_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 4.52746614125014e-07,
+        "M3": 3.1291786702543806e-07,
+        "M4": null,
+        "M5": 6.692883228727926e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/speech_focus_cap03_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__speech_focus_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 7.035138006964795e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.692990427836776e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/speech_focus_cap06.png"
+    },
+    {
+      "id": "music_dunkelheit__speech_focus_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 4.52746614125014e-07,
+        "M3": 3.1291786702543806e-07,
+        "M4": null,
+        "M5": 6.692990427836776e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/speech_focus_cap06_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__speech_focus_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 7.035138006964795e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.692990427836776e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_dunkelheit/speech_focus_cap10.png"
+    },
+    {
+      "id": "music_dunkelheit__speech_focus_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 4.52746614125014e-07,
+        "M3": 3.1291786702543806e-07,
+        "M4": null,
+        "M5": 6.692990427836776e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/speech_focus_cap10_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__neon_wave_circle_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.000535618649640431,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0006758379943979284
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/neon_wave_circle_cap03.png"
+    },
+    {
+      "id": "music_dunkelheit__neon_wave_circle_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 8.272464037872851e-05,
+        "M3": 0.00010558273546242465,
+        "M4": null,
+        "M5": 0.0006758379943979284
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/neon_wave_circle_cap03_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__neon_wave_circle_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0021360095512742796,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0026131903287023306
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/neon_wave_circle_cap06.png"
+    },
+    {
+      "id": "music_dunkelheit__neon_wave_circle_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0003845163252359877,
+        "M3": 0.0004800864262506366,
+        "M4": null,
+        "M5": 0.0026131903287023306
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/neon_wave_circle_cap06_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__neon_wave_circle_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.00453442878400286,
+        "M3": null,
+        "M4": null,
+        "M5": 0.005587176031743486
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_dunkelheit/neon_wave_circle_cap10.png"
+    },
+    {
+      "id": "music_dunkelheit__neon_wave_circle_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0011091886553913355,
+        "M3": 0.0014087549255539973,
+        "M4": null,
+        "M5": 0.005587176031743486
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/neon_wave_circle_cap10_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__pulsing_core_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0036112796515226364,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0005744373290023456
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/pulsing_core_cap03.png"
+    },
+    {
+      "id": "music_dunkelheit__pulsing_core_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0001951513986568898,
+        "M3": 0.00041388375878644484,
+        "M4": null,
+        "M5": 0.0005744373290023456
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/pulsing_core_cap03_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__pulsing_core_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.009415037153909603,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0013372520916163921
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_dunkelheit/pulsing_core_cap06.png"
+    },
+    {
+      "id": "music_dunkelheit__pulsing_core_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0008205782117632529,
+        "M3": 0.0017469893985738356,
+        "M4": null,
+        "M5": 0.0013372520916163921
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/pulsing_core_cap06_mask.png"
+    },
+    {
+      "id": "music_dunkelheit__pulsing_core_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.01657980028539896,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0023051490231106677
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_dunkelheit/pulsing_core_cap10.png"
+    },
+    {
+      "id": "music_dunkelheit__pulsing_core_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_dunkelheit",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0020811139062667885,
+        "M3": 0.004428132514779766,
+        "M4": null,
+        "M5": 0.0023051490231106677
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_dunkelheit/pulsing_core_cap10_mask.png"
+    },
+    {
+      "id": "music_velvet__spectrum_bars_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.005307544954121113,
+        "M3": null,
+        "M4": null,
+        "M5": 0.005643125623464584
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/spectrum_bars_cap03.png"
+    },
+    {
+      "id": "music_velvet__spectrum_bars_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.002700462704524398,
+        "M3": 0.0016149486570308607,
+        "M4": null,
+        "M5": 0.005643125623464584
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/spectrum_bars_cap03_mask.png"
+    },
+    {
+      "id": "music_velvet__spectrum_bars_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.022176899015903473,
+        "M3": null,
+        "M4": null,
+        "M5": 0.020857824633518856
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/spectrum_bars_cap06.png"
+    },
+    {
+      "id": "music_velvet__spectrum_bars_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.012660005750755468,
+        "M3": 0.007678609651823838,
+        "M4": null,
+        "M5": 0.020857824633518856
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/spectrum_bars_cap06_mask.png"
+    },
+    {
+      "id": "music_velvet__spectrum_bars_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.04856674994031588,
+        "M3": null,
+        "M4": null,
+        "M5": 0.04375561450918516
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_velvet/spectrum_bars_cap10.png"
+    },
+    {
+      "id": "music_velvet__spectrum_bars_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.03147382910052935,
+        "M3": 0.019495510185758274,
+        "M4": null,
+        "M5": 0.04375561450918516
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/spectrum_bars_cap10_mask.png"
+    },
+    {
+      "id": "music_velvet__lumina_core_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.010507083808382353,
+        "M3": null,
+        "M4": null,
+        "M5": 0.019946046794454258
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/lumina_core_cap03.png"
+    },
+    {
+      "id": "music_velvet__lumina_core_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0006377504905685782,
+        "M3": 0.0012388120715816815,
+        "M4": null,
+        "M5": 0.019946046794454258
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/lumina_core_cap03_mask.png"
+    },
+    {
+      "id": "music_velvet__lumina_core_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.030261604736248653,
+        "M3": null,
+        "M4": null,
+        "M5": 0.03900463506579399
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/lumina_core_cap06.png"
+    },
+    {
+      "id": "music_velvet__lumina_core_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.002979874533290664,
+        "M3": 0.005793679816027482,
+        "M4": null,
+        "M5": 0.03900463506579399
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/lumina_core_cap06_mask.png"
+    },
+    {
+      "id": "music_velvet__lumina_core_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0500350296497345,
+        "M3": null,
+        "M4": null,
+        "M5": 0.03945176427563032
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_velvet/lumina_core_cap10.png"
+    },
+    {
+      "id": "music_velvet__lumina_core_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.008667791883150736,
+        "M3": 0.016802968457341194,
+        "M4": null,
+        "M5": 0.03945176427563032
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/lumina_core_cap10_mask.png"
+    },
+    {
+      "id": "music_velvet__voice_flow_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0028193197989215455,
+        "M3": null,
+        "M4": null,
+        "M5": 0.004030939676643659
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/voice_flow_cap03.png"
+    },
+    {
+      "id": "music_velvet__voice_flow_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0009608587715774775,
+        "M3": 0.0008635551785118878,
+        "M4": null,
+        "M5": 0.004030939676643659
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/voice_flow_cap03_mask.png"
+    },
+    {
+      "id": "music_velvet__voice_flow_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.008107007791598638,
+        "M3": null,
+        "M4": null,
+        "M5": 0.013771105402459701
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/voice_flow_cap06.png"
+    },
+    {
+      "id": "music_velvet__voice_flow_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0033798445171366134,
+        "M3": 0.0031355728084842363,
+        "M4": null,
+        "M5": 0.013771105402459701
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/voice_flow_cap06_mask.png"
+    },
+    {
+      "id": "music_velvet__voice_flow_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.01351811115940412,
+        "M3": null,
+        "M4": null,
+        "M5": 0.026420005441953737
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_velvet/voice_flow_cap10.png"
+    },
+    {
+      "id": "music_velvet__voice_flow_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.006864171785612901,
+        "M3": 0.006667974094549815,
+        "M4": null,
+        "M5": 0.026420005441953737
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/voice_flow_cap10_mask.png"
+    },
+    {
+      "id": "music_velvet__speech_focus_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 1.0487300035795972e-06,
+        "M3": null,
+        "M4": null,
+        "M5": 6.704220625882347e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/speech_focus_cap03.png"
+    },
+    {
+      "id": "music_velvet__speech_focus_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 6.719210432493128e-07,
+        "M3": 4.44843616757377e-07,
+        "M4": null,
+        "M5": 6.704220625882347e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/speech_focus_cap03_mask.png"
+    },
+    {
+      "id": "music_velvet__speech_focus_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 1.0798290380383453e-06,
+        "M3": null,
+        "M4": null,
+        "M5": 6.70733061269857e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/speech_focus_cap06.png"
+    },
+    {
+      "id": "music_velvet__speech_focus_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 6.937233365533757e-07,
+        "M3": 4.565471461622413e-07,
+        "M4": null,
+        "M5": 6.70733061269857e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/speech_focus_cap06_mask.png"
+    },
+    {
+      "id": "music_velvet__speech_focus_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 1.0798290380383453e-06,
+        "M3": null,
+        "M4": null,
+        "M5": 6.70733061269857e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_velvet/speech_focus_cap10.png"
+    },
+    {
+      "id": "music_velvet__speech_focus_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 6.937233365533757e-07,
+        "M3": 4.565471461622413e-07,
+        "M4": null,
+        "M5": 6.70733061269857e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/speech_focus_cap10_mask.png"
+    },
+    {
+      "id": "music_velvet__neon_wave_circle_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0005422627242902914,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0007344144202458361
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/neon_wave_circle_cap03.png"
+    },
+    {
+      "id": "music_velvet__neon_wave_circle_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 8.849590327978755e-05,
+        "M3": 0.00011128119028095777,
+        "M4": null,
+        "M5": 0.0007344144202458361
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/neon_wave_circle_cap03_mask.png"
+    },
+    {
+      "id": "music_velvet__neon_wave_circle_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0021173337008804083,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0030486860778182745
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/neon_wave_circle_cap06.png"
+    },
+    {
+      "id": "music_velvet__neon_wave_circle_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.000404798163799569,
+        "M3": 0.0005014090371939043,
+        "M4": null,
+        "M5": 0.0030486860778182745
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/neon_wave_circle_cap06_mask.png"
+    },
+    {
+      "id": "music_velvet__neon_wave_circle_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.004454537605245908,
+        "M3": null,
+        "M4": null,
+        "M5": 0.006798595966150363
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_velvet/neon_wave_circle_cap10.png"
+    },
+    {
+      "id": "music_velvet__neon_wave_circle_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0011327512717495363,
+        "M3": 0.0014321339161445696,
+        "M4": null,
+        "M5": 0.006798595966150363
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/neon_wave_circle_cap10_mask.png"
+    },
+    {
+      "id": "music_velvet__pulsing_core_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0035221135088553033,
+        "M3": null,
+        "M4": null,
+        "M5": 0.00444958886752526
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/pulsing_core_cap03.png"
+    },
+    {
+      "id": "music_velvet__pulsing_core_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0002097473964871218,
+        "M3": 0.0004444286072005828,
+        "M4": null,
+        "M5": 0.00444958886752526
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/pulsing_core_cap03_mask.png"
+    },
+    {
+      "id": "music_velvet__pulsing_core_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0089833188491563,
+        "M3": null,
+        "M4": null,
+        "M5": 0.013421097459892431
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/music_velvet/pulsing_core_cap06.png"
+    },
+    {
+      "id": "music_velvet__pulsing_core_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0008495376290132602,
+        "M3": 0.0018054759129881859,
+        "M4": null,
+        "M5": 0.013421097459892431
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/pulsing_core_cap06_mask.png"
+    },
+    {
+      "id": "music_velvet__pulsing_core_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.015528862985471884,
+        "M3": null,
+        "M4": null,
+        "M5": 0.01837167516350746
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/music_velvet/pulsing_core_cap10.png"
+    },
+    {
+      "id": "music_velvet__pulsing_core_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "music_velvet",
+      "mode": "music",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0021027044470732412,
+        "M3": 0.004461668897420168,
+        "M4": null,
+        "M5": 0.01837167516350746
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/music_velvet/pulsing_core_cap10_mask.png"
+    },
+    {
+      "id": "podcast_macy__spectrum_bars_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0057452778952817125,
+        "M3": null,
+        "M4": null,
+        "M5": 0.003605900565162301
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/spectrum_bars_cap03.png"
+    },
+    {
+      "id": "podcast_macy__spectrum_bars_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.002949437281737725,
+        "M3": 0.0017493699366847675,
+        "M4": null,
+        "M5": 0.003605900565162301
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/spectrum_bars_cap03_mask.png"
+    },
+    {
+      "id": "podcast_macy__spectrum_bars_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.023320555066068966,
+        "M3": null,
+        "M4": null,
+        "M5": 0.012810398824512959
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/spectrum_bars_cap06.png"
+    },
+    {
+      "id": "podcast_macy__spectrum_bars_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.013663646144171556,
+        "M3": 0.00817679443086187,
+        "M4": null,
+        "M5": 0.012810398824512959
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/spectrum_bars_cap06_mask.png"
+    },
+    {
+      "id": "podcast_macy__spectrum_bars_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.050061860432227455,
+        "M3": null,
+        "M4": null,
+        "M5": 0.02670523834725221
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_macy/spectrum_bars_cap10.png"
+    },
+    {
+      "id": "podcast_macy__spectrum_bars_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.03350797606011232,
+        "M3": 0.02031744209428628,
+        "M4": null,
+        "M5": 0.02670523834725221
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/spectrum_bars_cap10_mask.png"
+    },
+    {
+      "id": "podcast_macy__lumina_core_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.012255842487017313,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0018355964760606487
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/lumina_core_cap03.png"
+    },
+    {
+      "id": "podcast_macy__lumina_core_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0007386946623834471,
+        "M3": 0.0014408353405694168,
+        "M4": null,
+        "M5": 0.0018355964760606487
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/lumina_core_cap03_mask.png"
+    },
+    {
+      "id": "podcast_macy__lumina_core_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.03388011455535889,
+        "M3": null,
+        "M4": null,
+        "M5": 0.004218090558424592
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/lumina_core_cap06.png"
+    },
+    {
+      "id": "podcast_macy__lumina_core_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0034891366958618164,
+        "M3": 0.006814495970805486,
+        "M4": null,
+        "M5": 0.004218090558424592
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/lumina_core_cap06_mask.png"
+    },
+    {
+      "id": "podcast_macy__lumina_core_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0548233799636364,
+        "M3": null,
+        "M4": null,
+        "M5": 0.006059346642966072
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_macy/lumina_core_cap10.png"
+    },
+    {
+      "id": "podcast_macy__lumina_core_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.010018764063715935,
+        "M3": 0.019507197042306263,
+        "M4": null,
+        "M5": 0.006059346642966072
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/lumina_core_cap10_mask.png"
+    },
+    {
+      "id": "podcast_macy__voice_flow_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.002829912273834149,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0006889820797368884
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/voice_flow_cap03.png"
+    },
+    {
+      "id": "podcast_macy__voice_flow_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0009898584879313905,
+        "M3": 0.0008782744795704881,
+        "M4": null,
+        "M5": 0.0006889820797368884
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/voice_flow_cap03_mask.png"
+    },
+    {
+      "id": "podcast_macy__voice_flow_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.008013274054974318,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0018442037981003523
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/voice_flow_cap06.png"
+    },
+    {
+      "id": "podcast_macy__voice_flow_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0034542533879478774,
+        "M3": 0.003177129508306583,
+        "M4": null,
+        "M5": 0.0018442037981003523
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/voice_flow_cap06_mask.png"
+    },
+    {
+      "id": "podcast_macy__voice_flow_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.01320317511757215,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0029969393896559873
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_macy/voice_flow_cap10.png"
+    },
+    {
+      "id": "podcast_macy__voice_flow_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.006902741113056739,
+        "M3": 0.006665373686701059,
+        "M4": null,
+        "M5": 0.0029969393896559873
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/voice_flow_cap10_mask.png"
+    },
+    {
+      "id": "podcast_macy__speech_focus_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 6.13918795503802e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.698058132315055e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/speech_focus_cap03.png"
+    },
+    {
+      "id": "podcast_macy__speech_focus_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 3.926875535853469e-07,
+        "M3": 2.788534345654625e-07,
+        "M4": null,
+        "M5": 6.698058132315055e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/speech_focus_cap03_mask.png"
+    },
+    {
+      "id": "podcast_macy__speech_focus_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 6.14165628576302e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.698082870570943e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/speech_focus_cap06.png"
+    },
+    {
+      "id": "podcast_macy__speech_focus_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 3.930166201371321e-07,
+        "M3": 2.790112697918327e-07,
+        "M4": null,
+        "M5": 6.698082870570943e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/speech_focus_cap06_mask.png"
+    },
+    {
+      "id": "podcast_macy__speech_focus_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 6.14165628576302e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.698082870570943e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_macy/speech_focus_cap10.png"
+    },
+    {
+      "id": "podcast_macy__speech_focus_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 3.930166201371321e-07,
+        "M3": 2.790112697918327e-07,
+        "M4": null,
+        "M5": 6.698082870570943e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/speech_focus_cap10_mask.png"
+    },
+    {
+      "id": "podcast_macy__neon_wave_circle_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0006121631595306098,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0004383029493813713
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/neon_wave_circle_cap03.png"
+    },
+    {
+      "id": "podcast_macy__neon_wave_circle_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 8.956235493921365e-05,
+        "M3": 0.00011920634763858591,
+        "M4": null,
+        "M5": 0.0004383029493813713
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/neon_wave_circle_cap03_mask.png"
+    },
+    {
+      "id": "podcast_macy__neon_wave_circle_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0022935660866399608,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0014598257839679718
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/neon_wave_circle_cap06.png"
+    },
+    {
+      "id": "podcast_macy__neon_wave_circle_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.00041667076099353534,
+        "M3": 0.0005481235178497931,
+        "M4": null,
+        "M5": 0.0014598257839679718
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/neon_wave_circle_cap06_mask.png"
+    },
+    {
+      "id": "podcast_macy__neon_wave_circle_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0046594867793222266,
+        "M3": null,
+        "M4": null,
+        "M5": 0.002940293944751223
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_macy/neon_wave_circle_cap10.png"
+    },
+    {
+      "id": "podcast_macy__neon_wave_circle_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0011751793790608644,
+        "M3": 0.00157504059219112,
+        "M4": null,
+        "M5": 0.002940293944751223
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/neon_wave_circle_cap10_mask.png"
+    },
+    {
+      "id": "podcast_macy__pulsing_core_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0030581181248029075,
+        "M3": null,
+        "M4": null,
+        "M5": 0.00048676086104630184
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/pulsing_core_cap03.png"
+    },
+    {
+      "id": "podcast_macy__pulsing_core_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0001817955392956113,
+        "M3": 0.00038609831244684756,
+        "M4": null,
+        "M5": 0.00048676086104630184
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/pulsing_core_cap03_mask.png"
+    },
+    {
+      "id": "podcast_macy__pulsing_core_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.007948500414689382,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0010192696354351938
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_macy/pulsing_core_cap06.png"
+    },
+    {
+      "id": "podcast_macy__pulsing_core_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0007288400277805825,
+        "M3": 0.0015527671203017235,
+        "M4": null,
+        "M5": 0.0010192696354351938
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/pulsing_core_cap06_mask.png"
+    },
+    {
+      "id": "podcast_macy__pulsing_core_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.014053065329790115,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0017966922411384683
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_macy/pulsing_core_cap10.png"
+    },
+    {
+      "id": "podcast_macy__pulsing_core_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_macy",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0017875823347518842,
+        "M3": 0.0038049352976183095,
+        "M4": null,
+        "M5": 0.0017966922411384683
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_macy/pulsing_core_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__spectrum_bars_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.004967979931583007,
+        "M3": null,
+        "M4": null,
+        "M5": 0.00192177733212399
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/spectrum_bars_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla__spectrum_bars_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0026347856037318707,
+        "M3": 0.0015422033999736111,
+        "M4": null,
+        "M5": 0.00192177733212399
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/spectrum_bars_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__spectrum_bars_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.019771697620550793,
+        "M3": null,
+        "M4": null,
+        "M5": 0.00647971216433992
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/spectrum_bars_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla__spectrum_bars_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.012295572397609552,
+        "M3": 0.007124404888600111,
+        "M4": null,
+        "M5": 0.00647971216433992
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/spectrum_bars_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__spectrum_bars_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.041789582620064415,
+        "M3": null,
+        "M4": null,
+        "M5": 0.011772870396574339
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla/spectrum_bars_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla__spectrum_bars_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.029916218171517055,
+        "M3": 0.017111395796140034,
+        "M4": null,
+        "M5": 0.011772870396574339
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/spectrum_bars_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__lumina_core_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.00990222425510486,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0018001656862907112
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/lumina_core_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla__lumina_core_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0004802874270050476,
+        "M3": 0.0009306582505814731,
+        "M4": null,
+        "M5": 0.0018001656862907112
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/lumina_core_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__lumina_core_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.033416240165630974,
+        "M3": null,
+        "M4": null,
+        "M5": 0.004220411530695856
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/lumina_core_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla__lumina_core_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0023242285630355277,
+        "M3": 0.004518114185581605,
+        "M4": null,
+        "M5": 0.004220411530695856
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/lumina_core_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__lumina_core_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.05693719660242399,
+        "M3": null,
+        "M4": null,
+        "M5": 0.005212953469405572
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla/lumina_core_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla__lumina_core_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.007617099986722072,
+        "M3": 0.014802449693282446,
+        "M4": null,
+        "M5": 0.005212953469405572
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/lumina_core_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__voice_flow_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.002802922778452436,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0011563230752168845
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/voice_flow_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla__voice_flow_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0009384702037399014,
+        "M3": 0.0008428862978083392,
+        "M4": null,
+        "M5": 0.0011563230752168845
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/voice_flow_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__voice_flow_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.008122684123615423,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0031201995831603804
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/voice_flow_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla__voice_flow_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0033401059918105602,
+        "M3": 0.003091697193061312,
+        "M4": null,
+        "M5": 0.0031201995831603804
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/voice_flow_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__voice_flow_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.014020165428519249,
+        "M3": null,
+        "M4": null,
+        "M5": 0.004946671038245161
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla/voice_flow_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla__voice_flow_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.007039058953523636,
+        "M3": 0.006827741861343384,
+        "M4": null,
+        "M5": 0.004946671038245161
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/voice_flow_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__speech_focus_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 4.627838829189083e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.685108382953331e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/speech_focus_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla__speech_focus_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 2.9585258213652804e-07,
+        "M3": 2.2139261564764942e-07,
+        "M4": null,
+        "M5": 6.685108382953331e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/speech_focus_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__speech_focus_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 4.627838829189083e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.685108382953331e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/speech_focus_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla__speech_focus_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 2.9585258213652804e-07,
+        "M3": 2.2139261564764942e-07,
+        "M4": null,
+        "M5": 6.685108382953331e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/speech_focus_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__speech_focus_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 4.627838829189083e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.685108382953331e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla/speech_focus_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla__speech_focus_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 2.9585258213652804e-07,
+        "M3": 2.2139261564764942e-07,
+        "M4": null,
+        "M5": 6.685108382953331e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/speech_focus_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__neon_wave_circle_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0004120834734446059,
+        "M3": null,
+        "M4": null,
+        "M5": 0.00037800650655602414
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/neon_wave_circle_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla__neon_wave_circle_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 5.799470697335588e-05,
+        "M3": 7.775748720935856e-05,
+        "M4": null,
+        "M5": 0.00037800650655602414
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/neon_wave_circle_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__neon_wave_circle_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.001746317488141358,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0014146113535389304
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/neon_wave_circle_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla__neon_wave_circle_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.00026764889965609956,
+        "M3": 0.0003500408395969619,
+        "M4": null,
+        "M5": 0.0014146113535389304
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/neon_wave_circle_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__neon_wave_circle_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.003795057845612367,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0030886397774641714
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla/neon_wave_circle_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla__neon_wave_circle_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0007850765250623226,
+        "M3": 0.001042454969137907,
+        "M4": null,
+        "M5": 0.0030886397774641714
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/neon_wave_circle_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__pulsing_core_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.00263698756073912,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0003268837899668142
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/pulsing_core_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla__pulsing_core_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.00013410827280798307,
+        "M3": 0.0002852066633446763,
+        "M4": null,
+        "M5": 0.0003268837899668142
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/pulsing_core_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__pulsing_core_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.007076909299939871,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0007892270223237574
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla/pulsing_core_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla__pulsing_core_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0005704552944128712,
+        "M3": 0.0012184391962364316,
+        "M4": null,
+        "M5": 0.0007892270223237574
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/pulsing_core_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla__pulsing_core_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.012819974372784296,
+        "M3": null,
+        "M4": null,
+        "M5": 0.001396409924685334
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla/pulsing_core_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla__pulsing_core_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0014445241540670395,
+        "M3": 0.00308858680849274,
+        "M4": null,
+        "M5": 0.001396409924685334
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla/pulsing_core_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__spectrum_bars_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.004471001370499532,
+        "M3": null,
+        "M4": null,
+        "M5": 0.003321502124890685
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/spectrum_bars_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__spectrum_bars_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.002522711098815004,
+        "M3": 0.0013321488707636793,
+        "M4": null,
+        "M5": 0.003321502124890685
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/spectrum_bars_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__spectrum_bars_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.018551450843612354,
+        "M3": null,
+        "M4": null,
+        "M5": 0.012210588281353315
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/spectrum_bars_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__spectrum_bars_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.011472938892741999,
+        "M3": 0.006247546834250291,
+        "M4": null,
+        "M5": 0.012210588281353315
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/spectrum_bars_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__spectrum_bars_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.040415745228528976,
+        "M3": null,
+        "M4": null,
+        "M5": 0.024431797365347546
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/spectrum_bars_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__spectrum_bars_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "spectrum_bars",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.027828007315595944,
+        "M3": 0.015688933432102203,
+        "M4": null,
+        "M5": 0.024431797365347546
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/spectrum_bars_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__lumina_core_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.009141046398629745,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0011855440679937601
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/lumina_core_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__lumina_core_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0005500728536086777,
+        "M3": 0.001067198347300291,
+        "M4": null,
+        "M5": 0.0011855440679937601
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/lumina_core_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__lumina_core_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.026645300288995106,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0042639237362891436
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/lumina_core_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__lumina_core_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.002561488149998089,
+        "M3": 0.004972622108956178,
+        "M4": null,
+        "M5": 0.0042639237362891436
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/lumina_core_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__lumina_core_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.04528078933556875,
+        "M3": null,
+        "M4": null,
+        "M5": 0.006431034300476313
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/lumina_core_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__lumina_core_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "lumina_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.007540701422840357,
+        "M3": 0.014599027733008066,
+        "M4": null,
+        "M5": 0.006431034300476313
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/lumina_core_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__voice_flow_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0026622552735110125,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0006173216194535295
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/voice_flow_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__voice_flow_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0009021032407569388,
+        "M3": 0.0008100770258655151,
+        "M4": null,
+        "M5": 0.0006173216194535295
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/voice_flow_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__voice_flow_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.007759408249209325,
+        "M3": null,
+        "M4": null,
+        "M5": 0.001650248149720331
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/voice_flow_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__voice_flow_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.003215279352540771,
+        "M3": 0.0029806237823019424,
+        "M4": null,
+        "M5": 0.001650248149720331
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/voice_flow_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__voice_flow_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.013059065056343874,
+        "M3": null,
+        "M4": null,
+        "M5": 0.002575918488825361
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/voice_flow_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__voice_flow_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "voice_flow",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0066087910284598666,
+        "M3": 0.006412707269191742,
+        "M4": null,
+        "M5": 0.002575918488825361
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/voice_flow_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__speech_focus_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 5.11982941967896e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.688868597848341e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/speech_focus_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__speech_focus_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 3.355902814898097e-07,
+        "M3": 2.419609425411788e-07,
+        "M4": null,
+        "M5": 6.688868597848341e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/speech_focus_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__speech_focus_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 5.11982941967896e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.688868597848341e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/speech_focus_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__speech_focus_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 3.355902814898097e-07,
+        "M3": 2.419609425411788e-07,
+        "M4": null,
+        "M5": 6.688868597848341e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/speech_focus_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__speech_focus_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 5.11982941967896e-07,
+        "M3": null,
+        "M4": null,
+        "M5": 6.688868597848341e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/speech_focus_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__speech_focus_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "speech_focus",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 3.355902814898097e-07,
+        "M3": 2.419609425411788e-07,
+        "M4": null,
+        "M5": 6.688868597848341e-05
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/speech_focus_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__neon_wave_circle_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.00041106757513868314,
+        "M3": null,
+        "M4": null,
+        "M5": 0.00031342110014520586
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/neon_wave_circle_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__neon_wave_circle_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 6.278169409294303e-05,
+        "M3": 8.304190123453736e-05,
+        "M4": null,
+        "M5": 0.00031342110014520586
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/neon_wave_circle_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__neon_wave_circle_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0016397279299174745,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0011132618722816308
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/neon_wave_circle_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__neon_wave_circle_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0002832896279869601,
+        "M3": 0.0003682781825773418,
+        "M4": null,
+        "M5": 0.0011132618722816308
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/neon_wave_circle_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__neon_wave_circle_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.0035129436291754246,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0024575574789196253
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/neon_wave_circle_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__neon_wave_circle_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "neon_wave_circle",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.000801284001984944,
+        "M3": 0.001058276859112084,
+        "M4": null,
+        "M5": 0.0024575574789196253
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/neon_wave_circle_cap10_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__pulsing_core_cap03",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": false,
+      "metrics": {
+        "M1": 0.002496234296510617,
+        "M3": null,
+        "M4": null,
+        "M5": 0.00032510373178714264
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/pulsing_core_cap03.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__pulsing_core_cap03_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.3,
+      "mask": true,
+      "metrics": {
+        "M1": 0.00014700982137583196,
+        "M3": 0.0003123184821257989,
+        "M4": null,
+        "M5": 0.00032510373178714264
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.3 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/pulsing_core_cap03_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__pulsing_core_cap06",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": false,
+      "metrics": {
+        "M1": 0.006516332893321912,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0008367569535039365
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/pulsing_core_cap06.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__pulsing_core_cap06_mask",
+      "good": true,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 0.6,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0005903968315881988,
+        "M3": 0.0012585152095804613,
+        "M4": null,
+        "M5": 0.0008367569535039365
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=0.6 <= 0.6 -> good; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/pulsing_core_cap06_mask.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__pulsing_core_cap10",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": false,
+      "metrics": {
+        "M1": 0.011626879995067915,
+        "M3": null,
+        "M4": null,
+        "M5": 0.0017731185459221404
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske keine.",
+      "frame": "frames/podcast_gorilla_mid/pulsing_core_cap10.png"
+    },
+    {
+      "id": "podcast_gorilla_mid__pulsing_core_cap10_mask",
+      "good": false,
+      "human_label": null,
+      "audio": "podcast_gorilla_mid",
+      "mode": "podcast",
+      "visualizer": "pulsing_core",
+      "alpha_cap": 1.0,
+      "mask": true,
+      "metrics": {
+        "M1": 0.0014481993857771158,
+        "M3": 0.003085657022893429,
+        "M4": null,
+        "M5": 0.0017731185459221404
+      },
+      "construction_note": "Konstruktions-Label: alpha_cap=1.0 > 0.6 -> bad; Maske Zentrums-Gauß.",
+      "frame": "frames/podcast_gorilla_mid/pulsing_core_cap10_mask.png"
     }
   ]
 }

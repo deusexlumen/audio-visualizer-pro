@@ -1,0 +1,47 @@
+{
+  "version": "golden-corpus/1",
+  "audios": [
+    {
+      "id": "music_severance",
+      "path": "audio/music_severance.m4a",
+      "mode": "music",
+      "description": "Aggressiver Electronica-Album-Opener, treibende Beats, viele Transienten.",
+      "source": "output/01 - Severance.mp4, Audiospur 30-120s (eigene Produktion Deus ex Lumen)"
+    },
+    {
+      "id": "music_dunkelheit",
+      "path": "audio/music_dunkelheit.m4a",
+      "mode": "music",
+      "description": "Dunkler, ruhigerer Track — wenig Transienten, Flächen; Gegenpol zu Severance.",
+      "source": "output/12 - Dunkelheit.mp4, Audiospur 30-120s"
+    },
+    {
+      "id": "music_velvet",
+      "path": "audio/music_velvet.m4a",
+      "mode": "music",
+      "description": "Midtempo-Electronica mit melodischen Flächen, längster Track.",
+      "source": "output/13 - Velvet Pressure.mp4, Audiospur 30-120s"
+    },
+    {
+      "id": "podcast_macy",
+      "path": "audio/podcast_macy.m4a",
+      "mode": "podcast",
+      "description": "Deutschsprachiger Monolog/Vortrag, Studiomikro, ruhiges Sprechen (bisherige Golden-Set-Referenz).",
+      "source": "assets/user_uploads/Die_Macy-Stiftung_als_Fundament_der_Kontrolle.m4a, 60-150s"
+    },
+    {
+      "id": "podcast_gorilla",
+      "path": "audio/podcast_gorilla.m4a",
+      "mode": "podcast",
+      "description": "Eigene Podcast-Episode (aus projects/podcast.json), Einstiegspassage.",
+      "source": "Downloads/Digitale_Gorilla-Taktiken_gegen_den_KI-Müll.m4a, 60-150s"
+    },
+    {
+      "id": "podcast_gorilla_mid",
+      "path": "audio/podcast_gorilla_mid.m4a",
+      "mode": "podcast",
+      "description": "Mittlerer Abschnitt derselben Episode — andere Passage/Dynamik. Limitation: gleiche Stimmen wie podcast_gorilla; Korpus soll mit künftigen Episoden wachsen.",
+      "source": "Downloads/Digitale_Gorilla-Taktiken_gegen_den_KI-Müll.m4a, Mitte der Episode, 90s"
+    }
+  ]
+}
