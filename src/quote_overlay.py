@@ -16,6 +16,21 @@ from pathlib import Path
 from .gemini_integration import Quote
 
 
+def _normalize_color(value):
+    """Normalisiert eine Farbe zu einem RGB(A)-Tupel.
+
+    JSON-Configs liefern Farben als Hex-String ("#RRGGBB"/"#RRGGBBAA")
+    oder als Liste; die Runtime erwartet Tupel von Ints.
+    """
+    if isinstance(value, str):
+        v = value.lstrip("#")
+        if len(v) not in (6, 8):
+            raise ValueError(f"Ungueltige Hex-Farbe: {value!r}")
+        comps = [int(v[i:i + 2], 16) for i in range(0, len(v), 2)]
+        return tuple(comps)
+    return tuple(value)
+
+
 @dataclass
 class QuoteOverlayConfig:
     """Konfiguration fuer Quote Overlays."""
@@ -68,6 +83,14 @@ class QuoteOverlayConfig:
     offset_x: int = 0       # Horizontaler Offset in Pixeln (negativ = links, positiv = rechts)
     offset_y: int = 0       # Vertikaler Offset in Pixeln (negativ = oben, positiv = unten)
     scale: float = 1.0      # Skalierungsfaktor (0.5 = halbe Groesse, 2.0 = doppelte Groesse)
+
+    def __post_init__(self):
+        # Farben aus JSON-Configs (Hex-String/Liste) in RGB(A)-Tupel normalisieren
+        self.font_color = _normalize_color(self.font_color)
+        self.box_color = _normalize_color(self.box_color)
+        self.shadow_color = _normalize_color(self.shadow_color)
+        self.text_shadow_color = _normalize_color(self.text_shadow_color)
+        self.accent_line_color = _normalize_color(self.accent_line_color)
 
 
 class QuoteOverlayRenderer:

@@ -1,263 +1,256 @@
 """
-GPU-beschleunigte Liquid Blobs / MetaBalls.
+Liquid Blobs — Plasma-Metaballs (GPU, SDF-basiert).
 
-Blobs als instanced Quads mit Glow, Verbindungslinien zwischen nahen Blobs,
-Beat-Ringe und Highlights.
+6-10 organische Metaballs, die ueber smooth-min verschmelzen und sich wieder
+trennen — wie fluessige Lichttropfen. Transluzent/leuchtend, additiver
+Charakter, dunkler Hintergrund (keine Vollflaeche, Hintergrundbild-freundlich).
+
+Feature-Mapping:
+- Bass/Onset/Beat: Pulsation + beat-synchron wachsender smooth-min-Radius
+  (staerkeres Verschmelzen)
+- spectral_centroid (Treble): feine Oberflaechen-Textur/Shimmer (FBM-Amplitude)
+- RMS/Energy: Bewegungsgeschwindigkeit + Blob-Groesse + Kern-Helligkeit
+- Chroma: Farbbasis, Verlauf Primaer -> Sekundaer pro Blob
+
+Sprach-Modus: gleiche Optik, andere Empfindlichkeit — langsames Atmen
+gesteuert von voice_band, Betonungen blühen sanft auf, Pausen fast reglos.
 """
 
 import numpy as np
 import moderngl
-from .base import BaseGPUVisualizer
+from .base import (
+    BaseGPUVisualizer,
+    FULLSCREEN_VERTEX_SHADER,
+    LYGIA_MATH_GLSL,
+    LYGIA_NOISE_GLSL,
+    LYGIA_SDF_GLSL,
+    SHADER_COMMON_GLSL,
+    compose_fragment,
+    create_fullscreen_quad,
+)
 
 
 class LiquidBlobsGPU(BaseGPUVisualizer):
     """
-    Flüssige Blob-Visualisierung mit MetaBall-aehnlichem Rendering.
+    Plasma-Metaballs: verschmelzende, transluzente Licht-Blobs (SDF/smin).
     """
 
     PARAMS = {
-        'blob_count': (6, 3, 12, 1),
-        'fluidity': (0.7, 0.1, 1.0, 0.1),
-        'blob_base_radius': (60.0, 20.0, 150.0, 5.0),
-        'radius_variation': (40.0, 0.0, 100.0, 5.0),
-        'connection_distance': (1.2, 0.5, 3.0, 0.1),
-        'ring_count': (3, 0, 8, 1),
-        'ring_base_radius': (100.0, 50.0, 300.0, 10.0),
-        'ring_spacing': (80.0, 20.0, 200.0, 5.0),
+        'blob_count': (7, 4, 10, 1),
+        'blob_size': (0.17, 0.06, 0.35, 0.01),
+        'fluidity': (0.8, 0.1, 2.0, 0.05),
+        'merge_strength': (1.0, 0.2, 3.0, 0.05),
+        'pulse_strength': (0.7, 0.0, 1.5, 0.05),
+        'shimmer': (0.6, 0.0, 1.5, 0.05),
+        'glow_strength': (0.8, 0.0, 2.0, 0.05),
+        'color_spread': (0.6, 0.0, 1.0, 0.05),
     }
 
+    PARAMS_GROUPS = {
+        "Blobs": ["blob_count", "blob_size", "fluidity"],
+        "Verschmelzung & Puls": ["merge_strength", "pulse_strength"],
+        "Textur & Glow": ["shimmer", "glow_strength"],
+        "Farben": ["color_spread"],
+    }
+
+    # Maximale Blob-Anzahl (muss mit GLSL-Loop-Grenze uebereinstimmen)
+    MAX_BLOBS = 10
+
     def _setup(self):
-        """Initialisiere Shader und VBOs."""
-        # --- Blob-Shader (instanced Quads mit weichem Rand) ---
-        self._blob_prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
+        """Fullscreen-Quad + Metaball-Shader erstellen."""
+        fragment = compose_fragment(
+            """
             uniform vec2 u_resolution;
-            in vec2 in_vertex_pos;
-            in vec2 in_blob_pos;
-            in vec3 in_color;
-            in float in_size;
-            in float in_alpha;
-            out vec3 v_color;
-            out float v_alpha;
-            out vec2 v_local;
-            void main() {
-                vec2 pixel_pos = in_blob_pos + in_vertex_pos * in_size;
-                vec2 ndc = (pixel_pos / u_resolution) * 2.0 - 1.0;
-                ndc.y = -ndc.y;
-                gl_Position = vec4(ndc, 0.0, 1.0);
-                v_color = in_color;
-                v_alpha = in_alpha;
-                v_local = in_vertex_pos;
-            }
-            """,
-            fragment_shader="""
-            #version 330
+            uniform float u_time;          // akkumulierte Simulationszeit (CPU)
+            uniform float u_energy;        // Musik: RMS | Sprache: voice_band
+            uniform float u_beat;          // Beat-/Betonungs-Envelope
+            uniform float u_detail;        // Treble (spectral_centroid)
+            uniform vec3 u_color;          // Primaerfarbe (Chroma)
+            uniform vec3 u_secondary_color;
+            uniform vec3 u_background_color;
+            uniform float u_blob_count;
+            uniform float u_blob_size;
+            uniform float u_merge;         // smooth-min-Basisradius
+            uniform float u_pulse;         // Staerke der Beat-Pulsation
+            uniform float u_shimmer;       // FBM-Oberflaechentextur
+            uniform float u_glow;          // Halo-/Glow-Staerke
+            uniform float u_color_spread;  // Farbmischung Primaer->Sekundaer
             uniform float u_brightness;
-            in vec3 v_color;
-            in float v_alpha;
-            in vec2 v_local;
+
             out vec4 f_color;
+
+            // Polynomielles smooth-min (IQ): k = Verschmelzungsradius
+            float smin(float a, float b, float k) {
+                float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+                return mix(b, a, h) - k * h * (1.0 - h);
+            }
+
             void main() {
-                float dist = length(v_local);
-                if (dist > 1.0) discard;
-                float core = 1.0 - smoothstep(0.0, 0.6, dist);
-                float glow = exp(-dist * dist * 3.0);
-                vec3 col = v_color * (core + glow * 0.5) * u_brightness;
-                float alpha = (core * 0.95 + glow * 0.4) * v_alpha;
-                f_color = vec4(col, alpha);
+                vec2 uv = (gl_FragCoord.xy / u_resolution) * 2.0 - 1.0;
+                float aspect = u_resolution.x / u_resolution.y;
+                uv.x *= aspect;
+
+                // Hintergrund: sehr dunkel, transparent-freundlich (Luma-Alpha)
+                vec3 col = u_background_color * 0.15;
+
+                // smooth-min-Radius waechst beat-synchron -> staerkeres Verschmelzen
+                float k = u_merge * (0.06 + 0.05 * u_energy + 0.22 * u_beat * u_pulse);
+
+                // === Metaball-Feld aufbauen ===
+                float d = 1e5;
+                vec3 wcol = vec3(0.0);
+                float wsum = 0.0;
+                int n = int(u_blob_count + 0.5);
+                for (int i = 0; i < 10; i++) {
+                    if (i >= n) break;
+                    float fi = float(i);
+                    // Deterministische, pro Blob stabile Zufaellswerte
+                    vec3 h = vec3(hash12(vec2(fi, 1.7)),
+                                  hash12(vec2(fi, 5.3)),
+                                  hash12(vec2(fi, 9.9)));
+
+                    // Organische Orbits (goldener Winkel streut die Phasen)
+                    float spd = 0.20 + 0.45 * h.x;
+                    float ph1 = fi * 2.39996 + h.y * 6.2831;
+                    float ph2 = fi * 1.73205 + h.z * 6.2831;
+                    vec2 c = vec2(sin(u_time * spd + ph1) * (0.28 + 0.34 * h.y) * aspect,
+                                  cos(u_time * spd * 0.83 + ph2) * (0.28 + 0.34 * h.z));
+
+                    // Groesse: Basis * Energie * individueller Beat-Versatz
+                    float pulse = 1.0 + u_pulse * u_beat
+                                  * (0.5 + 0.5 * sin(fi * 1.93 + u_time * 2.0));
+                    float r = u_blob_size * (0.55 + 0.55 * h.z)
+                              * (0.75 + 0.5 * u_energy) * pulse;
+
+                    float di = sdCircle(uv - c, r);
+                    d = smin(d, di, k);
+
+                    // Farbe einflussgewichtet mischen (weiche Farbverlaeufe)
+                    float w = (r * r) / (di * di + 0.02);
+                    wcol += mix(u_color, u_secondary_color, h.x * u_color_spread) * w;
+                    wsum += w;
+                }
+                vec3 blobCol = wcol / max(wsum, 1e-4);
+
+                // === Treble-Shimmer: FBM verzerrt die Oberflaeche ===
+                float shAmp = u_shimmer * (0.015 + 0.09 * u_detail);
+                float nz = fbm(uv * 4.0 + vec2(u_time * 0.4, -u_time * 0.3), 4) - 0.5;
+                float dd = d + nz * shAmp;
+
+                // === Koerper: weiche Kante, innerer Verlauf (HDR) ===
+                float body = aafill(dd);
+                // Kern-Normierung knapp unter Blob-Radius: der Mittelpunkt
+                // erreicht inside ~1 und ist damit die hellste Stelle
+                float inside = clamp(-dd / (u_blob_size * 0.75 + k), 0.0, 1.0);
+                vec3 inner = blobCol * (0.45 + 2.6 * pow(inside, 1.1)
+                                        * (0.55 + 0.65 * u_energy
+                                           + 0.55 * u_beat * u_pulse));
+                // Feine innere Textur (Treble-sichtbar)
+                inner *= 0.85 + 0.30 * fbm(uv * 9.0 - u_time * 0.2, 3);
+                col += inner * body;
+
+                // === Leuchtende Kante / Glow an Verschmelzungsstellen ===
+                // Die smin-Kontur hellt bei wachsendem k auf -> Beat-Glow
+                // Bewusst schwaecher als der Kern — sonst wirken die Blobs hohl
+                float rim = exp(-abs(dd) * 26.0);
+                col += blobCol * rim * (0.15 + 0.35 * u_beat * u_pulse)
+                       * (0.5 + 4.0 * k);
+
+                // === Aeusserer Halo (additiv, transluzent) ===
+                float halo = exp(-max(dd, 0.0) * 5.0) * u_glow;
+                col += blobCol * halo * (0.20 + 0.45 * u_energy);
+
+                // HDR-Ausgabe: kein clamp — ACES-Tonemapping macht der Renderer.
+                col = max(col, 0.0) * u_brightness;
+                // Triangular-Dithering gegen Banding bei 8-Bit-Quantisierung
+                col += ditherTriangular(gl_FragCoord.xy, fract(u_time));
+
+                f_color = vec4(col, 1.0);
             }
             """,
+            includes=(LYGIA_MATH_GLSL, LYGIA_NOISE_GLSL, LYGIA_SDF_GLSL,
+                      SHADER_COMMON_GLSL),
         )
 
-        # --- Line-Shader (Verbindungen + Beat-Ringe) ---
-        self._line_prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
-            uniform vec2 u_resolution;
-            in vec2 in_pos;
-            in vec3 in_color;
-            in float in_alpha;
-            out vec3 v_color;
-            out float v_alpha;
-            void main() {
-                vec2 ndc = (in_pos / u_resolution) * 2.0 - 1.0;
-                ndc.y = -ndc.y;
-                gl_Position = vec4(ndc, 0.0, 1.0);
-                v_color = in_color;
-                v_alpha = in_alpha;
-            }
-            """,
-            fragment_shader="""
-            #version 330
-            uniform float u_brightness;
-            in vec3 v_color;
-            in float v_alpha;
-            out vec4 f_color;
-            void main() { f_color = vec4(v_color * u_brightness, v_alpha); }
-            """,
+        self._prog = self.ctx.program(
+            vertex_shader=FULLSCREEN_VERTEX_SHADER,
+            fragment_shader=fragment,
         )
+        self._vao, self._vbo = create_fullscreen_quad(self.ctx, self._prog)
 
-        quad = np.array([[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]], dtype=np.float32)
-        self._quad_vbo = self.ctx.buffer(quad.tobytes())
-
-        max_blobs = 12
-        self._max_instances = max_blobs * 3  # Blob + Highlight + Glow
-        self._blob_data = np.zeros((self._max_instances, 7), dtype=np.float32)
-        self._blob_vbo = self.ctx.buffer(reserve=self._max_instances * 7 * 4, dynamic=True)
-        self._blob_vao = self.ctx.vertex_array(
-            self._blob_prog,
-            [
-                (self._quad_vbo, "2f", "in_vertex_pos"),
-                (self._blob_vbo, "2f 3f 1f 1f /i", "in_blob_pos", "in_color", "in_size", "in_alpha"),
-            ],
-        )
-
-        self._max_line_verts = 2000
-        self._line_vbo = self.ctx.buffer(reserve=self._max_line_verts * 6 * 4, dynamic=True)
-        self._line_vao = self.ctx.vertex_array(
-            self._line_prog,
-            [(self._line_vbo, "2f 3f 1f", "in_pos", "in_color", "in_alpha")],
-        )
-
-        self._init_blobs()
+        # Simulationszustand (deterministisch: nur aus Frame-Sequenz abgeleitet)
+        self._sim_time = 0.0      # akkumulierte, geschwindigkeitsgesteuerte Zeit
+        self._last_time = None    # letzter Zeitstempel fuer dt
+        self._energy_s = 0.0      # EMA-geglaettete Energie
 
     def _on_params_changed(self):
-        self._init_blobs()
-
-    def _init_blobs(self):
-        """Initialisiere Blob-Positionen und Eigenschaften."""
-        count = int(self.params["blob_count"])
-        base_radius = self.params["blob_base_radius"]
-        radius_variation = self.params["radius_variation"]
-        self._blobs = []
-        for i in range(count):
-            self._blobs.append({
-                "base_radius": base_radius + np.random.random() * radius_variation,
-                "phase": np.random.random() * np.pi * 2.0,
-                "x": 0.0,
-                "y": 0.0,
-                "current_radius": 0.0,
-                "color": (0.6, 0.6, 0.6),
-            })
-
-    def _shift_hue(self, rgb, shift):
-        """Verschiebt den Hue eines RGB-Tupels um shift (0.0-1.0)."""
-        h, s, v = self._rgb_to_hsv(*rgb)
-        return self._hsv_to_rgb((h + shift) % 1.0, s, v)
+        # Alle Parameter werden pro Frame gelesen — kein Rebuild noetig.
+        pass
 
     def render(self, features: dict, time: float):
-        """Rendert Blobs, Verbindungen, Beat-Ringe und Highlights."""
-        frame_idx = int(time * features.get("fps", 30))
-        f = self._get_feature_at_frame(features, frame_idx)
-        rms = f["rms"]
-        onset = f["onset"]
-        chroma = f["chroma"]
+        """Rendert einen Frame: Features -> Modus-Empfindlichkeit -> Uniforms."""
+        f = self._features_at_time(features, time)
+        mode = f.get("mode", "music")
 
-        base_color = self._chroma_to_color(chroma)
+        # === Modus = Empfindlichkeit, nicht Visualisierung ===
+        if mode == "speech":
+            # Sprache: ruhiges Atmen via voice_band, Betonung = sanftes Aufblühen
+            energy = f.get("voice_band", f["rms"])
+            beat = f.get("beat_intensity", f["onset"]) * 0.35
+            detail = f["spectral_centroid"] * 0.5
+            speed_base = 0.45          # deutlich langsamer
+            energy_gain = 0.8          # Pausen -> kleine, fast reglose Blobs
+        else:
+            # Musik: Beats, Onset, volle Treble-Textur
+            energy = f["rms"]
+            beat = max(f["onset"], f.get("beat_intensity", f["onset"]))
+            detail = f["spectral_centroid"]
+            speed_base = 1.0
+            energy_gain = 1.0
 
-        fluidity = self.params["fluidity"]
-        t = frame_idx * 0.02
+        # Leichte EMA-Glaettung gegen Frame-Jitter (deterministisch)
+        energy = energy * energy_gain
+        self._energy_s += (energy - self._energy_s) * 0.25
 
-        # --- Blob-Positionen aktualisieren ---
-        for i, blob in enumerate(self._blobs):
-            blob["phase"] += 0.01 + rms * 0.05 * fluidity
-            base_x = self.width / 2.0 + np.sin(t + i) * (self.width * 0.3)
-            base_y = self.height / 2.0 + np.cos(t * 0.7 + i * 1.3) * (self.height * 0.25)
-            noise_x = np.sin(t * 3.0 + i * 2.0) * rms * 100.0
-            noise_y = np.cos(t * 2.5 + i * 1.5) * rms * 100.0
-            blob["x"] = base_x + noise_x
-            blob["y"] = base_y + noise_y
-            blob["current_radius"] = blob["base_radius"] * (0.8 + rms * 0.6)
+        # Simulationszeit akkumulieren: Geschwindigkeit folgt der Energie,
+        # ohne dass Phasenspruenge im Shader entstehen.
+        if self._last_time is None:
+            dt = 0.0
+        else:
+            dt = max(0.0, min(time - self._last_time, 0.25))
+        self._last_time = time
+        speed = speed_base * self.params["fluidity"] * (0.35 + 0.85 * self._energy_s)
+        self._sim_time += dt * speed
 
-            blob["color"] = self._shift_hue(base_color, i * 0.15)
+        color = self._chroma_to_color(f["chroma"])
 
-        # --- Instanz-Array fuellen ---
-        instance_idx = 0
+        def _rgb_from_hex(value, default):
+            if isinstance(value, str) and value.startswith('#'):
+                try:
+                    return self._hex_to_rgb(value)
+                except Exception:
+                    pass
+            return default
 
-        for blob in self._blobs:
-            # Aeusserer Glow
-            if instance_idx < self._max_instances:
-                glow_color = tuple(max(0.0, c - 0.15) for c in blob["color"])
-                self._blob_data[instance_idx] = [
-                    blob["x"], blob["y"],
-                    glow_color[0], glow_color[1], glow_color[2],
-                    blob["current_radius"] + 25.0, 0.35
-                ]
-                instance_idx += 1
+        secondary = _rgb_from_hex(self.params.get("secondary_color"), (0.0, 0.8, 1.0))
+        background = _rgb_from_hex(self.params.get("background_color"), (0.02, 0.02, 0.04))
 
-            # Haupt-Blob
-            if instance_idx < self._max_instances:
-                self._blob_data[instance_idx] = [
-                    blob["x"], blob["y"],
-                    blob["color"][0], blob["color"][1], blob["color"][2],
-                    blob["current_radius"], 1.0
-                ]
-                instance_idx += 1
+        p = self._prog
+        p["u_resolution"].value = (self.width, self.height)
+        p["u_time"].value = self._sim_time
+        p["u_energy"].value = float(self._energy_s)
+        p["u_beat"].value = float(min(beat, 1.0))
+        p["u_detail"].value = float(detail)
+        p["u_color"].value = color
+        p["u_secondary_color"].value = secondary
+        p["u_background_color"].value = background
+        p["u_blob_count"].value = float(int(self.params["blob_count"]))
+        p["u_blob_size"].value = float(self.params["blob_size"])
+        p["u_merge"].value = float(self.params["merge_strength"])
+        p["u_pulse"].value = float(self.params["pulse_strength"])
+        p["u_shimmer"].value = float(self.params["shimmer"])
+        p["u_glow"].value = float(self.params["glow_strength"])
+        p["u_color_spread"].value = float(self.params["color_spread"])
+        p["u_brightness"].value = float(self.params["brightness"])
 
-            # Innerer Highlight
-            if instance_idx < self._max_instances:
-                hi_color = tuple(min(1.0, c + 0.1) for c in blob["color"])
-                offset = blob["current_radius"] * 0.3
-                self._blob_data[instance_idx] = [
-                    blob["x"] - offset, blob["y"] - offset,
-                    hi_color[0], hi_color[1], hi_color[2],
-                    blob["current_radius"] * 0.35, 0.8
-                ]
-                instance_idx += 1
-
-        # --- Verbindungslinien ---
-        line_verts = []
-        connection_distance = self.params["connection_distance"]
-        for i, b1 in enumerate(self._blobs):
-            for j, b2 in enumerate(self._blobs[i + 1:], i + 1):
-                dx = b1["x"] - b2["x"]
-                dy = b1["y"] - b2["y"]
-                dist = np.sqrt(dx * dx + dy * dy)
-                threshold = b1["current_radius"] + b2["current_radius"]
-                if dist < threshold * connection_distance:
-                    strength = 1.0 - (dist / (threshold * connection_distance))
-                    mixed = tuple((b1["color"][k] + b2["color"][k]) / 2.0 for k in range(3))
-                    alpha = strength * 0.6
-                    line_verts.append([b1["x"], b1["y"], *mixed, alpha])
-                    line_verts.append([b2["x"], b2["y"], *mixed, alpha])
-
-        # --- Beat-Ringe ---
-        if onset > 0.4:
-            cx, cy = self.width / 2.0, self.height / 2.0
-            ring_count = int(self.params["ring_count"])
-            ring_base = self.params["ring_base_radius"]
-            ring_spacing = self.params["ring_spacing"]
-            for i in range(ring_count):
-                radius = ring_base + i * ring_spacing + onset * 50.0
-                ring_color = self._shift_hue(base_color, i * 0.1)
-                alpha = onset * 0.4 * (1.0 - i / max(ring_count, 1))
-                segments = 48
-                for j in range(segments):
-                    a1 = (j / segments) * np.pi * 2.0
-                    a2 = ((j + 1) / segments) * np.pi * 2.0
-                    line_verts.append([cx + np.cos(a1) * radius, cy + np.sin(a1) * radius, *ring_color, alpha])
-                    line_verts.append([cx + np.cos(a2) * radius, cy + np.sin(a2) * radius, *ring_color, alpha])
-
-        # --- Rendern ---
-        self.ctx.enable(moderngl.BLEND)
-        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-
-        brightness = self.params.get("brightness", 1.0)
-        self._blob_prog["u_brightness"].value = brightness
-        self._line_prog["u_brightness"].value = brightness
-
-        # Verbindungen + Ringe (nur geschriebene Vertices rendern)
-        if line_verts:
-            arr = np.array(line_verts, dtype=np.float32)
-            self._line_prog["u_resolution"].value = (self.width, self.height)
-            self._line_vbo.write(arr.tobytes())
-            self._line_vao.render(mode=moderngl.LINES, vertices=len(line_verts))
-
-        # Blobs
-        if instance_idx > 0:
-            self._blob_prog["u_resolution"].value = (self.width, self.height)
-            self._blob_vbo.write(self._blob_data[:instance_idx].tobytes())
-            self._blob_vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_idx)
-
-        self.ctx.disable(moderngl.BLEND)
+        self._vao.render(mode=moderngl.TRIANGLE_STRIP)

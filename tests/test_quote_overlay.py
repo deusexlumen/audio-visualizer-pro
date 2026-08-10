@@ -418,3 +418,33 @@ class TestQuoteDisplayDuration:
         renderer = QuoteOverlayRenderer(quotes, config)
         result = renderer.apply(frame.copy(), time_seconds=2.0)
         assert np.any(result != frame)
+
+
+class TestHexColorNormalization:
+    """Hex-Farbstrings aus JSON-Configs muessen in RGB(A)-Tupel normalisiert werden."""
+
+    def test_hex_font_and_box_color_render(self):
+        """Hex-Strings duerfen nicht zu TypeError im Render fuehren."""
+        frame = create_test_frame()
+        quotes = [Quote(text="Test", start_time=1.0, end_time=5.0, confidence=1.0)]
+        config = QuoteOverlayConfig(
+            font_color="#FFFFFF",
+            box_color="#1A1A2E",
+            display_duration=4.0,
+            fade_duration=0.1,
+        )
+        renderer = QuoteOverlayRenderer(quotes, config)
+        result = renderer.apply(frame.copy(), time_seconds=2.0)
+        assert np.any(result != frame)
+
+    def test_hex_colors_become_tuples(self):
+        """Hex-Strings werden bei der Config-Erstellung zu Tupeln."""
+        config = QuoteOverlayConfig(font_color="#FF0055", box_color="#1A1A2E")
+        assert config.font_color == (255, 0, 85)
+        assert config.box_color == (26, 26, 46)
+
+    def test_list_colors_become_tuples(self):
+        """Listen aus JSON werden zu Tupeln."""
+        config = QuoteOverlayConfig(font_color=[255, 255, 255], box_color=[26, 26, 46, 200])
+        assert config.font_color == (255, 255, 255)
+        assert config.box_color == (26, 26, 46, 200)

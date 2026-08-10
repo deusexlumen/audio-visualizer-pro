@@ -160,10 +160,10 @@ def test_boolean_param_renders_as_checkbox(qtbot):
     panel = ParamsPanel(state)
     qtbot.addWidget(panel)
 
-    idx = panel.combo_viz.findText("particle_swarm")
+    idx = panel.combo_viz.findText("neon_oscilloscope")
     panel.combo_viz.setCurrentIndex(idx)
 
-    widget = _find_viz_param_widget(panel, "depth_enabled")
+    widget = _find_viz_param_widget(panel, "grid_enabled")
     assert isinstance(widget, QCheckBox)
     assert widget.isChecked()  # Default ist 1
 

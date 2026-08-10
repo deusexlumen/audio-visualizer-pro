@@ -412,22 +412,22 @@ Wichtige KI-Parameter pro Visualizer (siehe `PARAMS` in jeder Datei):
 
 | Visualizer | Parameter |
 |-----------|-----------|
-| pulsing_core | pulse_intensity, ring_count, glow_radius, bg_brightness |
+| pulsing_core | tunnel_speed, ring_density, bass_boost, treble_sparkle, hue_shift |
 | spectrum_bars | bar_count, height_scale, spacing, color_shift |
 | chroma_field | field_resolution, connection_dist, particle_size |
-| particle_swarm | particle_count, explosion_threshold, glow_size, trail_length |
-| typographic | bar_width, bar_spacing, animation_speed |
+| particle_swarm | particle_count, vortex_speed, shockwave_strength, sparkle, core_glow |
+| typographic | building_count, depth_layers, height_response, window_density, beat_flash |
 | neon_oscilloscope | line_thickness, trail_length, num_points, glow_radius |
 | sacred_mandala | rotation_speed |
-| liquid_blobs | blob_count, fluidity |
+| liquid_blobs | blob_count, fluidity, merge_strength, shimmer, pulse_strength |
 | neon_wave_circle | circle_count, wave_amplitude |
 | frequency_flower | num_petals, layer_count |
 | lumina_core | core_intensity, ring_count, noise_scale, glow_strength |
 | voice_flow | flow_speed, wave_depth, breathe_intensity, line_count |
 | spectrum_genesis | bar_count, wave_intensity, glow_radius, beat_flash |
-| speech_focus | line_thickness, vu_segments, response_speed, accent_color |
+| speech_focus | line_thickness, wave_amplitude, pulse_strength, calm_factor, accent_warmth, glow_strength, detail_texture |
 | bass_temple | bass_intensity, strobe_threshold, shockwave_speed |
-| orchestral_swell | swell_intensity, particle_count, dynamics_response |
+| orchestral_swell | curtain_count, swell_response, rise_speed, texture_detail, warmth |
 
 ### Audio-Analyse erweitern
 
