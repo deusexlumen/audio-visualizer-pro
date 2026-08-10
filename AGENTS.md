@@ -425,7 +425,7 @@ Wichtige KI-Parameter pro Visualizer (siehe `PARAMS` in jeder Datei):
 | lumina_core | core_intensity, ring_count, noise_scale, glow_strength |
 | voice_flow | flow_speed, wave_depth, breathe_intensity, line_count |
 | spectrum_genesis | bar_count, wave_intensity, glow_radius, beat_flash |
-| speech_focus | line_thickness, wave_amplitude, pulse_strength, calm_factor, accent_warmth, glow_strength, detail_texture |
+| speech_focus | line_thickness, wave_amplitude, pulse_strength, calm_factor, spectrum_response, spectrum_bins, band_fill |
 | bass_temple | bass_intensity, strobe_threshold, shockwave_speed |
 | orchestral_swell | curtain_count, swell_response, rise_speed, texture_detail, warmth |
 

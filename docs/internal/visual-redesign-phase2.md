@@ -79,7 +79,7 @@ Previews aktuell in `output/previews/` (Standbilder zur Sichtung:
 |---|---|---|
 | pulsing_core | Neon-Tunnel | fertig, Sichtung offen |
 | particle_swarm | Galaxie/Vortex | fertig, Sichtung offen |
-| speech_focus | Stimm-Linie (kein Schwarzbild mehr) | fertig, Sichtung offen |
+| speech_focus | Stimm-Linie / Spektrum-Band | fertig, Sichtung offen |
 | typographic | Metropolis-Skyline | fertig, Sichtung offen |
 | liquid_blobs | Plasma-Metaballs | fertig, Sichtung offen |
 | orchestral_swell | Swell-Vorhänge | fertig, Sichtung offen |
@@ -95,7 +95,30 @@ Beim Nachprüfen der Standbilder gefundene und behobene Fehler:
 - `liquid_blobs`: Blobs wirkten hohl (Rand heller als Kern). Kern-Normierung
   und Beat-Kopplung liegen jetzt beim Kern statt beim Rand.
 
+- `speech_focus`: gleicher y-Spiegel-Fehler — die Ruhezone für die Zitate lag
+  auf der falschen Bildhälfte.
+
 Zitat-Lesbarkeit im Podcast-Modus für alle sechs geprüft: in Ordnung.
+
+## speech_focus: Musik-Modus als Spektrum-Band (2026-08-10)
+
+Im Musik-Modus öffnet sich die Stimm-Linie zu einer symmetrischen Schleife um
+die Bildmitte; die halbe Höhe pro x-Position folgt einem Frequenz-Profil
+(links tief, rechts hoch), zwischen den Kanten liegt ein zarter Schleier.
+Im Sprach-Modus bleiben die Werte flach und klein (`u_band_gain` 0.12), die
+Schleife fällt optisch auf die dünne Linie zusammen — Prinzip 3 bleibt gewahrt.
+
+Das Profil ist **kein FFT-Spektrum**: `analyze()` bleibt unangetastet (Caching).
+Es entsteht aus vorhandenen Kanälen — Bass aus `rms`/`transient`, Mitten aus
+`rms`, Höhen aus `spectral_centroid`/`zero_crossing_rate`, dazu die 12
+Chroma-Werte als bewegte Feinstruktur (multiplikativ, damit die Grobform
+bleibt). Anschließend auf die eigene Spitze normiert, Kontrast über `pow`,
+Pegel getrennt aus Lautstärke. **Kein Peak-Hold** — das zieht alle
+Stützstellen auf ihr jeweiliges Maximum und bügelt die Silhouette flach.
+
+Offener Punkt: `podcast_macy.m4a` wird vom Analyzer als `mode = "music"`
+klassifiziert. Der Sprach-Zweig ist damit über die Previews **nicht**
+sichtbar — beide Preview-Spalten zeigen den Musik-Zweig.
 
 ## Offene technische Punkte (aus Session 2, weiterhin gültig)
 
