@@ -1,0 +1,26 @@
+[
+  {
+    "speaker": "Gast",
+    "text": "einfache Systeme laenger halten",
+    "timestamp": "00:45",
+    "start_time": 45
+  },
+  {
+    "speaker": "Host",
+    "text": "Komplexitaet ist der Feind",
+    "timestamp": "01:30",
+    "start_time": 90
+  },
+  {
+    "speaker": "Host",
+    "text": "Tempo schlaegt Perfektion",
+    "timestamp": "03:10",
+    "start_time": 190
+  },
+  {
+    "speaker": "Gast",
+    "text": "Mut zur Luecke",
+    "timestamp": "1:04:00",
+    "start_time": 3840
+  }
+]
