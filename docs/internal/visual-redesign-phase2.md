@@ -116,14 +116,19 @@ bleibt). Anschließend auf die eigene Spitze normiert, Kontrast über `pow`,
 Pegel getrennt aus Lautstärke. **Kein Peak-Hold** — das zieht alle
 Stützstellen auf ihr jeweiliges Maximum und bügelt die Silhouette flach.
 
-Offener Punkt: `podcast_macy.m4a` wird vom Analyzer als `mode = "music"`
-klassifiziert. Der Sprach-Zweig ist damit über die Previews **nicht**
-sichtbar — beide Preview-Spalten zeigen den Musik-Zweig.
+~~Offener Punkt: `podcast_macy.m4a` wird vom Analyzer als `mode = "music"`
+klassifiziert.~~ Erledigt 2026-08-10, siehe `mode-detection.md`. Die
+Podcast-Previews laufen jetzt über den Sprach-Zweig; Standbilder dazu in
+`output/previews/_frames/speech-modus/`. Alle sechs verhalten sich wie
+entworfen (ruhiger als im Musik-Modus, Zitate überall lesbar).
 
 ## Offene technische Punkte (aus Session 2, weiterhin gültig)
 
 - M4 (Quote-Lesbarkeit) in `src/studio/engine.py` berechnen.
 - C14-Alpha-Fix (Luma-Alpha im Blit-Shader).
+- Golden Set v2 wurde mit `mode = "music"` für alle sechs Audios gelabelt.
+  Die Labels der Podcast-Renders beziehen sich damit auf den falschen Zweig
+  und sind für Sprach-Vergleiche nicht mehr gültig.
 - Sprach-Feature-Ebene in `src/analyzer.py` ERWEITERN (nie ändern, Caching!):
   Silenz/Pausen, Sprechrhythmus, Betonung — Voraussetzung für Prinzip 3.
 - `speech_focus` rendert schwarz (auf allen Audios) — beim Umbau ersetzen oder reparieren.

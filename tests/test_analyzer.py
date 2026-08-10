@@ -161,5 +161,83 @@ def test_interpolate_method(analyzer):
     assert interpolated[-1] == 100
 
 
+def _stats_arrays(cent_mean, voice_mean, rms_std):
+    """Baut Feature-Arrays mit exakt den gewuenschten Kennwerten."""
+    spec_cent = np.full(100, cent_mean, dtype=np.float32)
+    voice = np.full(100, voice_mean, dtype=np.float32)
+    # Abwechselnd +/- Abweichung um 0.5 -> Standardabweichung = rms_std
+    rms = np.tile([0.5 - rms_std, 0.5 + rms_std], 50).astype(np.float32)
+    return spec_cent, voice, rms
+
+
+class TestModeDetection:
+    """Modus-Erkennung: Kennwerte stammen aus dem Golden-Korpus."""
+
+    def test_podcast_kennwerte_ergeben_speech(self, analyzer):
+        """Podcast-Werte (podcast_macy) muessen 'speech' liefern.
+
+        Regression: die alte UND-Kette verlangte cent_mean < 2000 und
+        voice_mean > 0.45 — beides ist nach dem Pre-Emphasis-Filter
+        unerreichbar, jeder Podcast landete auf 'music'.
+        """
+        assert analyzer._detect_mode_advanced(*_stats_arrays(5201, 0.372, 0.107)) == "speech"
+
+    def test_musik_kennwerte_ergeben_music(self, analyzer):
+        """Musik-Werte (music_severance) muessen 'music' liefern."""
+        assert analyzer._detect_mode_advanced(*_stats_arrays(6055, 0.288, 0.154)) == "music"
+
+    def test_werte_dazwischen_ergeben_hybrid(self, analyzer):
+        """Unklare Faelle landen bewusst auf 'hybrid' statt zu raten."""
+        assert analyzer._detect_mode_advanced(*_stats_arrays(5900, 0.315, 0.135)) == "hybrid"
+
+    def test_einzelner_ausreisser_kippt_nicht(self, analyzer):
+        """Zwei klare Sprach-Merkmale schlagen ein gegenlaeufiges drittes."""
+        assert analyzer._detect_mode_advanced(*_stats_arrays(7000, 0.380, 0.100)) == "speech"
+
+    def test_feature_score_bereich(self, analyzer):
+        """Der Merkmals-Score bleibt in [-1, 1] und ist an den Kanten gesaettigt."""
+        assert analyzer._mode_feature_score(0.05, 0.10, 0.17) == 1.0
+        assert analyzer._mode_feature_score(0.30, 0.10, 0.17) == -1.0
+        assert abs(analyzer._mode_feature_score(0.135, 0.10, 0.17)) < 1e-6
+
+
+class TestTempoEstimation:
+    """Tempo-Schaetzung."""
+
+    def test_plausibilitaet(self, analyzer):
+        """Nur endliche Werte im BPM-Fenster gelten als plausibel."""
+        assert analyzer._tempo_plausible(120.0)
+        assert analyzer._tempo_plausible(analyzer.TEMPO_MIN_BPM)
+        assert analyzer._tempo_plausible(analyzer.TEMPO_MAX_BPM)
+        assert not analyzer._tempo_plausible(float('inf'))
+        assert not analyzer._tempo_plausible(39.0)
+        assert not analyzer._tempo_plausible(251.0)
+
+    def test_tempogram_fallback_ignoriert_lag_null(self, analyzer, monkeypatch):
+        """Der Tempogram-Zweig darf nicht am Lag 0 haengenbleiben.
+
+        Regression: Lag 0 hat immer die groesste Energie und entspricht
+        inf BPM — ein blankes argmax lieferte deshalb ausnahmslos den
+        Fallback-Wert von 120 BPM.
+        """
+        import src.analyzer as analyzer_module
+
+        def _fail(*args, **kwargs):
+            raise RuntimeError("librosa-Schaetzer nicht verfuegbar")
+
+        monkeypatch.setattr(analyzer_module, "_librosa_tempo", _fail)
+
+        sr, hop = 22050, 512
+        # Klick alle 17 Frames -> rund 152 BPM (Oktaven: 76 / 304)
+        onset_env = np.zeros(1200, dtype=np.float32)
+        onset_env[::17] = 1.0
+
+        tempo = analyzer._estimate_tempo_simple(onset_env, sr, hop)
+
+        assert np.isfinite(tempo)
+        assert analyzer.TEMPO_MIN_BPM <= tempo <= analyzer.TEMPO_MAX_BPM
+        assert tempo != analyzer.TEMPO_FALLBACK_BPM
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
