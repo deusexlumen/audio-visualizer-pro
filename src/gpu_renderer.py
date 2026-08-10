@@ -160,6 +160,8 @@ class GPUBatchRenderer:
         viz_offset_x: float = 0.0,
         viz_offset_y: float = 0.0,
         viz_scale: float = 1.0,
+        viz_luma_knee_lo: float = 0.02,
+        viz_luma_knee_hi: float = 0.25,
         progress_callback=None,
         cancel_event=None,
         timeline=None,
@@ -183,6 +185,9 @@ class GPUBatchRenderer:
             viz_offset_x: Horizontaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
             viz_offset_y: Vertikaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
             viz_scale: Skalierungsfaktor des Visualizers (0.5 bis 2.0).
+            viz_luma_knee_lo: Helligkeit, ab der die Visualizer-Ebene ueber einem
+                Hintergrundbild sichtbar wird (darunter voll transparent).
+            viz_luma_knee_hi: Helligkeit, ab der sie voll deckend ist.
             progress_callback: Optionaler Callback(frame, total_frames) fuer Fortschritts-Updates.
             cancel_event: Optional threading.Event. Wenn gesetzt, wird die Render-Schleife unterbrochen.
             studio_constraints: Optionale Studio-MeasureConstraints (Alpha-Cap, Luma-Alpha, Subjekt-Stärke) — nur im Studio-Pfad gesetzt.
@@ -505,6 +510,17 @@ class GPUBatchRenderer:
                             "luma_knee_lo": studio_constraints.luma_knee_lo,
                             "luma_knee_hi": studio_constraints.luma_knee_hi,
                             "subject_strength": studio_constraints.subject_strength,
+                        }
+                    elif bg_texture is not None:
+                        # Ohne Hintergrundbild bleibt es beim deckenden Blit
+                        # (Schwarz ist dann der gewollte Bildgrund). Sobald ein
+                        # Bild/Video daruntergelegt wird, muss die Helligkeit die
+                        # Deckung bestimmen — sonst uebermalt der schwarze Anteil
+                        # der Visualizer das Bild vollstaendig.
+                        blit_kwargs = {
+                            "alpha_from_luma": True,
+                            "luma_knee_lo": viz_luma_knee_lo,
+                            "luma_knee_hi": viz_luma_knee_hi,
                         }
                     self._blit_viz_to_fbo(
                         active_viz_tex,

@@ -125,7 +125,17 @@ entworfen (ruhiger als im Musik-Modus, Zitate überall lesbar).
 ## Offene technische Punkte (aus Session 2, weiterhin gültig)
 
 - M4 (Quote-Lesbarkeit) in `src/studio/engine.py` berechnen.
-- C14-Alpha-Fix (Luma-Alpha im Blit-Shader).
+- ~~C14-Alpha-Fix (Luma-Alpha im Blit-Shader).~~ Erledigt 2026-08-10:
+  Der Shader-Code war fertig, aber nur im Studio-Pfad verdrahtet. Im
+  normalen Render-Pfad wurde die Visualizer-Ebene mit `alpha = 1.0`
+  geblittet — jedes schwarze Pixel war deckend und uebermalte ein
+  Hintergrundbild vollstaendig. Betraf alle 19 Visualizer, auch die
+  unveraenderten. Luma-Alpha wird jetzt automatisch aktiv, sobald ein
+  Hintergrundbild oder -video gesetzt ist (Renderer und Live-Vorschau).
+  Ohne Hintergrund bleibt es beim deckenden Blit.
+  Lehre: Previews auf Schwarz zeigen diesen Fehler nicht — "dunkel =
+  gedacht transparent" sieht dort genauso aus wie "dunkel = deckendes
+  Schwarz". Visualizer immer auch mit Hintergrundbild sichten.
 - Golden Set v2 wurde mit `mode = "music"` für alle sechs Audios gelabelt.
   Die Labels der Podcast-Renders beziehen sich damit auf den falschen Zweig
   und sind für Sprach-Vergleiche nicht mehr gültig.
