@@ -69,8 +69,8 @@ class TestQuoteOverlayRenderer:
         # display_duration auf 4.0 setzen, damit sie mit den Test-end_times uebereinstimmen
         config = QuoteOverlayConfig(display_duration=4.0)
         renderer = QuoteOverlayRenderer(quotes, config)
-        # Zeit vor dem ersten Zitat
-        result = renderer.apply(frame, time_seconds=0.5)
+        # Zeit vor dem ersten Zitat (inkl. Vorlauf-Fade von 0.6 s ab 0.4 s)
+        result = renderer.apply(frame, time_seconds=0.2)
         np.testing.assert_array_equal(frame, result)
         # Zeit zwischen den Zitaten (erstes endet bei 5.0, zweites startet bei 10.0)
         result = renderer.apply(frame, time_seconds=7.0)
@@ -117,20 +117,89 @@ class TestQuoteOverlayRenderer:
         assert np.any(result_later != frame)
     
     def test_fade_out_at_end(self):
-        """Fade-Out am Ende des Zitats."""
+        """Fade-Out am Ende des Zitats (liegt hinter der Sprechzeit)."""
         frame = create_test_frame()
         quotes = [Quote(text="Test", start_time=1.0, end_time=5.0, confidence=1.0)]
         # display_duration auf 4.0 setzen, damit end_time bei 5.0 bleibt
-        config = QuoteOverlayConfig(display_duration=4.0)
+        config = QuoteOverlayConfig(display_duration=4.0, fade_duration=0.6)
         renderer = QuoteOverlayRenderer(quotes, config)
-        
-        # Kurz vor Ende sollte es noch sichtbar sein
+
+        # Kurz vor Ende voll sichtbar
         result_before = renderer.apply(frame, time_seconds=4.6)
-        # Nach Ende sollte es nicht mehr sichtbar sein
-        result_after = renderer.apply(frame, time_seconds=5.5)
-        
+        # Im Ausblenden (5.0 bis 5.6) noch sichtbar
+        result_fading = renderer.apply(frame, time_seconds=5.3)
+        # Danach nicht mehr
+        result_after = renderer.apply(frame, time_seconds=5.9)
+
         assert np.any(result_before != frame)
+        assert np.any(result_fading != frame)
         np.testing.assert_array_equal(result_after, frame)
+
+    def test_lead_in_fade_voll_sichtbar_ab_sprechbeginn(self):
+        """Mit lead_in_fade steht der Text, wenn der Satz beginnt."""
+        frame = create_test_frame()
+        quotes = [Quote(text="Test", start_time=2.0, end_time=6.0, confidence=1.0)]
+        config = QuoteOverlayConfig(fade_duration=0.6)
+        renderer = QuoteOverlayRenderer(quotes, config)
+
+        assert renderer._calculate_fade_alpha(1.7, quotes[0]) == pytest.approx(0.5, abs=0.05)
+        assert renderer._calculate_fade_alpha(2.0, quotes[0]) == 1.0
+        assert renderer._calculate_fade_alpha(2.2, quotes[0]) == 1.0
+
+    def test_lead_in_fade_abschaltbar(self):
+        """Ohne lead_in_fade gilt das alte Verhalten (Fade im Fenster)."""
+        frame = create_test_frame()
+        quotes = [Quote(text="Test", start_time=2.0, end_time=6.0, confidence=1.0)]
+        config = QuoteOverlayConfig(fade_duration=0.6, lead_in_fade=False)
+        renderer = QuoteOverlayRenderer(quotes, config)
+
+        assert renderer._calculate_fade_alpha(1.9, quotes[0]) == 0.0
+        assert renderer._calculate_fade_alpha(2.3, quotes[0]) == pytest.approx(0.5, abs=0.05)
+
+    def test_min_display_duration_verlaengert_nur_nach_hinten(self):
+        """Kurze Zitate bekommen Lesezeit — der Anfang bleibt stehen."""
+        quotes = [Quote(text="Kurz", start_time=10.0, end_time=11.5, confidence=1.0)]
+        config = QuoteOverlayConfig(min_display_duration=3.5, fade_duration=0.0)
+        renderer = QuoteOverlayRenderer(quotes, config)
+
+        vis_start, vis_end, start, end = renderer._visible_window(quotes[0])
+        assert start == 10.0
+        assert end == pytest.approx(13.5)
+
+    def test_lesezeit_verdeckt_das_naechste_zitat_nicht(self):
+        """Das vorige Zitat muss weg sein, wenn der naechste Satz beginnt."""
+        quotes = [
+            Quote(text="Erstes", start_time=10.0, end_time=11.5),
+            Quote(text="Zweites", start_time=13.0, end_time=14.5),
+        ]
+        renderer = QuoteOverlayRenderer(quotes, QuoteOverlayConfig())
+        renderer.build_frame_index(frame_count=30 * 20, fps=30)
+
+        # Bei Sprechbeginn des zweiten Zitats ist genau dieses aktiv
+        active = renderer._get_active_quote(13.0, frame_idx=int(13.0 * 30))
+        assert active is not None and active.text == "Zweites"
+        assert renderer._calculate_fade_alpha(13.0, active) == 1.0
+
+        # Das erste ist zu diesem Zeitpunkt komplett ausgeblendet
+        _, vis_end, _, _ = renderer._visible_window(quotes[0])
+        assert vis_end <= 13.0
+
+    def test_kuerzt_nicht_unter_die_sprechzeit(self):
+        """Auch bei dicht folgendem Zitat bleibt die Sprechzeit erhalten."""
+        quotes = [
+            Quote(text="Erstes", start_time=10.0, end_time=12.9),
+            Quote(text="Zweites", start_time=13.0, end_time=15.0),
+        ]
+        renderer = QuoteOverlayRenderer(quotes, QuoteOverlayConfig())
+        assert renderer._effective_end_time(quotes[0]) >= 12.9
+
+    def test_min_display_duration_ueberschreitet_display_duration_nicht(self):
+        """display_duration bleibt die harte Obergrenze."""
+        quotes = [Quote(text="Kurz", start_time=0.0, end_time=1.0, confidence=1.0)]
+        config = QuoteOverlayConfig(min_display_duration=9.0, display_duration=4.0)
+        renderer = QuoteOverlayRenderer(quotes, config)
+
+        assert renderer._effective_end_time(quotes[0]) == pytest.approx(4.0)
     
     def test_text_wrapping(self):
         """Langer Text sollte umgebrochen werden."""
@@ -281,8 +350,9 @@ class TestQuoteOverlayRenderer:
         quotes = [Quote(text="Test", start_time=1.0, end_time=5.0, confidence=1.0)]
         config = QuoteOverlayConfig(fade_duration=2.0)
         renderer = QuoteOverlayRenderer(quotes, config)
-        # Direkt am Anfang (0.001s nach Start) -> alpha nahe 0
-        result = renderer.apply(frame, time_seconds=1.001)
+        # Der Vorlauf-Fade beginnt 2.0 s vor start_time (hier bei 0.0 s
+        # abgeschnitten) — dort ist alpha noch 0.
+        result = renderer.apply(frame, time_seconds=0.0)
         np.testing.assert_array_equal(result, frame)
 
     def test_custom_font_path_fallback(self):

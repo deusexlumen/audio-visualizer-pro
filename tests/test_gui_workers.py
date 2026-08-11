@@ -91,6 +91,7 @@ def test_quote_extract_worker_emits_quotes_ready(qtbot):
         audio_duration=120.0,
         max_quotes=5,
         use_cache=True,
+        features=None,
     )
 
 

@@ -49,6 +49,9 @@ class QuoteOverlayConfig:
     line_spacing: int = 10
     max_chars_per_line: int = 40
     display_duration: float = 8.0  # Maximale Anzeigedauer pro Zitat in Sekunden
+    min_display_duration: float = 3.5  # Mindest-Lesezeit; verlaengert NUR nach hinten
+    lead_in_fade: bool = True     # Fade-In liegt VOR start_time (Text steht,
+                                  # wenn der Satz beginnt). False = altes Verhalten.
     position: str = "bottom"      # 'bottom', 'center', 'top'
     font_path: Optional[str] = None  # Benutzerdefinierte Schriftart
     text_align: str = "center"    # 'left', 'center', 'right'
@@ -183,13 +186,51 @@ class QuoteOverlayRenderer:
             self.quotes.append(quote)
             self._dirty = True
     
+    def _next_start_after(self, quote: Quote):
+        """Startzeit des naechsten Zitats, oder None."""
+        later = [q.start_time for q in self.quotes if q.start_time > quote.start_time]
+        return min(later) if later else None
+
     def _effective_end_time(self, quote: Quote) -> float:
         """
         Berechnet das effektive Ende eines Zitats.
-        Respektiert quote.end_time, aber display_duration als Obergrenze.
+
+        Untergrenze ist die Mindest-Lesezeit, Obergrenze die display_duration.
+        Verlaengert wird ausschliesslich nach hinten — der Anfang bleibt auf
+        dem gesprochenen Moment stehen.
+
+        Die Lesezeit darf das naechste Zitat nicht verdecken: sonst haengt das
+        vorige Zitat noch auf dem Bild, waehrend der naechste Satz schon
+        laeuft. Gekuerzt wird dabei nie unter die tatsaechliche Sprechzeit.
         """
-        display_end = quote.start_time + self.config.display_duration
-        return min(quote.end_time, display_end)
+        start = quote.start_time
+        end = max(quote.end_time, start + self.config.min_display_duration)
+        end = min(end, start + self.config.display_duration)
+
+        next_start = self._next_start_after(quote)
+        if next_start is not None:
+            # Mit Vorlauf-Fade beginnt das naechste Zitat schon fade_duration
+            # frueher sichtbar zu werden — davor muss dieses hier weg sein.
+            fade = self.config.fade_duration if self.config.lead_in_fade else 0.0
+            end = min(end, max(next_start - 2.0 * fade, quote.end_time))
+            end = min(end, next_start)
+
+        return max(end, start + 0.1)
+
+    def _visible_window(self, quote: Quote) -> tuple:
+        """Sichtbares Zeitfenster inkl. Fades: (vis_start, vis_end, start, end).
+
+        Mit lead_in_fade liegen die Fades AUSSERHALB von [start, end]: der Text
+        ist genau dann voll sichtbar, wenn der Satz gesprochen wird. Ohne die
+        Option liegen sie wie frueher innerhalb des Fensters.
+        """
+        latency = self.config.latency_offset
+        start = quote.start_time + latency
+        end = self._effective_end_time(quote) + latency
+        if self.config.lead_in_fade:
+            fade = self.config.fade_duration
+            return max(0.0, start - fade), end + fade, start, end
+        return start, end, start, end
 
     def build_frame_index(self, frame_count: int, fps: int):
         """
@@ -202,11 +243,9 @@ class QuoteOverlayRenderer:
             self._frame_index = [[] for _ in range(frame_count)]
 
             for quote in self.quotes:
-                adj_start = quote.start_time + self.config.latency_offset
-                effective_end = self._effective_end_time(quote)
-                adj_end = effective_end + self.config.latency_offset
-                start_frame = max(0, min(int(adj_start * fps), frame_count - 1))
-                end_frame = max(0, min(int(adj_end * fps), frame_count - 1))
+                vis_start, vis_end, _, _ = self._visible_window(quote)
+                start_frame = max(0, min(int(vis_start * fps), frame_count - 1))
+                end_frame = max(0, min(int(vis_end * fps), frame_count - 1))
 
                 for f in range(start_frame, end_frame + 1):
                     self._frame_index[f].append(quote)
@@ -228,19 +267,15 @@ class QuoteOverlayRenderer:
             if 0 <= frame_idx < self._frame_count:
                 candidates = self._frame_index[frame_idx]
                 for quote in candidates:
-                    effective_end = self._effective_end_time(quote)
-                    adj_start = quote.start_time + self.config.latency_offset
-                    adj_end = effective_end + self.config.latency_offset
-                    if adj_start <= time_seconds <= adj_end:
+                    vis_start, vis_end, _, _ = self._visible_window(quote)
+                    if vis_start <= time_seconds <= vis_end:
                         return quote
                 return None
 
         # Fallback: lineare Suche (kompatibel mit alten Aufrufen)
         for quote in self.quotes:
-            effective_end = self._effective_end_time(quote)
-            adj_start = quote.start_time + self.config.latency_offset
-            adj_end = effective_end + self.config.latency_offset
-            if adj_start <= time_seconds <= adj_end:
+            vis_start, vis_end, _, _ = self._visible_window(quote)
+            if vis_start <= time_seconds <= vis_end:
                 return quote
         return None
     
@@ -253,22 +288,25 @@ class QuoteOverlayRenderer:
         Beruecksichtigt Latenz-Kompensation und maximale Anzeigedauer.
         """
         fade = self.config.fade_duration
-        effective_end = self._effective_end_time(quote)
-        latency = self.config.latency_offset
-        adj_start = quote.start_time + latency
-        adj_end = effective_end + latency
-        
-        # Am Anfang: Fade-In (mit Latenz-Kompensation)
+        vis_start, vis_end, adj_start, adj_end = self._visible_window(quote)
+        if fade <= 0.0:
+            return 1.0 if vis_start <= time_seconds <= vis_end else 0.0
+
+        if self.config.lead_in_fade:
+            # Fades liegen vor bzw. hinter dem gesprochenen Fenster
+            if time_seconds < adj_start:
+                return max(0.0, min(1.0, (time_seconds - vis_start) / fade))
+            if time_seconds > adj_end:
+                return max(0.0, min(1.0, (vis_end - time_seconds) / fade))
+            return 1.0
+
+        # Altes Verhalten: Fades innerhalb des Fensters
         if time_seconds < adj_start + fade:
             progress = (time_seconds - adj_start) / fade
             return max(0.0, min(1.0, progress))
-        
-        # Am Ende: Fade-Out (mit Latenz-Kompensation)
         elif time_seconds > adj_end - fade:
             progress = (adj_end - time_seconds) / fade
             return max(0.0, min(1.0, progress))
-        
-        # In der Mitte: Voll sichtbar
         return 1.0
     
     def _wrap_text(self, text: str) -> List[str]:

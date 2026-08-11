@@ -288,6 +288,7 @@ class QuoteExtractWorker(QThread):
         audio_duration: float | None = None,
         max_quotes: int | None = None,
         use_cache: bool = True,
+        features=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -296,6 +297,7 @@ class QuoteExtractWorker(QThread):
         self.audio_duration = audio_duration
         self.max_quotes = max_quotes
         self.use_cache = use_cache
+        self.features = features
 
     def run(self):
         try:
@@ -304,6 +306,7 @@ class QuoteExtractWorker(QThread):
                 audio_duration=self.audio_duration,
                 max_quotes=self.max_quotes,
                 use_cache=self.use_cache,
+                features=self.features,
             )
             quotes = future.result(timeout=120)
             self.quotes_ready.emit(quotes)

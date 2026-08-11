@@ -136,6 +136,18 @@ entworfen (ruhiger als im Musik-Modus, Zitate überall lesbar).
   Lehre: Previews auf Schwarz zeigen diesen Fehler nicht — "dunkel =
   gedacht transparent" sieht dort genauso aus wie "dunkel = deckendes
   Schwarz". Visualizer immer auch mit Hintergrundbild sichten.
+- ~~Silhouetten verschwinden ueber dem Hintergrundbild.~~ Erledigt
+  2026-08-11: Luma-Alpha kann "dunkel UND deckend" nicht ausdruecken, die
+  Metropolis-Skyline loeste sich damit in ein Fenster-Raster auf. Neuer
+  Opt-in `WRITES_OCCLUSION_ALPHA` (Klassen-Flag in `base.py`): der Shader
+  schreibt seine Deckung selbst nach `f_color.a`, der Blit verknuepft sie
+  per `max()` mit der Luma-Deckung. Nur `typographic` nutzt das; die
+  anderen 18 Visualizer bleiben unveraendert. Neuer Parameter
+  `silhouette_opacity` (0.88) steuert, wieviel Bild durchscheint.
+  Im Crossfade nur aktiv, wenn beide Szenen eine Deckung schreiben —
+  `_xfade_prog` mischt auch den Alpha-Kanal.
+  Nebeneffekt: ohne Hintergrundbild zeigt der Himmel jetzt die gewaehlte
+  `background_color` statt hartem Schwarz.
 - Golden Set v2 wurde mit `mode = "music"` für alle sechs Audios gelabelt.
   Die Labels der Podcast-Renders beziehen sich damit auf den falschen Zweig
   und sind für Sprach-Vergleiche nicht mehr gültig.

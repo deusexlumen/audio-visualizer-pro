@@ -199,9 +199,18 @@ pytest tests/test_gpu_renderer.py -v
 
 4. **KI-Integration** (`gemini_integration.py`):
    - `GeminiIntegration.transcribe_audio()` - Audio-Transkription
-   - `GeminiIntegration.extract_quotes()` - Key-Zitate mit Zeitstempeln
-   - `GeminiIntegration.optimize_all_settings()` - Parameter/Farben/Post-Process Optimierung
-   - Quotes werden in der GUI reviewt, editiert und gefiltert
+   - `GeminiIntegration.transcribe_segments()` - Transkript in Segmenten mit Zeitstempeln
+   - `GeminiIntegration.extract_quotes()` - Key-Zitate in zwei Stufen:
+     erst Segment-Transkript, dann Auswahl auf reinem Text. Die KI gibt
+     KEINE Sekunden aus; die Zeit wird lokal aus den Segmenten berechnet
+     (`quote_timing.locate_in_segments`) und auf Sprech-Kanten eingerastet
+     (`quote_timing.snap_quotes`). Hintergrund: `docs/internal/zitat-timing.md`
+   - `GeminiIntegration.optimize_all_settings()` - Parameter/Farben/Post-Process
+     Optimierung. Kein `response_schema` (die API lehnt offene Maps ab), die
+     Antwort wird in `_validate_optimized_result` geprueft und geclamped.
+     Hintergrund: `docs/internal/ki-optimierung.md`
+   - Quotes werden in der GUI reviewt, editiert (`gui/quote_editor.py`:
+     Wellenform, ziehbare Grenzen, Wiedergabe) und gefiltert
 
 ## Code-Style Guidelines
 
@@ -368,6 +377,7 @@ dummy_features = AudioFeatures(
 | `src/analyzer.py` | Audio-Feature-Extraktion (NICHT ÄNDERN, nur erweitern) |
 | `src/ai_matcher.py` | KI-Empfehlungslogik (Smart Matcher) |
 | `src/quote_overlay.py` | Text-Overlay Rendering für Quotes |
+| `src/quote_timing.py` | Lokale Zeitkorrektur für Zitate (Sprech-Kanten, Textzuordnung) |
 | `src/gemini_integration.py` | Gemini KI Integration |
 | `src/gpu_renderer.py` | Render-Flow verstehen |
 

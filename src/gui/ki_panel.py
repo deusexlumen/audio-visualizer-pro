@@ -238,7 +238,16 @@ class KIPanel(QWidget):
         self.btn_optimize.setEnabled(True)
         self.btn_optimize.setText("Komplett optimieren")
         self._apply_optimize_result(result)
-        self.lbl_status.setText("Parameter optimiert!")
+        count = len(result.get("params", {})) if isinstance(result, dict) else 0
+        if isinstance(result, dict) and result.get("_source") == "fallback":
+            # Nicht als Erfolg verkaufen: hier hat die KI nicht geantwortet,
+            # die Werte kommen aus der deterministischen Berechnung.
+            self.lbl_status.setText(
+                f"KI nicht erreichbar — {count} Parameter aus der "
+                f"Audio-Analyse berechnet (siehe logs/app.log)."
+            )
+        else:
+            self.lbl_status.setText(f"{count} Parameter von der KI optimiert.")
         self._update_cost_label()
 
     def on_optimize_error(self, msg: str, tb: str = ""):
