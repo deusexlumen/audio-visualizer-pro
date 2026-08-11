@@ -856,6 +856,8 @@ class GeminiIntegration:
             "  dieselbe Zeichenfolge, keine Umformulierung, keine Kuerzung",
             "  mitten im Satz, keine Auslassungspunkte.",
             "- Ein Zitat ist ein zusammenhaengender Ausschnitt, hoechstens 25 Woerter.",
+            "- Beginne moeglichst am Satzanfang und ende an einem Satzende. Ein",
+            "  Fragment mitten im Satz liest sich im Einblender schlecht.",
             f"- Hoechstens {max_quotes} Zitate, Qualitaet vor Menge.",
             "- 'confidence' ist deine Einschaetzung von 0.0 bis 1.0.",
         ]
