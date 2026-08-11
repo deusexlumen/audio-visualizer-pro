@@ -155,3 +155,56 @@ entworfen (ruhiger als im Musik-Modus, Zitate überall lesbar).
   Silenz/Pausen, Sprechrhythmus, Betonung — Voraussetzung für Prinzip 3.
 - `speech_focus` rendert schwarz (auf allen Audios) — beim Umbau ersetzen oder reparieren.
 - Quote-Overlay-Hex-Farben-Bug: GEFIXT 2026-08-09 (`_normalize_color` in `src/quote_overlay.py`).
+
+## Welle 3: drei neue Archetypen (2026-08-11)
+
+Der Umbau hat die sechs abgelehnten Visualizer ersetzt, aber nichts
+Neues hinzugefuegt. Aus dem Stil-Ideen-Pool wurden drei Archetypen
+gebaut, die in der Sammlung bisher fehlten:
+
+| Visualizer | Archetyp | Kernidee |
+|---|---|---|
+| `retro_sun` | Landschaft/Horizont | Sonne mit waagerechten Schlitzen ueber einem perspektivischen Gitter |
+| `dna_helix` | Struktur/Gitter | Doppelhelix, Querstreben leuchten pro Chroma-Ton |
+| `kaleidoscope` | Symmetrie/Spiegelung | Winkel-Faltung in N Sektoren, Sektorfarbe aus Chroma |
+
+Bewusst NICHT gebaut: Sunburst (waere eine weitere Radialform neben
+`sacred_mandala`/`frequency_flower`), String-Theory (liegt zu nah an
+`neon_oscilloscope`). Prinzip 1 verlangt eigene Welten, keine Varianten.
+
+### Neue automatische Pruefung
+
+`tests/test_visuals_welle3.py` prueft, was sich am Bild messen laesst:
+
+- **Prinzip 3**: derselbe Visualizer laeuft in `music`/`speech`/`hybrid`
+  und ist bei Sprache messbar ruhiger.
+- **Prinzip 5**: mindestens 35 % der Flaeche bleiben praktisch schwarz —
+  dort blendet der Blit-Shader die Visualizer-Ebene aus und ein
+  Hintergrundbild bleibt sichtbar.
+- **Zeitspruenge**: das Bild bei t = 3.0 s haengt nicht davon ab, welche
+  Frames vorher gerendert wurden (sonst flackert die Vorschau beim
+  Scrubben).
+
+Die Regel gilt bewusst nur fuer die neuen Visualizer. Bei den aelteren
+waere sie eine Nachruestung mit offenem Ausgang.
+
+### Beim Bauen gefundene Fehler
+
+- `kaleidoscope` deckte anfangs 93 % der Flaeche zu — der Prinzip-5-Test
+  hat das gefunden, bevor ein Frame gesichtet wurde. Ursache waren zwei
+  Dinge: ein verdrehter Parameter (`line_sharpness` machte die Linien
+  breiter statt schmaler) und ein fbm-Schleier ueber dem ganzen Bild.
+- `retro_sun`: das perspektivische Gitter lief nahe am Horizont in eine
+  geschlossene Flaeche. Ursache ist die Perspektive selbst — `1/depth`
+  waechst dort so schnell, dass die Linienfolge dichter wird als das
+  Pixelraster. Die Gitterlinie blendet jetzt aus, sobald `fwidth` zu
+  gross wird.
+- `retro_sun`: die Chroma-Faerbung machte aus der Sonne je nach Tonart
+  einen gruenen Klecks. Der Farbton wird jetzt zu 85 % auf die
+  Sonnenuntergangs-Palette gezogen; Chroma verschiebt nur noch.
+- `dna_helix`: im Sprach-Modus verschwanden die Querstreben ganz, weil
+  Chroma dort durch den Stimmwert ersetzt wird. Jetzt mit Grundwert —
+  ruhiger ja, unsichtbar nein.
+
+Sichtung: `output/previews/_frames/welle3/` (je Musik und Podcast,
+gerendert MIT Hintergrundbild).
