@@ -282,6 +282,14 @@ class BaseGPUVisualizer(abc.ABC):
     # Override in subclasses: {param_name: (default, min, max, step)}
     PARAMS = {}
 
+    # Opt-in: Der Shader schreibt eine sinnvolle Deckung in f_color.a.
+    # Noetig fuer Visualizer mit dunklen, aber *undurchsichtigen* Formen
+    # (Silhouetten). Ueber einem Hintergrundbild bestimmt sonst die Helligkeit
+    # die Deckung — dunkel = transparent — und solche Formen verschwinden.
+    # Wer das setzt, muss in JEDEM Pixel ein brauchbares Alpha ausgeben,
+    # auch fuer Leuchtelemente (dort typisch aus der eigenen Luma abgeleitet).
+    WRITES_OCCLUSION_ALPHA = False
+
     # Lygia Shader Snippets (in Subclasses via f-String einbinden)
     LYGIA_MATH = LYGIA_MATH_GLSL
     LYGIA_NOISE = LYGIA_NOISE_GLSL

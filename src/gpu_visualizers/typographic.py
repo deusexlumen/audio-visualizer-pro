@@ -12,6 +12,9 @@ Naechtliche Stadt-Skyline in leichter Zentralperspektive mit 2-3 Tiefen-Reihen:
   Fenster-Gruppen, Pausen lassen eine ruhige Nachtstadt mit wenigen Lichtern.
 
 Himmel bleibt schwarz (hintergrundbild-freundlich, kein Vollflaechen-Gradient).
+Die Gebaeude sind dunkel, aber undurchsichtig: sie schreiben ihre Deckung in
+f_color.a (WRITES_OCCLUSION_ALPHA), sonst wuerden sie ueber einem
+Hintergrundbild verschwinden — dort gilt sonst "dunkel = transparent".
 Unteres Drittel: Fenster werden zum Bildrand hin abgedunkelt, damit
 Zitat-Overlays lesbar bleiben. HDR-Ausgabe ohne clamp, Dithering aus
 SHADER_COMMON_GLSL, pixelgenaues AA via aastep/aafill.
@@ -43,6 +46,10 @@ class TypographicGPU(BaseGPUVisualizer):
     """Metropolis-Skyline: naechtliche Stadt, deren Gebaeude und Fenster
     auf Frequenzbaender, Beats und Sprache reagieren."""
 
+    # Die Skyline ist eine Silhouette: dunkel, aber deckend. Ohne diesen
+    # Opt-in wuerde sie ueber einem Hintergrundbild komplett verschwinden.
+    WRITES_OCCLUSION_ALPHA = True
+
     PARAMS = {
         'building_count': (24, 8, MAX_BUILDINGS, 1),
         'depth_layers': (3, 1, 3, 1),
@@ -52,12 +59,14 @@ class TypographicGPU(BaseGPUVisualizer):
         'window_flicker': (0.5, 0.0, 1.0, 0.05),
         'beat_flash': (0.8, 0.0, 2.0, 0.05),
         'horizon_glow': (0.6, 0.0, 1.5, 0.05),
+        'silhouette_opacity': (0.88, 0.0, 1.0, 0.02),
     }
 
     PARAMS_GROUPS = {
         "Skyline": ["building_count", "depth_layers", "height_response", "peak_hold"],
         "Fenster": ["window_density", "window_flicker"],
         "Reaktion": ["beat_flash", "horizon_glow"],
+        "Hintergrund": ["silhouette_opacity"],
     }
 
     def _setup(self):
@@ -81,6 +90,7 @@ class TypographicGPU(BaseGPUVisualizer):
             uniform float u_beat_flash;
             uniform float u_window_flicker;
             uniform float u_horizon_glow;
+            uniform float u_silhouette_opacity;
             uniform vec3 u_window_color;     // warm/kalt aus Chroma
             uniform vec3 u_flash_color;      // Horizont-Flash-Farbe (Chroma)
             uniform float u_brightness;
@@ -114,6 +124,9 @@ class TypographicGPU(BaseGPUVisualizer):
 
                 // --- Himmel: schwarz bleibt schwarz (hintergrundfreundlich) ---
                 vec3 col = vec3(0.0);
+                // Deckung der undurchsichtigen Bauteile (Silhouetten, Antennen).
+                // Leuchtendes kommt weiter unten aus der eigenen Luma dazu.
+                float occ = 0.0;
 
                 // Wenige, sehr dunkle Sterne weit oben (Punkte, kein Gradient)
                 if (uv.y > 0.55) {
@@ -191,6 +204,7 @@ class TypographicGPU(BaseGPUVisualizer):
                                    * 0.05 * (0.4 + flash);
 
                         col = mix(col, sil_col, fill);
+                        occ = max(occ, fill * u_silhouette_opacity);
 
                         // --- Fenster (nur wo Gebaeude gefuellt) ---
                         if (win_layer > 0.0 && fill > 0.001) {
@@ -237,6 +251,7 @@ class TypographicGPU(BaseGPUVisualizer):
                             float in_ant = (1.0 - aastep(0.0018, ax))
                                 * step(roof, uv.y) * step(uv.y, roof + ant_h);
                             col += vec3(0.10, 0.10, 0.12) * in_ant;
+                            occ = max(occ, in_ant * u_silhouette_opacity);
                             // Rotes Blinklicht (deterministische Phase)
                             float blink = pow(0.5 + 0.5 * sin(u_time * 2.2
                                 + hash12(vec2(bid, 31.0)) * 6.2831), 3.0);
@@ -250,7 +265,12 @@ class TypographicGPU(BaseGPUVisualizer):
                 // HDR-Ausgabe: kein clamp — Tonemapping macht zentral der Renderer.
                 col = max(col, 0.0) * u_brightness;
                 col += ditherTriangular(gl_FragCoord.xy, fract(u_time) * 7.0);
-                f_color = vec4(col, 1.0);
+                // Alpha = Deckung. Undurchsichtige Bauteile aus occ, alles
+                // Leuchtende (Fenster, Glut, Sterne) aus der eigenen Helligkeit,
+                // damit der Kanal auch ohne Hintergrundbild brauchbar bleibt.
+                float lum = dot(max(col, 0.0), vec3(0.2126, 0.7152, 0.0722));
+                float alpha = clamp(max(occ, smoothstep(0.02, 0.25, lum)), 0.0, 1.0);
+                f_color = vec4(col, alpha);
             }
             """,
             includes=(LYGIA_MATH_GLSL, LYGIA_NOISE_GLSL, SHADER_COMMON_GLSL),
@@ -358,6 +378,7 @@ class TypographicGPU(BaseGPUVisualizer):
         p["u_beat_flash"].value = float(self.params["beat_flash"])
         p["u_window_flicker"].value = float(self.params["window_flicker"])
         p["u_horizon_glow"].value = float(self.params["horizon_glow"])
+        p["u_silhouette_opacity"].value = float(self.params["silhouette_opacity"])
         p["u_window_color"].value = window_color
         p["u_flash_color"].value = tuple(chroma_color)
         p["u_brightness"].value = float(self.params.get("brightness", 1.0))

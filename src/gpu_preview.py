@@ -172,6 +172,9 @@ def render_gpu_preview(
                 "alpha_from_luma": True,
                 "luma_knee_lo": viz_luma_knee_lo,
                 "luma_knee_hi": viz_luma_knee_hi,
+                "occlusion_from_alpha": bool(
+                    getattr(viz, "WRITES_OCCLUSION_ALPHA", False)
+                ),
             }
         renderer._blit_viz_to_fbo(
             renderer.viz_fbo.color_attachments[0],
