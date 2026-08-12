@@ -24,6 +24,8 @@ NEUE_VISUALIZER = [
     "retro_sun", "dna_helix", "kaleidoscope",
     # Welle 4
     "spirograph", "voronoi_cells",
+    # Welle 5
+    "ink_bloom", "silk_ribbons",
 ]
 
 WIDTH, HEIGHT = 256, 144

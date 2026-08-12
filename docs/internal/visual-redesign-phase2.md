@@ -235,3 +235,52 @@ Beim Bauen gefunden:
 Ausserdem nachgebessert: das Gitter von `retro_sun` wirkte flach. Linien
 haben jetzt einen weichen Saum, werden nach vorne hin heller (Tiefe) und
 unter der Sonne liegt eine gestreifte Spiegelung.
+
+## Welle 5: Fluid und Stoff — ohne Simulation (2026-08-12)
+
+| Visualizer | Archetyp | Kernidee |
+|---|---|---|
+| `ink_bloom` | Fluid/Diffusion | Tinte in Wasser: Schlieren und Faeden aus verschachteltem Domain Warping |
+| `silk_ribbons` | Tuch/Band | Wehende Baender mit Glanzkante aus einer Pseudo-Normalen |
+
+### Warum keine echte Simulation
+
+Beide Archetypen waeren die klassischen Kandidaten fuer einen Solver:
+Advektion fuer die Tinte, Massepunkte und Federn fuer das Tuch. Beides
+braucht **Zustand ueber Frames** (Ping-Pong-Framebuffer bzw. Integration
+der Partikelpositionen). Das kollidiert mit zwei Eigenschaften, die das
+Projekt bisher hat:
+
+1. Der Offline-Render soll reproduzierbar sein.
+2. Die Vorschau springt beim Scrubben an beliebige Zeitpunkte. Mit
+   Frame-Zustand saehe derselbe Zeitpunkt jedes Mal anders aus — genau
+   das prueft `test_zeitsprung_ist_reproduzierbar`.
+
+Statt der Simulation zwei Tricks:
+
+**Tinte — Domain Warping.** fbm-Rauschen wird mit sich selbst verzerrt:
+
+    q = fbm(p);  r = fbm(p + 4*q);  d = fbm(p + 4*r)
+
+Die Wirbel und Faeden entstehen aus der Verschachtelung. Fuenf
+Rauschabfragen pro Pixel, 9 ms pro Frame bei 720p, zustandslos.
+Ein Dichte-Tor (`density_gate`) laesst nur die dichten Faeden leuchten —
+ohne das legt sich ein geschlossener Schleier ueber das Bild.
+
+**Stoff — Glanz statt Geometrie.** Ein Band wirkt erst dann wie Stoff,
+wenn es eine Oberflaeche hat. Aus der **analytischen** Ableitung der
+Mittellinie wird eine Pseudo-Normale gebaut:
+
+    n = normalize(vec2(-dy/dx, 1))
+
+Mit fester Lichtrichtung wandert der Glanzstreifen ueber die Faltung —
+die Woelbung wird sichtbar, ohne dass eine Flaeche berechnet wird. Die
+Ableitung muss analytisch sein; numerisch verrauscht sie bei hohen
+Wellenzahlen sichtbar.
+
+Was dabei verloren geht, ehrlich benannt: echte Tinte reagiert auf ihre
+eigene Vorgeschichte (eine Wolke, die einmal da war, bleibt und wird
+weitergetragen). Domain Warping hat kein Gedaechtnis — es sieht aus wie
+Stroemung, ist aber ein wanderndes Muster. Bei langsamen Passagen faellt
+das nicht auf, bei einem einzelnen harten Stoss schon: die Fahne baut
+sich nicht auf, sie ist einfach da.
