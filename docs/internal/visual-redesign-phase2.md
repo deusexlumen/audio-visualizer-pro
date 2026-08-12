@@ -208,3 +208,30 @@ waere sie eine Nachruestung mit offenem Ausgang.
 
 Sichtung: `output/previews/_frames/welle3/` (je Musik und Podcast,
 gerendert MIT Hintergrundbild).
+
+## Welle 4: zwei weitere Archetypen (2026-08-12)
+
+| Visualizer | Archetyp | Kernidee |
+|---|---|---|
+| `spirograph` | Kurvenzeichnung | Hypotrochoide; das Radienverhaeltnis (= Zackenzahl) kommt aus dem staerksten Chroma-Ton, drei Echos ziehen eine Spur |
+| `voronoi_cells` | Zerlegung/Mosaik | Wanderndes Zellnetz, nur die Kanten leuchten; zwoelf Zellen gehoeren je einem Chroma-Ton |
+
+**Vortex und Galaxy aus dem Ideen-Pool entfallen**: `particle_swarm` ist
+seit dem Welle-2-Umbau genau das (Docstring: "Galaxy/Vortex Visualizer").
+Sie zu bauen waere die Dopplung, die Prinzip 1 verbietet.
+
+Damit ist der Ideen-Pool aus dem Referenz-Projekt weitgehend abgearbeitet.
+Offen und noch nicht bewertet: Mechanik/Zahnraeder, Baender/Tuch,
+Tinten-/Rauchfahne (Fluid-Advektion, teuer).
+
+Beim Bauen gefunden:
+
+- `spirograph` kostet bei 96 Stuetzstellen rund 17 ms pro Frame bei 720p.
+  Ohne die Abkuerzung "ausserhalb des Huellkreises gar nicht rechnen"
+  waere es ein Vielfaches. Bei 4K ist der Visualizer entsprechend teuer.
+- `voronoi_cells` fiel zuerst durch den Dunkelflaechen-Test (26 %):
+  Kanten zu breit, Halo zu weit, Flaechentoenung zu kraeftig.
+
+Ausserdem nachgebessert: das Gitter von `retro_sun` wirkte flach. Linien
+haben jetzt einen weichen Saum, werden nach vorne hin heller (Tiefe) und
+unter der Sonne liegt eine gestreifte Spiegelung.

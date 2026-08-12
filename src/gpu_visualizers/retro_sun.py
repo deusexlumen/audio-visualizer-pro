@@ -101,11 +101,13 @@ class RetroSunGPU(BaseGPUVisualizer):
             // Wichtig: wird die Linienfolge dichter als das Pixelraster,
             // blendet sie aus. Ohne diese Bremse laeuft die Perspektive nahe
             // am Horizont in eine geschlossene Flaeche statt in Linien.
-            float gridLine(float x) {
+            float gridLine(float x, float glow) {
                 float w = fwidth(x) * 1.5 + 1e-6;
                 float f = fract(x);
                 float dist = min(f, 1.0 - f);
                 float line = 1.0 - smoothstep(0.0, w, dist);
+                // Weicher Saum: aus Haarlinien wird ein Leuchtstreifen
+                line += exp(-dist / max(w * 3.5, 1e-5)) * glow;
                 return line * smoothstep(0.45, 0.10, w);
             }
 
@@ -175,18 +177,30 @@ class RetroSunGPU(BaseGPUVisualizer):
                                  * smoothstep(1.10, 0.40, depth);
 
                     // Laengslinien fluchten auf den Fluchtpunkt bei x = 0.5
-                    float lines_x = gridLine((uv.x - 0.5) * z * 0.16 * u_grid_density);
+                    float lines_x = gridLine((uv.x - 0.5) * z * 0.45 * u_grid_density,
+                                             0.30);
 
                     // Querlinien laufen auf den Betrachter zu. Der Faktor
                     // bestimmt, wie viele Reihen zwischen Horizont und
                     // Bildunterkante liegen — zu klein und man sieht nur eine.
-                    float lines_z = gridLine(z * 2.2 - u_grid_phase * 2.0);
+                    float lines_z = gridLine(z * 2.2 - u_grid_phase * 2.0, 0.45);
 
-                    float grid = max(lines_x, lines_z) * fade;
+                    // Naeher = heller. Ohne diese Staffelung wirkt der Boden
+                    // flach, weil alle Linien gleich stark leuchten.
+                    float near = mix(0.45, 1.0, smoothstep(0.0, 0.8, depth));
+                    float grid = max(lines_x, lines_z) * fade * near;
                     // Querlinien pulsen auf dem Beat mit
                     float pulse = 1.0 + u_beat * u_beat_bloom * 0.9 * lines_z;
                     col += u_grid_color * grid * u_grid_brightness
                            * (0.35 + 0.9 * u_energy) * pulse;
+
+                    // Spiegelung der Sonne auf dem Boden: schmale Saeule unter
+                    // der Scheibe, in Streifen zerlegt wie das Original.
+                    float refl_x = exp(-pow((uv.x - 0.5) * (3.4 / max(radius, 0.05)), 2.0));
+                    float refl_stripes = step(0.35,
+                        abs(fract(depth * 26.0 - u_time * 0.6) - 0.5) * 2.0);
+                    col += u_sun_bottom * refl_x * refl_stripes
+                           * exp(-depth * 3.2) * 0.55 * (0.3 + u_energy);
 
                     // Sehr dezenter Bodennebel direkt unter dem Horizont —
                     // bewusst schwach, damit ein Hintergrundbild durchkommt.

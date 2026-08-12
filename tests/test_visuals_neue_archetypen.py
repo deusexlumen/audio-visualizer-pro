@@ -1,4 +1,4 @@
-"""Tests fuer die neuen Visualizer aus Welle 3.
+"""Tests fuer die neu gebauten Visualizer (Wellen 3 und 4).
 
 Prueft die drei Design-Prinzipien, die sich automatisch pruefen lassen:
 
@@ -19,7 +19,12 @@ import pytest
 
 from src.gpu_visualizers import get_visualizer
 
-WELLE3 = ["retro_sun", "dna_helix", "kaleidoscope"]
+NEUE_VISUALIZER = [
+    # Welle 3
+    "retro_sun", "dna_helix", "kaleidoscope",
+    # Welle 4
+    "spirograph", "voronoi_cells",
+]
 
 WIDTH, HEIGHT = 256, 144
 
@@ -79,7 +84,7 @@ def _render(ctx, name, mode, times=(0.0, 0.5, 1.0), viz=None):
 
 
 @pytest.mark.gpu
-@pytest.mark.parametrize("name", WELLE3)
+@pytest.mark.parametrize("name", NEUE_VISUALIZER)
 def test_rendert_in_beiden_modi(gl_context, name):
     for mode in ("music", "speech", "hybrid"):
         img = _render(gl_context, name, mode)
@@ -89,7 +94,7 @@ def test_rendert_in_beiden_modi(gl_context, name):
 
 
 @pytest.mark.gpu
-@pytest.mark.parametrize("name", WELLE3)
+@pytest.mark.parametrize("name", NEUE_VISUALIZER)
 def test_sprachmodus_ist_ruhiger(gl_context, name):
     """Prinzip 3: gleiche Optik, aber gedaempfte Reaktion bei Sprache."""
     music = _render(gl_context, name, "music")
@@ -100,7 +105,7 @@ def test_sprachmodus_ist_ruhiger(gl_context, name):
 
 
 @pytest.mark.gpu
-@pytest.mark.parametrize("name", WELLE3)
+@pytest.mark.parametrize("name", NEUE_VISUALIZER)
 def test_laesst_hintergrund_durch(gl_context, name):
     """Prinzip 5: genug dunkle Flaeche fuer ein untergelegtes Bild.
 
@@ -117,7 +122,7 @@ def test_laesst_hintergrund_durch(gl_context, name):
 
 
 @pytest.mark.gpu
-@pytest.mark.parametrize("name", WELLE3)
+@pytest.mark.parametrize("name", NEUE_VISUALIZER)
 def test_zeitsprung_ist_reproduzierbar(gl_context, name):
     """Nach einem Sprung in der Zeitachse zaehlt nur die absolute Zeit.
 
