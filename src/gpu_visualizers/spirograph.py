@@ -152,9 +152,13 @@ class SpirographGPU(BaseGPUVisualizer):
                     }
                     best += wob;
 
-                    // Schaerfe der Linie folgt dem spektralen Schwerpunkt
+                    // Schaerfe der Linie folgt dem spektralen Schwerpunkt.
+                    // Kein aastep: der Aufruf liegt hinter einem
+                    // pixelabhaengigen return, dort sind Ableitungen
+                    // undefiniert. Kantenbreite kommt aus der Aufloesung.
+                    float px = 1.0 / max(u_resolution.y, 1.0);
                     float lw = u_line_width * mix(1.5, 0.75, clamp(u_centroid, 0.0, 1.0));
-                    float core = 1.0 - aastep(lw, best);
+                    float core = 1.0 - smoothstep(lw - px, lw + px, best);
                     float halo = exp(-best / max(lw * 7.0, 1e-5)) * 0.5 * u_glow;
 
                     vec3 tint = mix(u_color_a, u_color_b, fe / max(u_echo_count, 1.0));

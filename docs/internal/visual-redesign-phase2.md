@@ -284,3 +284,46 @@ weitergetragen). Domain Warping hat kein Gedaechtnis — es sieht aus wie
 Stroemung, ist aber ein wanderndes Muster. Bei langsamen Passagen faellt
 das nicht auf, bei einem einzelnen harten Stoss schon: die Fahne baut
 sich nicht auf, sie ist einfach da.
+
+## Welle 6: Mechanik — aber ohne Zahnraeder (2026-08-14)
+
+Erster Anlauf war ein Zahnradwerk. Vom Nutzer verworfen: der Archetyp
+Mechanik ist interessant, Zahnraeder sind als Bild abgegriffen
+(Steampunk-Klischee). Der Code wurde geloescht statt aufgehoben.
+
+Stattdessen `scissor_lattice` — ein Scherengitter. Es traegt dieselbe
+Idee (Zwangsfuehrung statt freier Bewegung), ist aber geometrisch:
+
+    Zellenbreite  b = 2 * L * sin(theta)
+    Zellenhoehe   h = 2 * L * cos(theta)
+
+Ein einziger Freiheitsgrad. Oeffnet sich das Gitter, wird es breiter UND
+flacher — diese Kopplung liest das Auge als Mechanik. Der Winkel folgt
+dem Pegel ueber eine gedaempfte Feder, auf dem Schlag schnappt es auf
+und schwingt nach.
+
+### Wichtiger Fund: fwidth in divergentem Kontrollfluss
+
+Der Reproduzierbarkeits-Test schlug fehl: identische Uniforms, aber rund
+500 abweichende Pixel pro Bild, bei jedem Aufruf andere. Ursache war
+nicht der Zustand im Python-Teil, sondern der Shader.
+
+`aastep`/`aafill` benutzen `fwidth()`. Ableitungen werden auf Bloecken
+von 2x2 Pixeln gebildet — laut GLSL-Spezifikation sind sie **undefiniert**,
+wenn die vier Pixel unterschiedliche Zweige nehmen. Genau das passiert
+nach einem pixelabhaengigen `continue` oder `return`.
+
+Betroffen und behoben:
+
+- `scissor_lattice`: `lineAt()` nach `continue` — Kantenbreite kommt
+  jetzt aus der Aufloesung (`1.0 / u_resolution.y`, weil der Raum auf die
+  Bildhoehe normiert ist).
+- `spirograph`: `aastep` hinter dem Huellkreis-`return`.
+- `retro_sun`: `gridLine()` innerhalb von `if (uv.y < hy)`; die
+  Schrittweite wird jetzt analytisch aus der Perspektive gerechnet.
+
+**Regel fuer neue Visualizer:** `aastep`/`aafill`/`fwidth` nur im
+unverzweigten Teil des Shaders. Steht der Aufruf hinter einer
+pixelabhaengigen Verzweigung, die Kantenbreite aus `u_resolution`
+ableiten. Der Fehler ist auf Standbildern kaum zu sehen — im Video
+flimmert es.

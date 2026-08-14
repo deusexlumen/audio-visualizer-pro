@@ -101,8 +101,12 @@ class RetroSunGPU(BaseGPUVisualizer):
             // Wichtig: wird die Linienfolge dichter als das Pixelraster,
             // blendet sie aus. Ohne diese Bremse laeuft die Perspektive nahe
             // am Horizont in eine geschlossene Flaeche statt in Linien.
-            float gridLine(float x, float glow) {
-                float w = fwidth(x) * 1.5 + 1e-6;
+            // `step` ist die Schrittweite von x pro Pixel, aussen berechnet.
+            // fwidth() waere hier falsch: die Funktion laeuft nur unterhalb
+            // des Horizonts, also in divergentem Kontrollfluss, wo
+            // Ableitungen laut GLSL undefiniert sind.
+            float gridLine(float x, float glow, float step) {
+                float w = step * 1.5 + 1e-6;
                 float f = fract(x);
                 float dist = min(f, 1.0 - f);
                 float line = 1.0 - smoothstep(0.0, w, dist);
@@ -177,13 +181,20 @@ class RetroSunGPU(BaseGPUVisualizer):
                                  * smoothstep(1.10, 0.40, depth);
 
                     // Laengslinien fluchten auf den Fluchtpunkt bei x = 0.5
+                    // Schrittweite analytisch: d/dx von (x-0.5)*z*s ist z*s,
+                    // umgerechnet auf einen Pixel in x-Richtung.
+                    float px_x = 1.0 / max(u_resolution.x, 1.0);
+                    float sx = abs(z * 0.45 * u_grid_density) * px_x;
                     float lines_x = gridLine((uv.x - 0.5) * z * 0.45 * u_grid_density,
-                                             0.30);
+                                             0.30, sx);
 
                     // Querlinien laufen auf den Betrachter zu. Der Faktor
                     // bestimmt, wie viele Reihen zwischen Horizont und
                     // Bildunterkante liegen — zu klein und man sieht nur eine.
-                    float lines_z = gridLine(z * 2.2 - u_grid_phase * 2.0, 0.45);
+                    // d/dy von z*2.2 mit z = 1/depth, depth = (hy-uv.y)/hy
+                    float py = 1.0 / max(u_resolution.y, 1.0);
+                    float sz = 2.2 * z * z / max(hy, 1e-3) * py;
+                    float lines_z = gridLine(z * 2.2 - u_grid_phase * 2.0, 0.45, sz);
 
                     // Naeher = heller. Ohne diese Staffelung wirkt der Boden
                     // flach, weil alle Linien gleich stark leuchten.

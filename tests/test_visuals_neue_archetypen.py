@@ -26,6 +26,8 @@ NEUE_VISUALIZER = [
     "spirograph", "voronoi_cells",
     # Welle 5
     "ink_bloom", "silk_ribbons",
+    # Welle 6
+    "scissor_lattice",
 ]
 
 WIDTH, HEIGHT = 256, 144
