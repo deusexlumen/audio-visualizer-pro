@@ -210,6 +210,7 @@ def test_state_change_sets_dirty_flag(qtbot):
 
 def test_first_supported_drop_filters_extensions(qtbot, tmp_path):
     """Der Drop-Filter akzeptiert nur bekannte Datei-Endungen."""
+    from pathlib import Path
     from unittest.mock import MagicMock
     from PyQt6.QtCore import QUrl
 
@@ -224,6 +225,14 @@ def test_first_supported_drop_filters_extensions(qtbot, tmp_path):
         event.mimeData.return_value = mime
         return event
 
-    assert window._first_supported_drop(make_event(["C:/musik/song.mp3"])) == "C:/musik/song.mp3"
-    assert window._first_supported_drop(make_event(["C:/p/projekt.avproj"])) == "C:/p/projekt.avproj"
-    assert window._first_supported_drop(make_event(["C:/x/readme.txt"])) is None
+    # Echte Pfade aus tmp_path: ein Windows-Literal wie "C:/musik/song.mp3"
+    # kommt unter Linux als "/C:/musik/song.mp3" aus QUrl zurueck.
+    song = str(tmp_path / "song.mp3")
+    projekt = str(tmp_path / "projekt.avproj")
+    readme = str(tmp_path / "readme.txt")
+
+    # Ueber Path vergleichen: QUrl gibt unter Windows Vorwaerts-Schraegstriche
+    # zurueck, der String waere dann trotz gleichem Pfad ungleich.
+    assert Path(window._first_supported_drop(make_event([song]))) == Path(song)
+    assert Path(window._first_supported_drop(make_event([projekt]))) == Path(projekt)
+    assert window._first_supported_drop(make_event([readme])) is None

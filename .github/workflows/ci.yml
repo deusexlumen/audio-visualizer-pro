@@ -31,6 +31,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libegl1 libgl1 libxkbcommon0 libdbus-1-3 ffmpeg
 
+      - name: FFmpeg (Windows)
+        # Ohne FFmpeg schlagen alle Tests fehl, die einen Render anstossen.
+        # Auf den Linux-Runnern kommt es aus apt (Schritt oben), auf den
+        # Windows-Runnern ist es nicht vorinstalliert.
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg --no-progress -y
+
       - name: Abhaengigkeiten installieren (gepinnt)
         run: pip install -r requirements.lock
 

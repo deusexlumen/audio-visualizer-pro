@@ -16,6 +16,7 @@ from src.gpu_renderer import GPUBatchRenderer
 class TestBoundedFrameQueue:
     """Regression test for unbounded frame queue memory spike."""
 
+    @pytest.mark.gpu
     def test_render_queue_never_exceeds_maxsize(self, tmp_path):
         """A slow encoder must not let the frame queue grow beyond maxsize."""
         observed_max = [0]

@@ -1,6 +1,7 @@
 """Tests fuer src/ffmpeg_locator.py (Suche + gemockter Download)."""
 
 import io
+import os
 import zipfile
 from unittest.mock import patch
 
@@ -28,12 +29,17 @@ def test_find_ffmpeg_via_path(monkeypatch, local_appdata):
     assert loc.find_ffmpeg() == r"C:\Tools\ffmpeg.exe"
 
 
+def _exe_name(binary: str) -> str:
+    """Wie `_find_local_exe` es erwartet: nur unter Windows mit .exe."""
+    return f"{binary}.exe" if os.name == "nt" else binary
+
+
 def test_find_ffmpeg_lokal_wenn_nicht_im_path(monkeypatch, local_appdata):
     monkeypatch.setattr(loc.shutil, "which", lambda name: None)
     install_dir = loc._local_install_dir()
     nested = install_dir / "ffmpeg-essentials" / "bin"
     nested.mkdir(parents=True)
-    exe = nested / "ffmpeg.exe"
+    exe = nested / _exe_name("ffmpeg")
     exe.write_text("dummy")
 
     found = loc.find_ffmpeg()
@@ -60,8 +66,8 @@ def test_get_ffprobe_path_wirft_klare_fehlermeldung(monkeypatch, local_appdata):
 def _fake_zip_bytes() -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("ffmpeg-essentials/bin/ffmpeg.exe", "dummy-binary")
-        zf.writestr("ffmpeg-essentials/bin/ffprobe.exe", "dummy-binary")
+        zf.writestr(f"ffmpeg-essentials/bin/{_exe_name('ffmpeg')}", "dummy-binary")
+        zf.writestr(f"ffmpeg-essentials/bin/{_exe_name('ffprobe')}", "dummy-binary")
     return buf.getvalue()
 
 
@@ -79,7 +85,7 @@ def test_download_ffmpeg_erfolgreich_ohne_pruefsumme(monkeypatch, local_appdata)
     progress_calls = []
     path = loc.download_ffmpeg(progress_callback=lambda d, t: progress_calls.append((d, t)))
 
-    assert path.endswith("ffmpeg.exe")
+    assert path.endswith(_exe_name("ffmpeg"))
     assert progress_calls
 
 
