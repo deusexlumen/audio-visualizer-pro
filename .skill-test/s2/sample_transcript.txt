@@ -1,0 +1,9 @@
+Intro ohne Zeitstempel soll ignoriert werden
+[00:12] Host: Willkommen zur neuen Folge.
+[00:45] Gast: Ich glaube fest daran, dass "einfache Systeme laenger halten".
+[01:30] Host: Du hast mal gesagt: „Komplexitaet ist der Feind".
+[02:05] Gast: Genau, "einfache Systeme   laenger halten" — das wiederhole ich gern.
+[03:10] Host: Was meinst du mit "Tempo schlaegt Perfektion"?
+[03:10] Host: Was meinst du mit "Tempo schlaegt Perfektion"?
+Kaputter Eintrag ohne Klammern: kein Match
+[1:04:00] Gast: Zum Abschluss: "Mut zur Luecke".

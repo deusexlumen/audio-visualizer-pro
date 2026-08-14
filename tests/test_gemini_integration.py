@@ -365,12 +365,15 @@ class TestGeminiIntegration:
             assert result["postprocess"]["brightness"] == 0.0
             assert result["background"]["opacity"] == 1.0
 
-    def test_optimize_all_settings_uses_response_schema_and_temperature(self):
-        """Der API-Call soll response_schema und temperature=0.2 verwenden."""
+    def test_optimize_all_settings_ohne_response_schema(self):
+        """Kein response_schema — die Gemini-API lehnt offene Maps ab.
+
+        Frueher wurde hier ein Schema mit additionalProperties mitgeschickt.
+        Die API antwortete darauf mit einem Fehler, jeder Aufruf landete im
+        Fallback und der Nutzer bekam stillschweigend Standardwerte.
+        """
         with patch('src.gemini_integration.genai') as mock_genai:
-            from src.gemini_integration import (
-                GeminiIntegration, OPTIMIZE_RESPONSE_SCHEMA
-            )
+            from src.gemini_integration import GeminiIntegration
 
             mock_client = Mock()
             mock_response = Mock()
@@ -399,7 +402,7 @@ class TestGeminiIntegration:
             config = call_kwargs.get("config", {})
             assert config.get("temperature") == 0.2
             assert config.get("response_mime_type") == "application/json"
-            assert config.get("response_schema") is OPTIMIZE_RESPONSE_SCHEMA
+            assert "response_schema" not in config
             assert "system_instruction" in config
             assert result["params"]["pulse_intensity"] == pytest.approx(0.6, abs=0.001)
 
@@ -467,3 +470,177 @@ class TestGeminiIntegration:
             assert _get_param_category("viz_offset_x") == "transform"
             assert _get_param_category("background_color") == "special"
             assert _get_param_category("unknown_param") == "other"
+
+
+class TestSegmentPipeline:
+    """Zwei-Stufen-Extraktion: Segment-Transkript -> Auswahl auf Text."""
+
+    def _gemini(self):
+        with patch('src.gemini_integration.genai') as mock_genai:
+            from src.gemini_integration import GeminiIntegration
+            mock_genai.Client.return_value = Mock()
+            return GeminiIntegration(api_key="test-key")
+
+    def test_clean_segments_verwirft_eintraege_ohne_zeiten(self):
+        from src.gemini_integration import GeminiIntegration
+        raw = [
+            {"start": 0.0, "end": 2.0, "text": "Erstes Segment"},
+            {"text": "Ohne Zeiten"},
+            {"start": 5.0, "text": "Nur Start"},
+            {"start": 2.0, "end": 4.0, "text": "  "},
+        ]
+        cleaned = GeminiIntegration._clean_segments(raw)
+        assert len(cleaned) == 1
+        assert cleaned[0]["text"] == "Erstes Segment"
+
+    def test_clean_segments_sortiert_und_begrenzt_auf_laenge(self):
+        from src.gemini_integration import GeminiIntegration
+        raw = [
+            {"start": 8.0, "end": 12.0, "text": "Spaet"},
+            {"start": 1.0, "end": 3.0, "text": "Frueh"},
+            {"start": 20.0, "end": 22.0, "text": "Nach Ende des Audios"},
+        ]
+        cleaned = GeminiIntegration._clean_segments(raw, audio_duration=10.0)
+        assert [c["text"] for c in cleaned] == ["Frueh", "Spaet"]
+        assert cleaned[1]["end"] == 10.0
+
+    def test_clean_segments_korrigiert_ungueltige_reihenfolge(self):
+        from src.gemini_integration import GeminiIntegration
+        cleaned = GeminiIntegration._clean_segments(
+            [{"start": 5.0, "end": 3.0, "text": "Verdreht"}]
+        )
+        assert cleaned[0]["end"] > cleaned[0]["start"]
+
+    def test_quotes_from_segments_rechnet_zeiten_lokal(self):
+        gemini = self._gemini()
+        segments = [
+            {"start": 0.0, "end": 4.0, "text": "Hallo und willkommen zu dieser Folge."},
+            {"start": 4.0, "end": 9.0,
+             "text": "Das Fundament von diesem Schlamassel ist die Werbeoekonomie."},
+        ]
+        with patch.object(gemini, "_select_quotes_from_text", return_value=[
+            {"text": "Das Fundament von diesem Schlamassel", "confidence": 0.9},
+        ]):
+            quotes = gemini._quotes_from_segments(segments, max_quotes=3)
+
+        assert len(quotes) == 1
+        # Zeit stammt aus dem zweiten Segment, nicht aus einer KI-Schaetzung
+        assert 4.0 <= quotes[0].start_time < 6.0
+        assert quotes[0].end_time <= 9.0
+
+    def test_quotes_from_segments_verwirft_erfundene_zitate(self):
+        gemini = self._gemini()
+        segments = [{"start": 0.0, "end": 4.0, "text": "Hallo und willkommen."}]
+        with patch.object(gemini, "_select_quotes_from_text", return_value=[
+            {"text": "Diesen Satz hat niemand gesagt", "confidence": 0.95},
+        ]):
+            quotes = gemini._quotes_from_segments(segments, max_quotes=3)
+        assert quotes == []
+
+    def test_extract_quotes_faellt_ohne_segmente_auf_alten_pfad_zurueck(self):
+        gemini = self._gemini()
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp:
+            tmp.write(b'dummy')
+            tmp_path = tmp.name
+        try:
+            with patch.object(gemini, "transcribe_segments", return_value=[]), \
+                 patch.object(gemini, "_upload_audio_with_retry", return_value=Mock()):
+                response = Mock()
+                response.text = ('[{"text": "Ein ganzer Satz hier", '
+                                 '"start_time": 3.0, "end_time": 6.0, '
+                                 '"confidence": 0.9}]')
+                gemini.client.models.generate_content.return_value = response
+                quotes = gemini.extract_quotes(tmp_path, max_quotes=2, use_cache=False)
+            assert len(quotes) == 1
+            assert quotes[0].start_time == 3.0
+        finally:
+            os.unlink(tmp_path)
+
+    def test_finalize_quotes_rastet_mit_features_ein(self):
+        import numpy as np
+        from src.types import AudioFeatures, Quote
+
+        gemini = self._gemini()
+        fps = 30
+        n = 20 * fps
+        rms = np.full(n, 0.02, dtype=np.float32)
+        rms[int(4.0 * fps):int(7.0 * fps)] = 0.8
+        features = AudioFeatures(
+            duration=20.0, sample_rate=22050, fps=fps, frame_count=n,
+            rms=rms, onset=np.zeros(n), spectral_centroid=np.zeros(n),
+            spectral_rolloff=np.zeros(n), zero_crossing_rate=np.zeros(n),
+            chroma=np.zeros((12, n)), mfcc=np.zeros((13, n)),
+            tempogram=np.zeros((10, n)), tempo=120.0, mode="speech",
+        )
+        quotes = [Quote(text="Test", start_time=4.4, end_time=7.4, confidence=0.9)]
+        result = gemini._finalize_quotes(quotes, max_quotes=5, features=features)
+        assert result[0].start_time == pytest.approx(3.88, abs=0.06)
+        assert result[0].end_time == pytest.approx(7.0, abs=0.06)
+
+    def test_window_is_plausible(self):
+        from src.gemini_integration import GeminiIntegration as G
+        text = "Das Netz basiert aktuell auf Masse statt Klasse"  # 8 Woerter
+        assert G._window_is_plausible(text, 10.0, 13.0)
+        # Entartetes Fenster (Segment-Zeiten am Audio-Ende zusammengefallen)
+        assert not G._window_is_plausible(text, 90.01, 90.03)
+        # Viel zu lang fuer die Textmenge
+        assert not G._window_is_plausible(text, 10.0, 40.0)
+        # Zu schnell gesprochen, um wahr zu sein
+        assert not G._window_is_plausible(text, 10.0, 10.9)
+
+    def test_quotes_from_segments_verwirft_entartete_fenster(self):
+        gemini = self._gemini()
+        segments = [
+            {"start": 89.9, "end": 90.0, "text": "Du holst dir genau den Liter Milch."},
+        ]
+        with patch.object(gemini, "_select_quotes_from_text", return_value=[
+            {"text": "Du holst dir genau den Liter Milch", "confidence": 0.9},
+        ]):
+            quotes = gemini._quotes_from_segments(segments, max_quotes=3,
+                                                  audio_duration=90.0)
+        assert quotes == []
+
+
+class TestOptimizeResultValidation:
+    """Der Optimierer muss die Antwort auch dann verstehen, wenn das Modell
+    die Bloecke anders benennt — sonst landet das Ergebnis lautlos im Nichts."""
+
+    def _gemini(self):
+        with patch('src.gemini_integration.genai') as mock_genai:
+            from src.gemini_integration import GeminiIntegration
+            mock_genai.Client.return_value = Mock()
+            return GeminiIntegration(api_key="test-key")
+
+    def test_akzeptiert_alternative_schluesselnamen(self):
+        gemini = self._gemini()
+        specs = {"num_petals": (8, 3, 16, 1), "brightness": (1.0, 0.5, 2.0, 0.05)}
+        raw = {
+            "parameters": {"num_petals": 6, "brightness": 1.2},
+            "post_process": {"contrast": 1.2},
+            "colour": {"primary": "#112233"},
+        }
+        result = gemini._validate_optimized_result(raw, {}, {}, specs)
+        assert result["params"]["num_petals"] == 6
+        assert result["postprocess"]["contrast"] == pytest.approx(1.2)
+        assert result["colors"]["primary"] == "#112233"
+
+    def test_clamped_auf_die_spec_grenzen(self):
+        gemini = self._gemini()
+        specs = {"num_petals": (8, 3, 16, 1)}
+        result = gemini._validate_optimized_result({"params": {"num_petals": 99}},
+                                                   {}, {}, specs)
+        assert result["params"]["num_petals"] == 16
+
+    def test_blur_darf_ueber_eins_gehen(self):
+        gemini = self._gemini()
+        raw = {"background": {"blur": 12.0, "opacity": 0.8, "vignette": 0.4}}
+        result = gemini._validate_optimized_result(raw, {}, {}, {})
+        assert result["background"]["blur"] == pytest.approx(12.0)
+        assert result["background"]["opacity"] == pytest.approx(0.8)
+
+    def test_unbekannte_parameter_werden_verworfen(self):
+        gemini = self._gemini()
+        specs = {"num_petals": (8, 3, 16, 1)}
+        result = gemini._validate_optimized_result(
+            {"params": {"gibt_es_nicht": 5}}, {}, {}, specs)
+        assert result["params"] == {}

@@ -28,6 +28,13 @@ logger = get_logger(__name__)
 
 _SLOW_FORMATS = {'.mp3', '.m4a', '.aac', '.ogg', '.wma', '.opus'}
 
+# librosa hat tempo() in 0.10 nach feature.rhythm verschoben; der alte
+# Alias in librosa.beat warnt und verschwindet in 1.0.
+try:
+    from librosa.feature.rhythm import tempo as _librosa_tempo
+except ImportError:  # pragma: no cover - nur auf aelteren librosa-Versionen
+    from librosa.beat import tempo as _librosa_tempo
+
 
 class EMAFilter:
     """Exponential Moving Average fuer geglaettete Steuerungswerte."""
@@ -59,7 +66,7 @@ class AudioAnalyzer:
         
     # Bei Format-Aenderungen an den gecachten Features hochzaehlen —
     # invalidiert alle bestehenden Caches.
-    CACHE_VERSION = 8
+    CACHE_VERSION = 9
 
     def _get_cache_path(self, audio_path: str, fps: int, ema_alpha: float = 0.15) -> Path:
         """Cache-Key basiert auf Datei-Inhalt (MD5) + fps + ema_alpha — nicht auf mtime."""
@@ -244,7 +251,7 @@ class AudioAnalyzer:
         # Tempo & Mode
         self._progress("Klassifiziere Audio-Typ...", step := step + 1, total_steps, progress_callback)
         tempo = self._estimate_tempo_simple(onset_env, sr, hop_length)
-        mode = self._detect_mode_advanced(tempo, onset_env, spec_cent, voice_clarity, rms)
+        mode = self._detect_mode_advanced(spec_cent, voice_clarity, rms)
         key = self._estimate_key(chroma) if duration < 600 else None
         
         # Beat-Frames fuer Audio-Sync extrahieren
@@ -374,48 +381,108 @@ class AudioAnalyzer:
         except Exception:
             return np.array([], dtype=np.int32)
     
+    # Plausibler BPM-Bereich; alles ausserhalb gilt als Fehlschaetzung
+    TEMPO_MIN_BPM = 40.0
+    TEMPO_MAX_BPM = 250.0
+    TEMPO_FALLBACK_BPM = 120.0
+
     def _estimate_tempo_simple(self, onset_env: np.ndarray, sr: int, hop_length: int) -> float:
+        """Schaetzt das Tempo in BPM.
+
+        Bevorzugt librosas eigenen Schaetzer (log-normaler Prior um 120 BPM,
+        das faengt Oktav-Fehler ab). Faellt auf das Tempogram-Maximum zurueck,
+        wobei ungueltige Lags ausmaskiert werden muessen: der Lag 0 hat immer
+        die groesste Energie und entspricht inf BPM — ein blankes argmax
+        liefert deshalb ausnahmslos den Fallback-Wert.
+        """
+        try:
+            tempo = float(np.atleast_1d(
+                _librosa_tempo(onset_envelope=onset_env, sr=sr, hop_length=hop_length)
+            )[0])
+            if self._tempo_plausible(tempo):
+                return tempo
+        except Exception:
+            logger.warning("Tempo-Schaetzung ueber librosa fehlgeschlagen, nutze Tempogram",
+                           exc_info=True)
+
         try:
             tempogram = librosa.feature.tempogram(
                 onset_envelope=onset_env, sr=sr, hop_length=hop_length, win_length=96
             )
             tg_mean = np.mean(tempogram, axis=1)
             bpms = librosa.tempo_frequencies(len(tg_mean), hop_length=hop_length, sr=sr)
-            best_idx = np.argmax(tg_mean)
-            tempo = float(bpms[best_idx])
-            if tempo < 40 or tempo > 250:
-                return 120.0
-            return tempo
+            valid = np.isfinite(bpms) & (bpms >= self.TEMPO_MIN_BPM) & (bpms <= self.TEMPO_MAX_BPM)
+            if not np.any(valid):
+                return self.TEMPO_FALLBACK_BPM
+            masked = np.where(valid, tg_mean, -np.inf)
+            tempo = float(bpms[int(np.argmax(masked))])
+            if self._tempo_plausible(tempo):
+                return tempo
         except Exception:
-            return 120.0
+            pass
+
+        return self.TEMPO_FALLBACK_BPM
+
+    def _tempo_plausible(self, tempo: float) -> bool:
+        """True, wenn der BPM-Wert endlich und im plausiblen Bereich liegt."""
+        return bool(np.isfinite(tempo)) and self.TEMPO_MIN_BPM <= tempo <= self.TEMPO_MAX_BPM
     
-    def _detect_mode_advanced(self, tempo: float, onset_env: np.ndarray, 
-                               spec_cent: np.ndarray, voice_clarity: np.ndarray,
-                               rms: np.ndarray) -> str:
+    # Stuetzpunkte der Modus-Erkennung, gemessen am Golden-Korpus
+    # (3 Musik-, 3 Podcast-Dateien, siehe docs/internal/mode-detection.md).
+    # Jeweils (Sprache-Kante, Musik-Kante) — dazwischen wird linear ueberblendet.
+    # ACHTUNG: cent_mean gilt fuer das Spektrum NACH dem Pre-Emphasis-Filter
+    # (analyze() hebt Hoehen um ~6 dB/Oktave an). Sprache liegt roh bei
+    # 500-1500 Hz, hier aber bei ~5200 Hz.
+    MODE_RMS_VAR_EDGES = (0.10, 0.17)        # wenig Dynamik -> Sprache
+    MODE_VOICE_MEAN_EDGES = (0.35, 0.28)     # viel Sprachband-Anteil -> Sprache
+    MODE_CENT_MEAN_EDGES = (5400.0, 6300.0)  # tieferer Schwerpunkt -> Sprache
+    # Ab welchem Gesamtscore die Entscheidung eindeutig ist. 0.30 liegt knapp
+    # unter 1/3: zwei voll ausgeschlagene Merkmale setzen sich damit gegen ein
+    # gegenlaeufiges drittes durch, echte Mischfaelle bleiben 'hybrid'.
+    MODE_DECISION_MARGIN = 0.30
+
+    @staticmethod
+    def _mode_feature_score(value: float, speech_edge: float, music_edge: float) -> float:
+        """Bewertet ein Merkmal: +1 = klar Sprache, -1 = klar Musik.
+
+        Zwischen den beiden Kanten wird linear ueberblendet, damit
+        Grenzfaelle nicht an einer harten Schwelle kippen.
         """
-        Erweiterte Modus-Erkennung mit mehr Features.
-        Returns: 'music', 'speech', 'hybrid'
+        span = speech_edge - music_edge
+        if abs(span) < 1e-9:
+            return 0.0
+        t = float(np.clip((value - music_edge) / span, 0.0, 1.0))
+        return t * 2.0 - 1.0
+
+    def _detect_mode_advanced(self, spec_cent: np.ndarray, voice_clarity: np.ndarray,
+                              rms: np.ndarray) -> str:
+        """Klassifiziert das Material als 'music', 'speech' oder 'hybrid'.
+
+        Bewertet drei Merkmale einzeln und mittelt sie, statt harte
+        UND-Ketten zu verlangen: ein einzelner Ausreisser kippt die
+        Entscheidung dann nicht mehr, und unklare Faelle landen bewusst
+        auf 'hybrid'.
+
+        Tempo und Onset-Streuung gehen bewusst NICHT ein: Sprache bekommt
+        vom Tempo-Schaetzer ebenso plausible BPM-Werte wie Musik, und die
+        Onset-Streuung trennt am Korpus nicht (Podcasts streuen dort sogar
+        staerker als Musik).
         """
-        onset_std = float(np.std(onset_env))
         cent_mean = float(np.mean(spec_cent))
         voice_mean = float(np.mean(voice_clarity))
         rms_var = float(np.std(rms))
-        
-        # Speech: hohe Voice-Clarity, niedrige spektrale Variabilitaet
-        is_speech = (voice_mean > 0.45) and (rms_var < 0.15) and (cent_mean < 2000)
-        
-        # Music: erkennbares Tempo, rhythmische Variabilitaet, hoher Spectral-Centroid
-        is_music = (tempo > 60) and (onset_std > 0.08) and (cent_mean > 1200) and (voice_mean < 0.5)
-        
-        if is_music and is_speech:
-            return "hybrid"
-        elif is_music:
-            return "music"
-        elif is_speech:
+
+        score = float(np.mean([
+            self._mode_feature_score(rms_var, *self.MODE_RMS_VAR_EDGES),
+            self._mode_feature_score(voice_mean, *self.MODE_VOICE_MEAN_EDGES),
+            self._mode_feature_score(cent_mean, *self.MODE_CENT_MEAN_EDGES),
+        ]))
+
+        if score > self.MODE_DECISION_MARGIN:
             return "speech"
-        else:
-            # Default: Hybrid wenn unklar
-            return "hybrid"
+        if score < -self.MODE_DECISION_MARGIN:
+            return "music"
+        return "hybrid"
     
     def _estimate_key(self, chroma: np.ndarray) -> str:
         """

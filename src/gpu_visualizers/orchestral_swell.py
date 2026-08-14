@@ -1,276 +1,357 @@
 """
-Orchestral Swell - GPU-Visualizer fuer klassische Musik.
+Orchestral Swell - GPU-Visualizer "Swell-Vorhaenge".
 
-Eleganter, warmer Visualizer fuer Orchester- und Kammermusik:
-- Aufsteigende goldene Partikel wie Glut und Staub im Konzertsaallicht
-- Dynamik-basiertes Schwellen: forte = mehr Partikel, heller, weiter
-- piano = weniger Partikel, gedimmter, kontrollierter
-- Langsame, sanfte Bewegung mit Sinus-Wellen
+Breite, vertikale Licht-Vorhaenge, die wie Buehnenlicht von unten aufsteigen
+und langsam anschwellen/verklingen — majestaetisch, langsam, orchestrisch.
+
+Design:
+- Mehrere ueberlagerte vertikale Farb-Saeulen mit weichen Kanten und
+  fbm-Textur, tiefengestaffelt (vordere Vorhaenge kraeftiger, hintere diffuser)
+- Stark geglaettete RMS-/Voice-Huellkurve steuert Hoehe + Leuchtdichte
+  (langsames Anschwellen, kein Zucken)
+- Beats = breites, sanftes Aufhellen (Swell, kein Strobe)
+- spectral_centroid = Feinheit der Vorhang-Textur
+- Chroma = Warm/Kalt-Farbstimmung
+- transient = kurzer Glanzstreifen, der nach oben laeuft
+- Sprach-Modus: sehr ruhiges Schwellen auf Phrasen (voice_band), Pausen
+  lassen die Vorhaenge sanft in sich zusammensinken
+
+HDR-Ausgabe (kein clamp) — Tonemapping macht zentral der Renderer.
+Deterministisch: alle Huellkurven werden kausal aus den Feature-Arrays
+berechnet und pro Feature-Satz gecacht.
 """
 
 import numpy as np
 import moderngl
-from .base import BaseGPUVisualizer
+from .base import (
+    BaseGPUVisualizer,
+    FULLSCREEN_VERTEX_SHADER,
+    LYGIA_MATH_GLSL,
+    LYGIA_NOISE_GLSL,
+    SHADER_COMMON_GLSL,
+    compose_fragment,
+    create_fullscreen_quad,
+)
 
 
 class OrchestralSwellGPU(BaseGPUVisualizer):
-    """
-    Orchestral Swell - Eleganter GPU-Visualizer fuer klassische Musik-Dynamik.
-    """
+    """Swell-Vorhaenge: vertikale Licht-Saeulen mit orchestrischem Schwellen."""
 
     COLOR_PARAMS = {
         'color_mode': 'warm',     # Orchestral-Look: warme Toene als Default
-        'base_hue': 0.10,         # 0.0-1.0, nur fuer 'fixed'
-        'color_saturation': 0.75, # 0.0-1.0
+        'base_hue': 0.09,         # 0.0-1.0, nur fuer 'fixed'
+        'color_saturation': 0.7,  # 0.0-1.0
     }
 
     PARAMS = {
-        'swell_intensity': (1.0, 0.2, 2.0, 0.05),
-        'particle_count': (64, 8, 128, 8),
-        'gold_tint': (0.5, 0.0, 1.0, 0.05),
-        'dynamics_response': (1.2, 0.5, 2.5, 0.1),
-        'bg_brightness': (0.08, 0.0, 0.5, 0.01),
-        'vignette_strength': (0.6, 0.0, 1.5, 0.05),
-        'spotlight_strength': (0.3, 0.0, 1.0, 0.05),
-        'ray_strength': (0.06, 0.0, 0.3, 0.01),
-        'grain_amount': (0.015, 0.0, 0.1, 0.005),
-        'particle_spread': (1.0, 0.0, 4.0, 0.1),
+        'curtain_count': (6, 2, 10, 1),
+        'swell_response': (1.0, 0.2, 2.5, 0.05),
+        'rise_speed': (0.25, 0.0, 1.0, 0.05),
+        'texture_detail': (1.0, 0.2, 3.0, 0.1),
+        'warmth': (0.6, 0.0, 1.0, 0.05),
+        'curtain_softness': (0.70, 0.1, 1.5, 0.05),
+        'height_max': (0.80, 0.3, 0.95, 0.02),
+        'beat_glow': (0.5, 0.0, 1.5, 0.05),
+        'glint_strength': (0.8, 0.0, 2.0, 0.05),
+        'bg_brightness': (0.10, 0.0, 0.6, 0.01),
+    }
+
+    PARAMS_GROUPS = {
+        "Vorhaenge": ["curtain_count", "curtain_softness", "height_max"],
+        "Bewegung & Textur": ["rise_speed", "texture_detail"],
+        "Reaktion": ["swell_response", "beat_glow", "glint_strength"],
+        "Farbe & Hintergrund": ["warmth", "bg_brightness"],
     }
 
     def _setup(self):
-        self._prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
-            in vec2 in_pos;
-            void main() { gl_Position = vec4(in_pos, 0.0, 1.0); }
-            """,
-            fragment_shader="""
-            #version 330
+        self._env_cache = None  # Huellkurven-Cache (pro Feature-Satz)
+        fragment = compose_fragment(
+            """
             uniform vec2 u_resolution;
             uniform float u_time;
-            uniform float u_rms;
-            uniform float u_beat_intensity;
-            uniform float u_swell_intensity;
-            uniform float u_particle_count;
-            uniform float u_gold_tint;
-            uniform float u_dynamics_response;
-            uniform float u_bg_brightness;
-            uniform float u_vignette_strength;
-            uniform float u_spotlight_strength;
-            uniform float u_ray_strength;
-            uniform float u_grain_amount;
-            uniform float u_particle_spread;
-            uniform float u_brightness;
-            uniform vec3 u_primary_color;
-            uniform vec3 u_secondary_color;
+            uniform float u_swell;        // stark geglaettete Dynamik-Huellkurve
+            uniform float u_beat;         // sanftes Beat-Aufhellen (Decay-Envelope)
+            uniform float u_detail;       // spectral_centroid (geglaettet)
+            uniform float u_glint_pos;    // Position des Glanzstreifens (0..1.2)
+            uniform float u_glint;        // Intensitaet des Glanzstreifens
+            uniform vec3 u_warm_color;
+            uniform vec3 u_cold_color;
             uniform vec3 u_background_color;
+            uniform float u_curtain_count;
+            uniform float u_swell_response;
+            uniform float u_rise_speed;
+            uniform float u_texture_detail;
+            uniform float u_warmth;
+            uniform float u_curtain_softness;
+            uniform float u_height_max;
+            uniform float u_beat_glow;
+            uniform float u_glint_strength;
+            uniform float u_bg_brightness;
+            uniform float u_brightness;
 
             out vec4 f_color;
 
-            // === Utilities ===
-            float remap(float v, float i_min, float i_max, float o_min, float o_max) {
-                return o_min + (v - i_min) * (o_max - o_min) / (i_max - i_min + 1e-8);
-            }
-
-            float hash(float n) { return fract(sin(n) * 43758.5453123); }
-            float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-
-            float noise(vec2 p) {
-                vec2 i = floor(p);
-                vec2 f = fract(p);
-                float a = hash(i);
-                float b = hash(i + vec2(1.0, 0.0));
-                float c = hash(i + vec2(0.0, 1.0));
-                float d = hash(i + vec2(1.0, 1.0));
-                vec2 u = f * f * (3.0 - 2.0 * f);
-                return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-            }
-
-            float fbm(vec2 p, int octaves) {
-                float v = 0.0;
-                float a = 0.5;
-                mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
-                for (int i = 0; i < octaves; i++) {
-                    v += a * noise(p);
-                    p = rot * p * 2.0 + vec2(100.0);
-                    a *= 0.5;
-                }
-                return v;
-            }
+            const int MAX_CURTAINS = 10;
 
             void main() {
                 vec2 uv = gl_FragCoord.xy / u_resolution;
+                // Im Renderer liegt gl_FragCoord.y = 0 OBEN im fertigen Bild.
+                // Fuer "von unten aufsteigend" muss y gespiegelt werden.
+                uv.y = 1.0 - uv.y;
                 float aspect = u_resolution.x / u_resolution.y;
-                uv.x *= aspect;
+                // p.x in [0, aspect], p.y in [0, 1] — Vorhaenge am Boden verankert
+                vec2 p = vec2(uv.x * aspect, uv.y);
 
-                float t = u_time;
-                float rms = u_rms;
-                float beat = u_beat_intensity;
-                float dyn = rms * u_dynamics_response;
+                // Sehr dunkler, warmer Grund — obere Bildhaelfte und Raender
+                // bleiben dunkel (Hintergrundbild-Harmonie, Schwarz = transparent)
+                vec3 col = u_background_color * u_bg_brightness
+                         * (0.55 + 0.45 * uv.y) * (1.0 - 0.35 * uv.y * uv.y);
 
-                // === Deep warm background ===
-                vec3 col = u_background_color * u_bg_brightness;
+                // Anschwellen: Hoehe und Leuchtdichte folgen der Huellkurve,
+                // Beats hellen breit und sanft auf (kein Strobe)
+                float swell = clamp(u_swell * u_swell_response, 0.0, 1.5);
+                float glowAll = 1.0 + u_beat * u_beat_glow;
 
-                // Subtle warm vignette
-                vec2 center = vec2(aspect * 0.5, 0.5);
-                float dist = length(uv - center);
-                col *= smoothstep(1.2, 0.2, dist * u_vignette_strength);
+                float curtainSum = 0.0;  // Maske aller Vorhaenge (fuer Glanzstreifen)
 
-                // === Central warm glow (spotlight effect) ===
-                float spotGlow = exp(-dist * dist * 2.0) * (0.1 + dyn * 0.4);
-                vec3 spotColor = mix(u_primary_color, vec3(1.0, 0.95, 0.85), 0.25);
-                col += spotColor * spotGlow * u_spotlight_strength * u_swell_intensity;
-
-                // === Particles (embers/dust) ===
-                int activeParticles = int(u_particle_count * (0.4 + rms * 0.6));
-                float spread = 1.0 + dyn * 2.5 * u_particle_spread;
-                float globalBright = 0.5 + dyn * 0.5;
-
-                for (int i = 0; i < 128; i++) {
-                    if (float(i) >= u_particle_count) break;
-                    if (i >= activeParticles) break;
-
+                for (int i = 0; i < MAX_CURTAINS; i++) {
+                    if (float(i) >= u_curtain_count) break;
                     float fi = float(i);
-                    float seed = fi * 1.618033;
+                    float seed = fi * 7.31 + 1.7;
 
-                    // Base position
-                    float px = hash(seed * 7.13) * aspect;
-                    float py = fract(hash(seed * 13.37) + t * (0.02 + hash(seed * 3.71) * 0.03 + dyn * 0.015));
+                    // Tiefenstaffelung: 0 = ganz hinten (diffus), 1 = vorn (kraeftig)
+                    float depth = 0.25 + 0.75 * hash(seed * 3.17);
 
-                    // Spread from center when loud
-                    px = (px - aspect * 0.5) * spread + aspect * 0.5;
+                    // Gleichmaessige Verteilung mit organischem Jitter
+                    float cx = (fi + 0.5) / u_curtain_count;
+                    cx += (hash(seed * 5.03) - 0.5) * 0.35 / u_curtain_count;
+                    cx = clamp(cx, 0.04, 0.96) * aspect;
+                    // Langsame horizontale Atembewegung
+                    cx += sin(u_time * 0.07 + seed) * 0.02;
 
-                    // Gentle drift
-                    px += sin(t * 0.4 + fi * 0.73) * 0.04 * spread;
-                    px += sin(t * 0.9 + fi * 1.19) * 0.015 * spread;
+                    // Breite: hintere Vorhaenge breiter und diffuser
+                    float w = mix(0.30, 0.14, depth) * u_curtain_softness;
 
-                    vec2 pPos = vec2(px, py);
-                    float d = length(uv - pPos);
+                    // Hoehe: Basis + Schwellen, pro Vorhang variiert,
+                    // sehr langsames eigenes Auf und Ab
+                    // Deutlich unterschiedliche Grundhoehen -> keine flache Kante
+                    float hBase = 0.22 + 0.34 * hash(seed * 9.11);
+                    float hSwell = (u_height_max - hBase) * clamp(swell * (0.75 + 0.5 * hash(seed * 4.7)), 0.0, 1.3);
+                    float h = hBase + hSwell + sin(u_time * 0.11 + seed * 2.0) * 0.03;
 
-                    // Particle size
-                    float pSize = 0.004 + hash(seed * 5.23) * 0.006 + dyn * 0.006;
-                    float glow = exp(-d * d / (pSize * pSize));
+                    // Ausgefranste Oberkante via fbm (langsam wandernd)
+                    float edge = (fbm(vec2(p.x * 2.5 + seed * 10.0, u_time * 0.04), 3) - 0.5) * 0.18;
+                    float hEdge = h + edge * (0.4 + 0.6 * swell);
 
-                    // Palette aus primary/secondary abgeleitet
-                    float ci = hash(seed * 11.11);
-                    vec3 pColor;
-                    if (ci < 0.33) {
-                        pColor = u_primary_color;
-                    } else if (ci < 0.66) {
-                        pColor = mix(u_primary_color, u_secondary_color, 0.5);
-                    } else {
-                        pColor = u_secondary_color;
-                    }
+                    // Vertikale Maske: von unten bis zur weichen Oberkante
+                    float topSoft = 0.10 + 0.10 * (1.0 - depth);
+                    float vmask = 1.0 - smoothstep(hEdge - topSoft, hEdge, p.y);
+                    // Unteres Drittel ruhig halten (Zitat-Zone): sanft abgedimmt
+                    vmask *= mix(0.35, 1.0, smoothstep(0.0, 0.28, p.y));
+                    // Lichtstrahl-Charakter: nach oben hin duenner/schwaecher,
+                    // sonst wirkt der Vorhang wie eine flache Nebelwand
+                    vmask *= mix(1.0, 0.30, clamp(p.y / max(hEdge, 0.05), 0.0, 1.0));
 
-                    // Gold tint bias
-                    pColor = mix(pColor, u_primary_color, u_gold_tint * 0.25);
+                    // Horizontale Maske: weiche Gauß-Kanten
+                    float dx = (p.x - cx) / w;
+                    float hmask = exp(-dx * dx * 2.0);
 
-                    // Brightness per particle + dynamics
-                    float pBright = (0.3 + hash(seed * 9.99) * 0.5) * globalBright;
-                    pBright *= (1.0 + beat * 0.6 * hash(seed * 2.71));
+                    // Aufsteigende fbm-Textur: anisotrop gestreckt = vertikale
+                    // Streifen wie Licht im Bühnenhaze; Feinheit via Centroid
+                    float texScale = (2.0 + u_detail * 6.0) * u_texture_detail;
+                    float rise = u_rise_speed * (0.5 + 0.5 * depth);
+                    float tex = fbm(vec2(p.x * texScale * 3.0 + seed * 20.0,
+                                         p.y * texScale * 0.35 - u_time * rise), 4);
+                    float body = 0.45 + 1.1 * tex;
 
-                    col += pColor * glow * pBright * u_swell_intensity;
+                    float curtain = hmask * vmask * body;
+                    curtainSum += hmask * vmask;
+
+                    // Farbe: Warm/Kalt-Verlauf nach Param + Tiefenlage,
+                    // vordere Vorhaenge saettiger und heller
+                    float warmMix = clamp(u_warmth + (hash(seed * 6.7) - 0.5) * 0.5, 0.0, 1.0);
+                    vec3 cCol = mix(u_cold_color, u_warm_color, warmMix);
+                    float bright = mix(0.40, 1.0, depth) * (0.45 + 0.95 * swell);
+
+                    col += cCol * curtain * bright * glowAll;
                 }
 
-                // === Subtle light rays from top ===
-                vec2 rayOrigin = vec2(aspect * 0.5, 1.05);
-                vec2 rayDir = uv - rayOrigin;
-                float rayAngle = atan(rayDir.x, -rayDir.y);
-                float rayLen = length(rayDir);
+                // === Glanzstreifen: laeuft bei Transienten nach oben ===
+                if (u_glint > 0.001 && u_glint_pos < 1.2) {
+                    float dy = (p.y - u_glint_pos) / 0.035;
+                    float band = exp(-dy * dy);
+                    // horizontal breit, innerhalb der Vorhaenge kraeftiger
+                    float spread = 0.25 + 0.75 * clamp(curtainSum, 0.0, 1.5);
+                    vec3 glintCol = mix(vec3(1.0, 0.97, 0.9), u_warm_color, 0.35);
+                    col += glintCol * band * spread * u_glint * u_glint_strength;
+                }
 
-                float rayNoise = fbm(vec2(rayAngle * 2.0 + t * 0.05, t * 0.08), 3);
-                float rays = pow(max(0.0, sin(rayAngle * 5.0 + rayNoise * 1.5)), 6.0);
-                rays *= exp(-rayLen * rayLen * 1.5);
-                rays *= (0.2 + dyn * 0.8);
-                rays *= smoothstep(0.0, 0.3, uv.y); // fade at bottom
+                // HDR-Ausgabe: kein clamp, kein lokales Tonemapping —
+                // das uebernimmt zentral der ACES-Pass des Renderers.
+                col = max(col, 0.0) * u_brightness;
+                // Triangular-Dithering gegen Banding in den weichen Verlaeufen
+                col += ditherTriangular(gl_FragCoord.xy, fract(u_time * 0.5) * 100.0);
 
-                vec3 rayColor = mix(u_primary_color, u_secondary_color, dyn);
-                col += rayColor * rays * u_ray_strength * u_swell_intensity;
-
-                // === Film grain ===
-                float grain = hash(gl_FragCoord.xy + fract(t * 100.0) * 100.0) * u_grain_amount - u_grain_amount * 0.5;
-                col += grain;
-
-                // Tone mapping
-                col = col / (1.0 + col * 0.5);
-
-                f_color = vec4(col * u_brightness, 1.0);
+                f_color = vec4(col, 1.0);
             }
             """,
+            includes=(LYGIA_MATH_GLSL, LYGIA_NOISE_GLSL, SHADER_COMMON_GLSL),
         )
+        self._prog = self.ctx.program(
+            vertex_shader=FULLSCREEN_VERTEX_SHADER,
+            fragment_shader=fragment,
+        )
+        self._prog["u_resolution"].value = (self.width, self.height)
+        self._vao, self._vbo = create_fullscreen_quad(self.ctx, self._prog)
 
-        quad = np.array([[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]], dtype=np.float32)
-        vbo = self.ctx.buffer(quad.tobytes())
-        self._vao = self.ctx.vertex_array(self._prog, [(vbo, "2f", "in_pos")])
+    # === Huellkurven (kausal, gecacht, deterministisch) ===
+
+    @staticmethod
+    def _ema_envelope(x: np.ndarray, attack: float, release: float) -> np.ndarray:
+        """Asymmetrische EMA: schneller Anstieg, langsames Abklingen.
+
+        Erzeugt das organische 'Anschwellen und Verklingen' ohne Zucken.
+        """
+        out = np.empty(len(x), dtype=np.float64)
+        prev = 0.0
+        for i, v in enumerate(x):
+            a = attack if v > prev else release
+            prev += a * (float(v) - prev)
+            out[i] = prev
+        return out
+
+    @staticmethod
+    def _normalize_envelope(x: np.ndarray) -> np.ndarray:
+        """Spreizt eine Huellkurve auf den vollen Wertebereich des Clips.
+
+        Leise gemasterte Stuecke liefern sonst dauerhaft nur ~0.2 und die
+        Vorhaenge blieben immer kurz und dunkel. Bezug ist das 95%-Perzentil
+        (robust gegen einzelne Spitzen), das Ergebnis ist deterministisch,
+        weil die Feature-Arrays offline vollstaendig vorliegen.
+        """
+        if len(x) == 0:
+            return x
+        ref = float(np.percentile(x, 95))
+        if ref < 1e-6:
+            return x
+        return np.clip(x / ref, 0.0, 1.15)
+
+    def _envelopes(self, features: dict) -> dict:
+        """Berechnet alle geglaetteten Huellkurven einmal pro Feature-Satz."""
+        fid = id(features)
+        if self._env_cache is not None and self._env_cache.get("id") == fid:
+            return self._env_cache
+
+        fps = float(features.get("fps", 30))
+        n = int(features.get("frame_count", 0))
+
+        def _arr(key):
+            a = features.get(key)
+            if a is None or not hasattr(a, "__len__") or len(a) == 0:
+                return np.zeros(n, dtype=np.float64)
+            return np.asarray(a, dtype=np.float64).reshape(-1)[:n] if len(a) >= n else np.pad(
+                np.asarray(a, dtype=np.float64).reshape(-1), (0, n - len(a)))
+
+        rms = _arr("rms")
+        voice = _arr("voice_band")
+        if not np.any(voice):
+            voice = rms
+        centroid = _arr("spectral_centroid")
+        transient = _arr("transient")
+
+        # Anschwell-Huellkurven: Musik etwas agiler, Sprache sehr ruhig/traege.
+        # Koeffizienten auf ~0.4s Anstieg / ~1.5s Abfall (Musik) bzw.
+        # ~0.8s / ~3s (Sprache) bei 30 fps ausgelegt, fps-skalierend.
+        a_mus, r_mus = 2.5 / fps, 0.65 / fps
+        a_sp, r_sp = 1.2 / fps, 0.33 / fps
+        swell_music = self._normalize_envelope(self._ema_envelope(rms, a_mus, r_mus))
+        swell_voice = self._normalize_envelope(self._ema_envelope(voice, a_sp, r_sp))
+        # Textur-Feinheit folgt dem Klang, aber ohne Flackern
+        detail = self._ema_envelope(centroid, 1.5 / fps, 0.5 / fps)
+
+        # Glanzstreifen: bei Transienten-Impuls startet ein Streifen unten
+        # und laeuft in ~0.7s nach oben, Intensitaet klingt ab.
+        glint_pos = np.zeros(n, dtype=np.float64)
+        glint_int = np.zeros(n, dtype=np.float64)
+        pos = 2.0
+        inten = 0.0
+        prev = 0.0
+        speed = 1.3 / (0.7 * fps)      # Bildhoehe pro Frame
+        decay = 1.0 - 2.2 / fps        # ~0.45s Halbwertszeit
+        for i, v in enumerate(transient):
+            if v > 0.3 and v > prev * 1.15 and inten < 0.35:
+                pos = 0.0
+                inten = min(1.0, 0.4 + float(v))
+            prev = float(v)
+            pos += speed
+            inten *= decay
+            glint_pos[i] = pos
+            glint_int[i] = inten if pos < 1.2 else 0.0
+
+        self._env_cache = {
+            "id": fid,
+            "swell_music": swell_music,
+            "swell_voice": swell_voice,
+            "detail": np.clip(detail, 0.0, 1.0),
+            "glint_pos": glint_pos,
+            "glint_int": glint_int,
+        }
+        return self._env_cache
 
     def render(self, features: dict, time: float):
+        f = self._features_at_time(features, time)
         frame_idx = int(time * features.get("fps", 30))
-        frame_idx = max(0, min(frame_idx, features.get("frame_count", 0) - 1))
+        frame_idx = max(0, min(frame_idx, features.get("frame_count", 1) - 1))
 
-        def _safe_float(arr, idx, default=0.0):
-            if arr is None:
-                return default
-            if hasattr(arr, "__len__") and len(arr) > idx >= 0:
-                return float(arr[idx])
-            return default
+        env = self._envelopes(features)
+        mode = f.get("mode", "music")
 
-        rms = _safe_float(features.get("rms"), frame_idx, 0.0)
-        onset = _safe_float(features.get("onset"), frame_idx, 0.0)
-        chroma = features.get("chroma")
-        if chroma is not None and hasattr(chroma, "shape") and len(chroma.shape) > 1:
-            if chroma.shape[0] == 12 and chroma.shape[1] > frame_idx >= 0:
-                chroma_frame = chroma[:, frame_idx]
-            elif chroma.shape[1] == 12 and chroma.shape[0] > frame_idx >= 0:
-                chroma_frame = chroma[frame_idx, :]
-            else:
-                chroma_frame = np.zeros(12, dtype=np.float32)
-        elif chroma is not None and hasattr(chroma, "__len__") and len(chroma) > frame_idx >= 0:
-            chroma_frame = chroma[frame_idx]
+        # Modus = Empfindlichkeit, nicht andere Optik:
+        # Sprache fahrt auf der Voice-Huellkurve, Beats/Glanz stark gedämpft.
+        if mode == "speech":
+            swell = float(env["swell_voice"][frame_idx])
+            beat = f.get("beat_intensity", f["onset"]) * 0.3
+            glint = float(env["glint_int"][frame_idx]) * 0.3
         else:
-            chroma_frame = np.zeros(12, dtype=np.float32)
+            swell = float(env["swell_music"][frame_idx])
+            beat = f.get("beat_intensity", f["onset"])
+            glint = float(env["glint_int"][frame_idx])
 
-        beat_intensity_arr = features.get("beat_intensity")
-        if beat_intensity_arr is not None and hasattr(beat_intensity_arr, "__len__") and len(beat_intensity_arr) > frame_idx >= 0:
-            beat_intensity = float(beat_intensity_arr[frame_idx])
-        else:
-            beat_intensity = min(onset * 1.5, 1.0)
+        # Farbstimmung: Primaerfarbe aus Chroma, dazu analoger Kalt-Partner.
+        # warmth-Param mischt im Shader zwischen beiden.
+        warm_color = self._chroma_to_color(f["chroma"])
+        h, s, v = self._rgb_to_hsv(*warm_color)
+        cold_color = self._hsv_to_rgb((h + 0.55) % 1.0, min(1.0, s * 0.85), v * 0.9)
 
-        # Farben aus dem konfigurierten color_mode ableiten
-        primary_color = self._chroma_to_color(chroma_frame)
-        # Sekundaere Farbe: etwas waermer/heller, falls nicht via Parameter gesetzt
-        secondary_param = self.params.get('secondary_color')
-        if secondary_param and isinstance(secondary_param, str) and secondary_param.startswith('#'):
-            secondary_color = self._hex_to_rgb(secondary_param)
+        bg = self.params.get("background_color")
+        if isinstance(bg, str) and bg.startswith("#"):
+            try:
+                bg_rgb = self._hex_to_rgb(bg)
+            except Exception:
+                bg_rgb = (0.03, 0.018, 0.01)
         else:
-            secondary_color = (
-                min(1.0, primary_color[0] * 1.1 + 0.1),
-                min(1.0, primary_color[1] * 0.9 + 0.05),
-                min(1.0, primary_color[2] * 0.7),
-            )
-
-        background_param = self.params.get('background_color')
-        if background_param and isinstance(background_param, str) and background_param.startswith('#'):
-            background_color = self._hex_to_rgb(background_param)
-        else:
-            background_color = (0.03, 0.015, 0.008)
+            bg_rgb = (0.03, 0.018, 0.01)
 
         self._prog["u_resolution"].value = (self.width, self.height)
         self._prog["u_time"].value = time
-        self._prog["u_rms"].value = rms
-        self._prog["u_beat_intensity"].value = beat_intensity
-        self._prog["u_swell_intensity"].value = self.params["swell_intensity"]
-        self._prog["u_particle_count"].value = self.params["particle_count"]
-        self._prog["u_gold_tint"].value = self.params["gold_tint"]
-        self._prog["u_dynamics_response"].value = self.params["dynamics_response"]
-        self._prog["u_bg_brightness"].value = self.params["bg_brightness"]
-        self._prog["u_vignette_strength"].value = self.params["vignette_strength"]
-        self._prog["u_spotlight_strength"].value = self.params["spotlight_strength"]
-        self._prog["u_ray_strength"].value = self.params["ray_strength"]
-        self._prog["u_grain_amount"].value = self.params["grain_amount"]
-        self._prog["u_particle_spread"].value = self.params["particle_spread"]
-        self._prog["u_brightness"].value = self.params.get("brightness", 1.0)
-        self._prog["u_primary_color"].value = primary_color
-        self._prog["u_secondary_color"].value = secondary_color
-        self._prog["u_background_color"].value = background_color
+        self._prog["u_swell"].value = float(swell)
+        self._prog["u_beat"].value = float(beat)
+        self._prog["u_detail"].value = float(env["detail"][frame_idx])
+        self._prog["u_glint_pos"].value = float(env["glint_pos"][frame_idx])
+        self._prog["u_glint"].value = float(glint)
+        self._prog["u_warm_color"].value = warm_color
+        self._prog["u_cold_color"].value = cold_color
+        self._prog["u_background_color"].value = bg_rgb
+        self._prog["u_curtain_count"].value = float(self.params["curtain_count"])
+        self._prog["u_swell_response"].value = float(self.params["swell_response"])
+        self._prog["u_rise_speed"].value = float(self.params["rise_speed"])
+        self._prog["u_texture_detail"].value = float(self.params["texture_detail"])
+        self._prog["u_warmth"].value = float(self.params["warmth"])
+        self._prog["u_curtain_softness"].value = float(self.params["curtain_softness"])
+        self._prog["u_height_max"].value = float(self.params["height_max"])
+        self._prog["u_beat_glow"].value = float(self.params["beat_glow"])
+        self._prog["u_glint_strength"].value = float(self.params["glint_strength"])
+        self._prog["u_bg_brightness"].value = float(self.params["bg_brightness"])
+        self._prog["u_brightness"].value = float(self.params.get("brightness", 1.0))
 
         self._vao.render(mode=moderngl.TRIANGLE_STRIP)

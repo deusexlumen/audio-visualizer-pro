@@ -26,6 +26,9 @@ hiddenimports = (
     librosa_hidden
     + collect_submodules("src.gpu_visualizers")  # dynamisch via pkgutil entdeckte Module
     + ["numba", "llvmlite.binding", "soundfile", "moderngl", "glcontext"]
+    # QtMultimedia: Wiedergabe im Zitat-Editor. Der Import steht dort in
+    # einem try/except, PyInstallers statische Analyse findet ihn nicht.
+    + ["PyQt6.QtMultimedia"]
 )
 
 binaries = librosa_binaries + collect_dynamic_libs("soundfile")
@@ -45,7 +48,10 @@ datas = librosa_datas + [
 excludes = [
     "PyQt6.QtQml", "PyQt6.QtQuick", "PyQt6.QtQuick3D",
     "PyQt6.QtWebEngineCore", "PyQt6.QtWebEngineWidgets", "PyQt6.QtWebChannel",
-    "PyQt6.QtMultimedia", "PyQt6.QtMultimediaWidgets",
+    # QtMultimedia NICHT ausschliessen — der Zitat-Editor spielt damit den
+    # Ausschnitt ab. Ohne das Modul faellt die Wiedergabe stillschweigend
+    # aus (der Import ist abgefangen), die Knoepfe bleiben nur grau.
+    "PyQt6.QtMultimediaWidgets",
     "PyQt6.QtNetwork", "PyQt6.QtBluetooth", "PyQt6.QtPositioning",
     "PyQt6.QtSensors", "PyQt6.QtNfc", "PyQt6.QtSql", "PyQt6.QtTest",
     "PyQt6.QtDesigner", "PyQt6.QtHelp", "PyQt6.QtPdf", "PyQt6.QtCharts",

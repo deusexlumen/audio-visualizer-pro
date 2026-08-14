@@ -70,8 +70,8 @@ python build/build.py
 # Ergebnis: dist/AudioVisualizerPro/AudioVisualizerPro.exe (onedir)
 
 # Installer bauen (Inno Setup https://jrsoftware.org/isinfo.php installiert):
-ISCC build/installer.iss /DMyAppVersion=3.1.0
-# Ergebnis: dist/installer/AudioVisualizerPro-Setup-3.1.0.exe
+ISCC build/installer.iss /DMyAppVersion=3.2.0
+# Ergebnis: dist/installer/AudioVisualizerPro-Setup-3.2.0.exe
 ```
 
 Details zu Build-Fallstricken (librosa/numba/soundfile-Bundling, Qt-Modul-

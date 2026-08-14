@@ -33,7 +33,38 @@ logger = get_logger(__name__)
 
 # Version der Prompt-/Schema-Logik. Bei Prompt-Aenderungen erhoehen, damit
 # alte gecachte KI-Ergebnisse verworfen werden.
-PROMPT_VERSION = 1
+# 2: Zwei-Stufen-Zitatextraktion ueber ein Segment-Transkript.
+PROMPT_VERSION = 2
+
+# Antwort-Schema fuer das Segment-Transkript. Erzwingt Zahlen statt Strings
+# und verhindert erfundene Zusatzfelder.
+SEGMENTS_RESPONSE_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "start": {"type": "number"},
+            "end": {"type": "number"},
+            "text": {"type": "string"},
+        },
+        "required": ["start", "end", "text"],
+    },
+}
+
+# Antwort-Schema der Zitat-Auswahl. Die KI liefert KEINE Sekunden mehr —
+# nur woertliche Textstellen, deren Zeit lokal aus dem Segment-Transkript
+# berechnet wird.
+QUOTE_SELECTION_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string"},
+            "confidence": {"type": "number"},
+        },
+        "required": ["text", "confidence"],
+    },
+}
 
 try:
     from google import genai
@@ -249,71 +280,15 @@ SEMANTIC_PARAM_DESCRIPTIONS = {
 
 
 # =============================================================================
-# RESPONSE SCHEMA FOR DETERMINISTIC JSON OUTPUT
+# HINWEIS ZUM ANTWORT-SCHEMA DER PARAMETER-OPTIMIERUNG
 # =============================================================================
-# Wird an Gemini uebergeben, damit die Antwort exakt diesem Schema folgt.
-# Reduziert Halluzinationen und erzwingt gueltige Wertebereiche.
-
-OPTIMIZE_RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "params": {
-            "type": "object",
-            "description": "Optimierte Visualizer-Parameter. Werte muessen innerhalb der angegebenen min/max-Grenzen liegen.",
-            "additionalProperties": {
-                "anyOf": [
-                    {"type": "number"},
-                    {"type": "string"},
-                    {"type": "boolean"},
-                ]
-            }
-        },
-        "colors": {
-            "type": "object",
-            "properties": {
-                "primary": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
-                "secondary": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
-                "background": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"},
-            },
-            "required": ["primary", "secondary", "background"],
-            "additionalProperties": False,
-        },
-        "postprocess": {
-            "type": "object",
-            "properties": {
-                "contrast": {"type": "number"},
-                "saturation": {"type": "number"},
-                "brightness": {"type": "number"},
-                "warmth": {"type": "number"},
-                "film_grain": {"type": "number"},
-            },
-            "additionalProperties": False,
-        },
-        "background": {
-            "type": "object",
-            "properties": {
-                "opacity": {"type": "number"},
-                "blur": {"type": "number"},
-                "vignette": {"type": "number"},
-            },
-            "additionalProperties": False,
-        },
-        "quotes": {
-            "type": "object",
-            "description": "Quote-Overlay-Einstellungen.",
-            "additionalProperties": {
-                "anyOf": [
-                    {"type": "number"},
-                    {"type": "string"},
-                    {"type": "boolean"},
-                    {"type": "array", "items": {"type": "integer"}},
-                ]
-            }
-        },
-    },
-    "required": ["params", "colors", "postprocess", "background", "quotes"],
-    "additionalProperties": False,
-}
+# Hier gibt es bewusst KEIN response_schema. Die Parameterliste ist pro
+# Visualizer anders, ein Schema muesste also eine offene Map erlauben — und
+# genau das lehnt die Gemini-API ab ("additionalProperties is not supported
+# in the Gemini API"). Ein solches Schema liess frueher JEDEN Aufruf mit
+# einer Exception enden; der Nutzer bekam still die Werte aus default.json.
+# Die Antwort wird stattdessen in _validate_optimized_result geprueft,
+# geclamped und auf bekannte Parameter gefiltert.
 
 
 def _compress_audio_for_upload(input_path: str, output_path: str) -> bool:
@@ -597,11 +572,12 @@ class GeminiIntegration:
 
     def extract_quotes_async(self, audio_path: str, audio_duration: float = None,
                               max_quotes: int = None,
-                              use_cache: bool = True) -> concurrent.futures.Future:
+                              use_cache: bool = True,
+                              features=None) -> concurrent.futures.Future:
         """Asynchrone Zitat-Extraktion. Gibt ein Future zurueck."""
         return self._executor.submit(
             self.extract_quotes, audio_path, audio_duration, max_quotes,
-            None, use_cache
+            None, use_cache, features
         )
 
     def optimize_all_settings_async(self, visualizer_type: str, current_params: dict,
@@ -772,22 +748,223 @@ class GeminiIntegration:
         except Exception as e:
             raise RuntimeError(f"Unerwarteter Fehler bei der Transkription: {e}") from e
 
+    def transcribe_segments(self, audio_path: str, audio_duration: float = None,
+                            use_cache: bool = True,
+                            progress_callback=None) -> List[dict]:
+        """Transkribiert ein Audio in kurze Segmente mit Zeitstempeln.
+
+        Grundlage der Zwei-Stufen-Zitatextraktion: Zeiten entstehen hier
+        einmal am Audio, die Zitatauswahl arbeitet danach nur noch auf Text.
+
+        Returns:
+            Liste von {"start": float, "end": float, "text": str},
+            nach Startzeit sortiert. Leer, wenn nichts brauchbar zurueckkam.
+        """
+        audio_path = str(audio_path)
+        sig = f"{self.model}|{PROMPT_VERSION}|segments"
+        if use_cache:
+            cached = load_json_result(audio_path, "segments", sig)
+            if cached is not None:
+                logger.info("[Gemini] Gecachtes Segment-Transkript verwendet.")
+                return cached
+
+        if progress_callback:
+            progress_callback("Transkript mit Zeitstempeln...")
+
+        uploaded_file = self._upload_audio_with_retry(
+            audio_path, progress_callback=progress_callback
+        )
+        length_hint = (f"Das Audio ist {audio_duration:.0f} Sekunden lang. "
+                       if audio_duration else "")
+        prompt = (
+            f"{length_hint}Transkribiere das Audio vollstaendig in kurzen "
+            "Segmenten von je 1-2 Saetzen. Gib fuer jedes Segment die "
+            "tatsaechliche Start- und Endzeit in Sekunden an sowie den "
+            "woertlichen Text. Erfinde nichts und lasse nichts aus."
+        )
+        response = self._call_gemini_with_retry(
+            lambda: self.client.models.generate_content(
+                model=self.model,
+                contents=[prompt, uploaded_file],
+                config={
+                    "response_mime_type": "application/json",
+                    "response_schema": SEGMENTS_RESPONSE_SCHEMA,
+                    # Ohne Temperatur 0 faellt bei jedem Klick ein anderes
+                    # Transkript und damit eine andere Zeitachse heraus.
+                    "temperature": 0.0,
+                },
+            )
+        )
+        segments = self._clean_segments(
+            self._parse_json_response(response.text), audio_duration
+        )
+        if segments and use_cache:
+            save_json_result(audio_path, "segments", sig, segments)
+        return segments
+
+    @staticmethod
+    def _clean_segments(raw, audio_duration: float = None) -> List[dict]:
+        """Validiert Segmente: Zahlen, Reihenfolge, Laengengrenze."""
+        if isinstance(raw, dict):
+            raw = raw.get("segments", [])
+        if not isinstance(raw, list):
+            return []
+
+        limit = float(audio_duration) if audio_duration else None
+        cleaned = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get("text", "")).strip()
+            if not text or "start" not in item or "end" not in item:
+                # Ohne beide Zeitangaben ist das Segment als Zeitquelle wertlos
+                continue
+            try:
+                start = float(item["start"])
+                end = float(item["end"])
+            except (TypeError, ValueError):
+                continue
+            if start < 0.0:
+                start = 0.0
+            if end <= start:
+                end = start + 0.5
+            if limit is not None:
+                # Ueber die Audiolaenge hinaus ist die Zeit nicht verwertbar
+                if start >= limit:
+                    continue
+                end = min(end, limit)
+            cleaned.append({"start": start, "end": end, "text": text})
+
+        cleaned.sort(key=lambda seg: seg["start"])
+        return cleaned
+
+    def _select_quotes_from_text(self, segments: List[dict],
+                                 max_quotes: int) -> List[dict]:
+        """Waehlt Zitate auf dem Transkript aus — ohne Audio, ohne Sekunden."""
+        transcript = "\n".join(seg["text"] for seg in segments)
+        lines = [
+            "Hier ist das Transkript einer Aufnahme:",
+            "",
+            f"<<<{transcript}>>>",
+            "",
+            "Waehle die staerksten Key-Zitate aus. Ein Key-Zitat ist praegnant,",
+            "emotional, witzig oder fasst den Kern einer Idee zusammen.",
+            "Floskeln wie 'Also', 'Ja genau', 'Stimmt' sind keine Zitate.",
+            "",
+            "Harte Regeln:",
+            "- Der Feldwert 'text' muss WOERTLICH im Transkript stehen: exakt",
+            "  dieselbe Zeichenfolge, keine Umformulierung, keine Kuerzung",
+            "  mitten im Satz, keine Auslassungspunkte.",
+            "- Ein Zitat ist ein zusammenhaengender Ausschnitt, hoechstens 25 Woerter.",
+            "- Beginne moeglichst am Satzanfang und ende an einem Satzende. Ein",
+            "  Fragment mitten im Satz liest sich im Einblender schlecht.",
+            f"- Hoechstens {max_quotes} Zitate, Qualitaet vor Menge.",
+            "- 'confidence' ist deine Einschaetzung von 0.0 bis 1.0.",
+        ]
+        prompt = "\n".join(lines)
+        response = self._call_gemini_with_retry(
+            lambda: self.client.models.generate_content(
+                model=self.model,
+                contents=[prompt],
+                config={
+                    "response_mime_type": "application/json",
+                    "response_schema": QUOTE_SELECTION_SCHEMA,
+                    "temperature": 0.0,
+                },
+            )
+        )
+        selection = self._parse_json_response(response.text)
+        if isinstance(selection, dict):
+            selection = selection.get("quotes", [])
+        return selection if isinstance(selection, list) else []
+
+    # Grenzen fuer die Plausibilitaetspruefung eines berechneten Fensters,
+    # in Sekunden pro Wort. Schneller als 0.15 s/Wort spricht niemand,
+    # langsamer als 1.2 s/Wort stimmt die Zuordnung nicht mehr.
+    _MIN_SECONDS_PER_WORD = 0.15
+    _MAX_SECONDS_PER_WORD = 1.2
+    _MIN_QUOTE_SECONDS = 0.8
+
+    def _quotes_from_segments(self, segments: List[dict], max_quotes: int,
+                              audio_duration: float = None) -> List[Quote]:
+        """Zwei-Stufen-Pfad: Auswahl auf Text, Zeiten lokal aus den Segmenten."""
+        from .quote_timing import locate_in_segments
+
+        selection = self._select_quotes_from_text(segments, max_quotes)
+        quotes = []
+        for item in selection:
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get("text", "")).strip()
+            if len(text.split()) < 3 and len(text) < 6:
+                continue
+            window = locate_in_segments(text, segments)
+            if window is None:
+                # Nicht woertlich im Transkript -> Zeit waere geraten
+                logger.info(
+                    f"[Gemini] Zitat nicht im Transkript gefunden, verworfen: "
+                    f"{text[:50]}"
+                )
+                continue
+            try:
+                confidence = float(item.get("confidence", 0.5))
+            except (TypeError, ValueError):
+                confidence = 0.5
+            start, end = window
+            if audio_duration:
+                end = min(end, float(audio_duration))
+            if not self._window_is_plausible(text, start, end):
+                logger.info(
+                    f"[Gemini] Unplausibles Zeitfenster "
+                    f"({start:.2f}-{end:.2f}s), verworfen: {text[:50]}"
+                )
+                continue
+            quotes.append(Quote(text=text, start_time=start, end_time=end,
+                                confidence=confidence))
+        return quotes
+
+    @classmethod
+    def _window_is_plausible(cls, text: str, start: float, end: float) -> bool:
+        """Passt die Fensterlaenge zur Textmenge?
+
+        Faengt kaputte Zuordnungen ab: ein Fenster von 0.03 s kann keinen
+        Satz enthalten, ein Fenster von einer Minute auch nicht.
+        """
+        duration = end - start
+        if duration < cls._MIN_QUOTE_SECONDS:
+            return False
+        word_count = max(len(text.split()), 1)
+        return (word_count * cls._MIN_SECONDS_PER_WORD
+                <= duration
+                <= max(4.0, word_count * cls._MAX_SECONDS_PER_WORD))
+
     def extract_quotes(self, audio_path: str, audio_duration: float = None,
                         max_quotes: int = None, progress_callback=None,
-                        use_cache: bool = True) -> List[Quote]:
+                        use_cache: bool = True, features=None,
+                        use_segments: bool = True) -> List[Quote]:
         """
-        Extrahiert Key-Zitate direkt aus einer Audio-Datei.
+        Extrahiert Key-Zitate aus einer Audio-Datei.
 
-        Smartes Verhalten:
-        - Anzahl Zitate passt sich der Audio-Dauer an (nicht starr 5)
-        - Confidence-Filter: nur Zitate mit confidence >= 0.6
-        - Mindestlaenge: mindestens 3 Woerter
+        Zwei Stufen, damit die Zeitangaben stimmen:
+        1. Das Audio wird EINMAL in Segmente mit Zeitstempeln transkribiert.
+        2. Die Zitatauswahl laeuft nur noch auf diesem Text; die Zeit eines
+           Zitats wird lokal aus den Segmenten berechnet, nicht von der KI
+           geschaetzt. Zitate, die nicht woertlich im Transkript stehen,
+           werden verworfen — ihre Zeit waere geraten.
+
+        Sind `features` dabei, werden die Grenzen zusaetzlich auf die
+        erkannten Sprech-Kanten eingerastet (rein lokal, siehe quote_timing).
+
+        Faellt Stufe 1 aus, greift der alte Ein-Stufen-Pfad direkt am Audio.
 
         Args:
             audio_path: Pfad zur Audio-Datei
             audio_duration: Dauer des Audios in Sekunden (fuer dynamische Anzahl)
             max_quotes: Maximale Anzahl an Zitaten (None = automatisch aus Dauer)
             progress_callback: Optional callback(status_msg) fuer Fortschrittsupdates
+            use_cache: Gecachte Ergebnisse verwenden
+            features: AudioFeatures fuer das lokale Einrasten (optional)
+            use_segments: Zwei-Stufen-Pfad verwenden (Standard)
 
         Returns:
             Liste von Quote-Objekten, sortiert nach Startzeit
@@ -829,6 +1006,26 @@ class GeminiIntegration:
                         )
                         for q in cached
                     ]
+
+            # --- Stufe 1+2: Segment-Transkript, dann Auswahl auf Text ---
+            if use_segments:
+                segment_quotes = self._extract_via_segments(
+                    str(audio_path), audio_duration, max_quotes,
+                    progress_callback, use_cache,
+                )
+                if segment_quotes:
+                    quotes = self._finalize_quotes(
+                        segment_quotes, max_quotes, audio_duration, features
+                    )
+                    if progress_callback:
+                        progress_callback(f"{len(quotes)} Zitate extrahiert")
+                    if use_cache:
+                        self._cache_quotes(str(audio_path), cache_sig, quotes)
+                    return quotes
+                logger.warning(
+                    "[Gemini] Zwei-Stufen-Pfad ohne Ergebnis, "
+                    "weiche auf die direkte Audio-Extraktion aus."
+                )
 
             if progress_callback:
                 progress_callback("Audio wird vorbereitet...")
@@ -911,53 +1108,82 @@ class GeminiIntegration:
                     confidence=conf
                 ))
 
-            # --- ADAPTIVE CONFIDENCE-FILTERUNG ---
-            base_threshold = 0.6
-            filtered = [q for q in quotes if q.confidence >= base_threshold]
-
-            # Zu wenige Zitate -> Threshold senken
-            if len(filtered) < 2 and len(quotes) > len(filtered):
-                if progress_callback:
-                    progress_callback(f"Nur {len(filtered)} Zitate bei 0.6, senke auf 0.4...")
-                filtered = [q for q in quotes if q.confidence >= 0.4]
-
-            # Zu viele Zitate bei kurzem Audio -> Threshold erhöhen
-            if len(filtered) > 15 and audio_duration is not None and audio_duration < 600:
-                if progress_callback:
-                    progress_callback(f"{len(filtered)} Zitate, erhöhe auf 0.7...")
-                filtered = [q for q in quotes if q.confidence >= 0.7]
-
-            quotes = filtered
-
-            # Nach Confidence sortieren (beste zuerst)
-            quotes = sorted(quotes, key=lambda x: x.confidence, reverse=True)
-
-            # Auf max_quotes begrenzen
-            quotes = quotes[:max_quotes]
-
-            # Nach Startzeit sortieren fuer finale Ausgabe
-            quotes = sorted(quotes, key=lambda x: x.start_time)
+            quotes = self._finalize_quotes(
+                quotes, max_quotes, audio_duration, features, progress_callback
+            )
 
             if progress_callback:
                 progress_callback(f"{len(quotes)} Zitate extrahiert")
 
             # Ergebnis cachen (weitere Klicks ohne Parameteraenderung sind gratis)
             if use_cache:
-                save_json_result(str(audio_path), "quotes", cache_sig, [
-                    {
-                        "text": q.text,
-                        "start_time": q.start_time,
-                        "end_time": q.end_time,
-                        "confidence": q.confidence,
-                    }
-                    for q in quotes
-                ])
+                self._cache_quotes(str(audio_path), cache_sig, quotes)
 
             return quotes
         except (FileNotFoundError, RuntimeError):
             raise
         except Exception as e:
             raise RuntimeError(f"Unerwarteter Fehler bei der Zitat-Extraktion: {e}") from e
+
+    def _extract_via_segments(self, audio_path: str, audio_duration, max_quotes,
+                              progress_callback, use_cache) -> List[Quote]:
+        """Stufe 1+2 der Extraktion. Gibt bei jedem Problem [] zurueck."""
+        try:
+            segments = self.transcribe_segments(
+                audio_path, audio_duration=audio_duration,
+                use_cache=use_cache, progress_callback=progress_callback,
+            )
+            if not segments:
+                return []
+            if progress_callback:
+                progress_callback("Zitate im Transkript auswaehlen...")
+            return self._quotes_from_segments(segments, max_quotes, audio_duration)
+        except Exception as e:
+            logger.warning(f"[Gemini] Segment-Pfad fehlgeschlagen: {e}")
+            return []
+
+    def _finalize_quotes(self, quotes: List[Quote], max_quotes: int,
+                         audio_duration=None, features=None,
+                         progress_callback=None) -> List[Quote]:
+        """Filtert nach Confidence, begrenzt die Anzahl und rastet die Zeiten ein."""
+        base_threshold = 0.6
+        filtered = [q for q in quotes if q.confidence >= base_threshold]
+
+        # Zu wenige Zitate -> Threshold senken
+        if len(filtered) < 2 and len(quotes) > len(filtered):
+            if progress_callback:
+                progress_callback(f"Nur {len(filtered)} Zitate bei 0.6, senke auf 0.4...")
+            filtered = [q for q in quotes if q.confidence >= 0.4]
+
+        # Zu viele Zitate bei kurzem Audio -> Threshold erhoehen
+        if len(filtered) > 15 and audio_duration is not None and audio_duration < 600:
+            if progress_callback:
+                progress_callback(f"{len(filtered)} Zitate, erhoehe auf 0.7...")
+            filtered = [q for q in quotes if q.confidence >= 0.7]
+
+        # Beste zuerst, auf max_quotes begrenzen, dann chronologisch ausgeben
+        result = sorted(filtered, key=lambda x: x.confidence, reverse=True)[:max_quotes]
+        result = sorted(result, key=lambda x: x.start_time)
+
+        if features is not None:
+            try:
+                from .quote_timing import snap_quotes
+                result = snap_quotes(result, features)
+            except Exception as e:
+                logger.debug(f"[Gemini] Einrasten auf Sprech-Kanten uebersprungen: {e}")
+        return result
+
+    @staticmethod
+    def _cache_quotes(audio_path: str, cache_sig: str, quotes: List[Quote]) -> None:
+        save_json_result(audio_path, "quotes", cache_sig, [
+            {
+                "text": q.text,
+                "start_time": q.start_time,
+                "end_time": q.end_time,
+                "confidence": q.confidence,
+            }
+            for q in quotes
+        ])
 
     def optimize_visualizer_params(self, visualizer_type: str, current_params: dict,
                                    audio_features: dict, user_prompt: str = None) -> dict:
@@ -1044,6 +1270,25 @@ class GeminiIntegration:
             c in '0123456789abcdefABCDEF' for c in color[1:]
         )
 
+    # Das Modell benennt die Bloecke gern anders ("parameters", "post_process").
+    # Ohne Toleranz landet das komplette Ergebnis im Nichts.
+    _RESULT_ALIASES = {
+        "params": ("params", "parameters", "visualizer_params", "parameter"),
+        "colors": ("colors", "color", "colour", "colours", "palette"),
+        "postprocess": ("postprocess", "post_process", "postProcess", "post"),
+        "background": ("background", "bg", "hintergrund"),
+        "quotes": ("quotes", "quote", "quote_config", "zitate"),
+    }
+
+    @classmethod
+    def _section(cls, optimized: dict, key: str) -> dict:
+        """Holt einen Ergebnis-Block, egal wie das Modell ihn benannt hat."""
+        for alias in cls._RESULT_ALIASES.get(key, (key,)):
+            value = optimized.get(alias)
+            if isinstance(value, dict):
+                return value
+        return {}
+
     def _validate_optimized_result(self, optimized: dict, current_params: dict,
                                    colors: dict, param_specs: dict) -> dict:
         """Validiert und korrigiert das KI-Ergebnis (Clamp, Hex-Check, Defaults)."""
@@ -1061,7 +1306,7 @@ class GeminiIntegration:
 
         # --- Params validieren ---
         result_params = {}
-        raw_params = optimized.get("params") or {}
+        raw_params = self._section(optimized, "params")
         for name, val in raw_params.items():
             if name in (param_specs or {}):
                 default, min_val, max_val, step = param_specs[name]
@@ -1101,14 +1346,14 @@ class GeminiIntegration:
         for key, default in [("primary", colors.get("primary", "#FF0055")),
                              ("secondary", colors.get("secondary", "#00CCFF")),
                              ("background", colors.get("background", "#0A0A0A"))]:
-            val = optimized.get("colors", {}).get(key)
+            val = self._section(optimized, "colors").get(key)
             result_colors[key] = val if self._is_valid_hex(val) else default
 
         # --- Postprocess validieren ---
         pp_defaults = {"contrast": 1.0, "saturation": 1.0, "brightness": 0.0,
                        "warmth": 0.0, "film_grain": 0.0}
         result_pp = {}
-        raw_pp = optimized.get("postprocess") or {}
+        raw_pp = self._section(optimized, "postprocess")
         for key, default in pp_defaults.items():
             val = raw_pp.get(key, default)
             try:
@@ -1124,19 +1369,24 @@ class GeminiIntegration:
             result_pp[key] = val
 
         # --- Hintergrund validieren ---
+        # Wertebereiche wie die Regler im Assets-Panel: Blur ist ein Radius
+        # bis 20, nicht 0..1 — ein pauschaler Clamp auf 1.0 hat den
+        # Weichzeichner faktisch abgeschaltet.
         bg_defaults = {"opacity": 0.3, "blur": 0.0, "vignette": 0.0}
+        bg_ranges = {"opacity": (0.0, 1.0), "blur": (0.0, 20.0), "vignette": (0.0, 1.0)}
         result_bg = {}
-        raw_bg = optimized.get("background") or {}
+        raw_bg = self._section(optimized, "background")
         for key, default in bg_defaults.items():
             val = raw_bg.get(key, default)
             try:
                 val = float(val)
             except (TypeError, ValueError):
                 val = default
-            result_bg[key] = max(0.0, min(1.0, val))
+            low, high = bg_ranges[key]
+            result_bg[key] = max(low, min(high, val))
 
         # --- Quotes validieren ---
-        raw_quotes = optimized.get("quotes") or {}
+        raw_quotes = self._section(optimized, "quotes")
         result_quotes = {**default_quotes}
         for key, default in default_quotes.items():
             val = raw_quotes.get(key)
@@ -1296,6 +1546,11 @@ class GeminiIntegration:
             return result
 
         def _fallback_colors():
+            # Die uebergebene Palette kommt vom SmartMatcher und passt zur
+            # Tonart des Stuecks — sie ist besser als jede feste Notfarbe.
+            if all(self._is_valid_hex(colors.get(k))
+                   for k in ("primary", "secondary", "background")):
+                return {k: colors[k] for k in ("primary", "secondary", "background")}
             mode = audio_features.get('mode', 'music')
             tempo = audio_features.get('tempo', 120)
             if mode == 'speech':
@@ -1344,6 +1599,7 @@ class GeminiIntegration:
             "postprocess": _fallback_postprocess(),
             "background": {"opacity": 0.3, "blur": 0.0, "vignette": 0.0},
             "quotes": _fallback_quotes(),
+            "_source": "fallback",
         }
         
         def _build_semantic_param_info(specs):
@@ -1414,11 +1670,23 @@ REGELN:
 - Speech: sanfte, langsame Werte, dezente Farben, grosse lesbare Schrift.
 - Music + Tempo > 110: aggressiver, kontrastreich, mehr Partikel/Balken.
 - Music + Tempo <= 110: fliessend, organisch, warm.
-- Post-Process: Speech (contrast 1.05, saturation 0.8, warmth 0.1, grain 0.05), Energy (1.2/1.3/0/0.05), Chill (1.05/0.9/0.2/0.1).
-- Farben: Podcast (#667EEA/#764BA2/#1A1A2E), Energy (#FF0055/#00CCFF/#0A0A0A), Chill (#4ECDC4/#96CEB4/#1A1A3E).
+- Post-Process: Speech (contrast 1.05, saturation 0.8, warmth 0.1, film_grain 0.05), Energy (1.2/1.3/0/0.05), Chill (1.05/0.9/0.2/0.1).
+- Farben: Nimm die oben vorgeschlagene Palette als Ausgangspunkt — sie stammt
+  aus der Tonart-Analyse des Stuecks. Weiche nur ab, wenn es einen konkreten
+  Grund gibt, und dann nur in Helligkeit/Saettigung, nicht im Farbton.
 - Quotes: Podcast (font_size 52-64, bottom), Musik (40-48, center).
 
-Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
+ANTWORTFORMAT — genau diese Schluessel, keine anderen Namen:
+{{
+  "params":      {{ "<parametername>": <zahl>, ... }},
+  "colors":      {{ "primary": "#RRGGBB", "secondary": "#RRGGBB", "background": "#RRGGBB" }},
+  "postprocess": {{ "contrast": <zahl>, "saturation": <zahl>, "brightness": <zahl>, "warmth": <zahl>, "film_grain": <zahl> }},
+  "background":  {{ "opacity": 0.0-1.0, "blur": 0.0-20.0, "vignette": 0.0-1.0 }},
+  "quotes":      {{ "font_size": <ganzzahl>, "position": "bottom" | "center" | "top", "display_duration": <zahl> }}
+}}
+
+Unter "params" duerfen NUR Namen aus den Parameter-Spezifikationen oben stehen.
+Gib NUR dieses JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
 """
 
             if user_prompt:
@@ -1431,7 +1699,6 @@ Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
                     config={
                         "system_instruction": system_instruction,
                         "response_mime_type": "application/json",
-                        "response_schema": OPTIMIZE_RESPONSE_SCHEMA,
                         "temperature": 0.2,
                     }
                 )
@@ -1449,10 +1716,15 @@ Gib NUR ein JSON-Objekt zurueck. Keine Erklaerungen, kein Markdown.
                         "postprocess": {**default_result["postprocess"], **cfg_fallback.get("postprocess", {})},
                         "background": default_result["background"],
                         "quotes": default_result["quotes"],
+                        "_source": "fallback",
                     }
                 return default_result
 
-            return self._validate_optimized_result(optimized, current_params, colors, param_specs)
+            validated = self._validate_optimized_result(
+                optimized, current_params, colors, param_specs
+            )
+            validated["_source"] = "gemini"
+            return validated
             
         except Exception as e:
             logger.warning(f"[Gemini] All-Settings-Optimierung fehlgeschlagen: {e}, verwende Fallback")

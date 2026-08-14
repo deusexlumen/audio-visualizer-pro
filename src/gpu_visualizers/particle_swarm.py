@@ -1,103 +1,143 @@
 """
-GPU-beschleunigtes Partikel-System mit Trails, Glow und Tiefen-Simulation.
+Particle Swarm - Galaxy/Vortex Visualizer.
 
-Physik-Update auf CPU (150-500 Partikel sind trivial),
-Rendering auf GPU via instanced Quads mit weichem Kreis-Fragment-Shader.
+Hunderte Gluehpartikel auf Spiralbahnen um ein gemeinsames Zentrum:
+langsamer Einfall nach innen, Wobble, logarithmische Spiralarme und ein
+leicht gekippter Galaxien-Blickwinkel. Alles deterministisch aus
+Partikel-Index + festem Seed (kein Laufzeit-Zufallszustand) — der
+Offline-Render ist dadurch exakt reproduzierbar.
+
+Audio-Reaktionen (Musik-Modus):
+- Bass/Onset/Transient: Schockwelle, die Partikel nach aussen schleudert,
+  sichtbarer expandierender Ring + Kern-Aufblitzen.
+- spectral_centroid (Treble): Funkeln (Groessen-/Alpha-Jitter pro Partikel).
+- RMS/Energy: Rotationsgeschwindigkeit + sichtbare Partikelmenge/Helligkeit.
+- Chroma: Farbverlauf ueber Radius und Lebensdauer (Hue-Spread).
+
+Sprach-Modus (mode == "speech"): gleiche Optik, andere Empfindlichkeit —
+Partikel folgen voice_band/voice_clarity, Betonungen (Anstieg im Voice-Band)
+loesen sanfte Wirbel-Pulse aus, Pausen lassen die Galaxie fast ruhen.
+
+Rendering: instanzierte Quads mit weichem Glow-Fragment-Shader, additive
+Mischung (ONE, ONE), HDR-Ausgabe ohne clamp — das Tonemapping uebernimmt
+zentral der Renderer. Der Hintergrund bleibt transparent (keine
+Vollflaechen-Fuellung), damit Hintergrundbilder sichtbar bleiben.
 """
 
 import numpy as np
 import moderngl
-from .base import BaseGPUVisualizer
+from .base import (
+    BaseGPUVisualizer,
+    SHADER_COMMON_GLSL,
+    compose_fragment,
+)
 
 
 class ParticleSwarmGPU(BaseGPUVisualizer):
     """
-    Professionelles GPU-Partikel-System mit Trails und Glow.
-
-    Partikel werden als instanzierte Quads gerendert – jede Instanz
-traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
-    zeichnet einen weichen, leuchtenden Kreis mit exponentiellem Glow.
+    Galaxy/Vortex: Gluehpartikel auf Spiralbahnen mit Einfall, Schockwellen
+    und Kern-Leuchten. Additive HDR-Mischung, vollstaendig deterministisch.
     """
 
     PARAMS = {
-        'particle_count': (150, 50, 500, 10),
-        'explosion_threshold': (0.4, 0.1, 0.9, 0.05),
-        'glow_size': (3, 0, 10, 1),
-        'glow_strength': (0.7, 0.0, 2.0, 0.1),
-        'trail_length': (5, 0, 10, 1),
-        'depth_enabled': (1, 0, 1, 1),
-        'speed_scale': (1.0, 0.2, 3.0, 0.1),
-        'center_force': (0.04, 0.0, 0.2, 0.01),
-        'friction': (0.985, 0.9, 0.999, 0.001),
-        'life_decay': (0.004, 0.001, 0.02, 0.001),
-        'size_scale': (1.0, 0.2, 3.0, 0.1),
+        'particle_count': (550, 100, 1000, 20),
+        'vortex_speed': (1.0, 0.0, 3.0, 0.05),
+        'spiral_arms': (2, 1, 4, 1),
+        'spiral_twist': (2.4, 0.0, 6.0, 0.1),
+        'infall_speed': (0.35, 0.0, 1.5, 0.05),
+        'wobble': (0.5, 0.0, 2.0, 0.05),
+        'shockwave_strength': (1.0, 0.0, 2.5, 0.05),
+        'sparkle': (0.6, 0.0, 2.0, 0.05),
+        'hue_spread': (0.45, 0.0, 1.0, 0.05),
+        'point_size': (1.0, 0.3, 3.0, 0.05),
+        'core_glow': (1.0, 0.0, 3.0, 0.05),
+        'galaxy_tilt': (0.55, 0.2, 1.0, 0.05),
     }
 
     PARAMS_GROUPS = {
-        "Partikel": ["particle_count", "size_scale", "life_decay"],
-        "Bewegung": ["speed_scale", "center_force", "friction", "explosion_threshold"],
-        "Erscheinungsbild": ["glow_size", "glow_strength", "depth_enabled"],
-        "Trail": ["trail_length"],
+        "Galaxie": ["particle_count", "spiral_arms", "spiral_twist", "galaxy_tilt"],
+        "Bewegung": ["vortex_speed", "infall_speed", "wobble"],
+        "Reaktion": ["shockwave_strength", "sparkle", "hue_spread"],
+        "Erscheinungsbild": ["point_size", "core_glow"],
     }
+
+    # Feste Seed fuer alle statischen Partikel-Eigenschaften (Determinismus)
+    _SEED = 0xA17C1E
+    # Anzahl der Punkte, aus denen der Schockwellen-Ring gezeichnet wird
+    _RING_POINTS = 56
 
     def _setup(self):
         """Initialisiere Shader, VBOs und Partikel-System."""
-        self._prog = self.ctx.program(
-            vertex_shader="""
-            #version 330
-            uniform vec2 u_resolution;
+        vertex_shader = """
+        #version 330
+        uniform vec2 u_resolution;
 
-            in vec2 in_vertex_pos;
-            in vec2 in_particle_pos;
-            in vec3 in_particle_color;
-            in float in_particle_size;
-            in float in_particle_alpha;
+        in vec2 in_vertex_pos;
+        in vec2 in_pos;
+        in vec3 in_color;
+        in float in_size;
+        in float in_alpha;
+        in float in_seed;
 
-            out vec3 v_color;
-            out float v_alpha;
-            out vec2 v_local_pos;
+        out vec3 v_color;
+        out float v_alpha;
+        out vec2 v_local;
+        out float v_seed;
 
-            void main() {
-                // Zentrum und Offset getrennt in NDC umrechnen, damit Kreise
-                // bei nicht-quadratischer Aufloesung kreisrund bleiben.
-                vec2 center_ndc = (in_particle_pos / u_resolution) * 2.0 - 1.0;
-                center_ndc.y = -center_ndc.y;
+        void main() {
+            // Zentrum und Offset getrennt in NDC umrechnen, damit die
+            // Gluehpunkte bei nicht-quadratischer Aufloesung rund bleiben.
+            vec2 center_ndc = (in_pos / u_resolution) * 2.0 - 1.0;
+            center_ndc.y = -center_ndc.y;
 
-                vec2 offset_ndc = in_vertex_pos * in_particle_size / u_resolution * 2.0;
-                // X-Offset an Pixel-Aspekt anpassen (1 Pixel in X = height/width Pixel in Y)
-                offset_ndc.x *= u_resolution.x / u_resolution.y;
+            vec2 offset_ndc = in_vertex_pos * in_size / u_resolution * 2.0;
+            offset_ndc.x *= u_resolution.x / u_resolution.y;
 
-                gl_Position = vec4(center_ndc + offset_ndc, 0.0, 1.0);
+            gl_Position = vec4(center_ndc + offset_ndc, 0.0, 1.0);
 
-                v_color = in_particle_color;
-                v_alpha = in_particle_alpha;
-                v_local_pos = in_vertex_pos;
-            }
-            """,
-            fragment_shader="""
-            #version 330
+            v_color = in_color;
+            v_alpha = in_alpha;
+            v_local = in_vertex_pos;
+            v_seed = in_seed;
+        }
+        """
+
+        fragment = compose_fragment(
+            """
             uniform float u_brightness;
-            uniform float u_glow_strength;
+
             in vec3 v_color;
             in float v_alpha;
-            in vec2 v_local_pos;
+            in vec2 v_local;
+            in float v_seed;
             out vec4 f_color;
 
             void main() {
-                float dist = length(v_local_pos);
-                if (dist > 1.0) discard;
+                float d = length(v_local);
+                if (d > 1.0) discard;
 
-                // Kern: fester Kreis
-                float core = 1.0 - smoothstep(0.0, 0.65, dist);
-                // Glow: exponentieller Abfall
-                float glow = exp(-dist * dist * 3.5);
+                // Weicher Kern + weit auslaufender Halo (Glow-Punkt)
+                float core = exp(-d * d * 10.0);
+                float halo = exp(-d * 3.2) * 0.30;
+                float glow = core + halo;
 
-                vec3 final_color = v_color * (core + glow * u_glow_strength) * u_brightness;
-                float alpha = (core * 0.95 + glow * 0.45) * v_alpha;
+                // HDR: heisser Kern darf ueber 1.0 hinaus —
+                // das Tonemapping uebernimmt zentral der Renderer.
+                vec3 col = v_color * glow + v_color * core * core * 1.6;
+                col *= u_brightness * v_alpha;
 
-                f_color = vec4(final_color, alpha);
+                // Triangular-Dithering gegen Farb-Banding im Halo
+                col += ditherTriangular(gl_FragCoord.xy, v_seed);
+
+                f_color = vec4(col, clamp(glow * v_alpha, 0.0, 1.0));
             }
             """,
+            includes=(SHADER_COMMON_GLSL,),
+        )
+
+        self._prog = self.ctx.program(
+            vertex_shader=vertex_shader,
+            fragment_shader=fragment,
         )
 
         # Ein einziges Quad (-1,-1) .. (1,1) als Basis-Geometrie
@@ -112,16 +152,14 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
         )
         self._quad_vbo = self.ctx.buffer(quad.tobytes())
 
-        # Maximale Instanzen: Partikel + Trails + Zentrumspuls-Ringe
-        max_particles = 500
-        max_trail = 10
-        max_rings = 4
-        self._max_instances = max_particles * (1 + max_trail) + max_rings
+        # Maximale Instanzen: Partikel + Schockwellen-Ring + Kern-Schichten
+        max_particles = int(self.PARAMS['particle_count'][2])
+        self._max_instances = max_particles + self._RING_POINTS + 4
 
-        # Instanz-Daten: pos_x, pos_y, r, g, b, size, alpha
-        self._instance_data = np.zeros((self._max_instances, 7), dtype=np.float32)
+        # Instanz-Daten: pos_x, pos_y, r, g, b, size, alpha, seed
+        self._instance_data = np.zeros((self._max_instances, 8), dtype=np.float32)
         self._instance_vbo = self.ctx.buffer(
-            reserve=self._max_instances * 7 * 4, dynamic=True
+            reserve=self._max_instances * 8 * 4, dynamic=True
         )
 
         # VAO: Quad-Vertex (non-instanced) + Instanz-Attribute (instanced via /i)
@@ -131,71 +169,74 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
                 (self._quad_vbo, "2f", "in_vertex_pos"),
                 (
                     self._instance_vbo,
-                    "2f 3f 1f 1f /i",
-                    "in_particle_pos",
-                    "in_particle_color",
-                    "in_particle_size",
-                    "in_particle_alpha",
+                    "2f 3f 1f 1f 1f /i",
+                    "in_pos",
+                    "in_color",
+                    "in_size",
+                    "in_alpha",
+                    "in_seed",
                 ),
             ],
         )
 
         self._init_particles()
+        self._reset_motion_state()
 
     def _on_params_changed(self):
-        """Re-initialisiere Partikel wenn sich die Anzahl aendert."""
+        """Re-initialisiere Partikel wenn sich Struktur-Parameter aendern."""
         self._init_particles()
 
-    # Maximale Trail-Historie (entspricht PARAMS['trail_length'] Maximum)
-    _MAX_TRAIL = 10
+    def _reset_motion_state(self):
+        """Setzt die (deterministischen) Bewegungs-Akkumulatoren zurueck."""
+        self._last_time = None     # letzte Frame-Zeit (fuer dt)
+        self._rot_phase = 0.0      # akkumulierte Rotationsphase des Vortex
+        self._shock_age = 99.0     # Alter der letzten Schockwelle (Sekunden)
+        self._energy_s = 0.0       # EMA-geglaettete Energie
+        self._treble_s = 0.0       # EMA-geglaettetes Treble (Funkeln)
+        self._flow_s = 0.0         # EMA-geglaetteter Sprach-Flow
+        self._prev_voice = 0.0     # Voice-Band des letzten Frames (Betonung)
 
     def _init_particles(self):
-        """Initialisiere Partikel-Array und Trail-Historie (vektorisiert)."""
-        count = int(self.params["particle_count"])
-        # Spalten: x, y, vx, vy, life, max_life, size, hue, depth
-        self._particles = np.zeros((count, 9), dtype=np.float32)
-        # Trail-Historie als Ringpuffer: (Slot, Partikel, [x, y, life])
-        self._trail_hist = np.zeros((self._MAX_TRAIL, count, 3), dtype=np.float32)
-        self._trail_valid = np.zeros(count, dtype=np.int32)
+        """Initialisiert die statischen Partikel-Eigenschaften (vektorisiert).
 
-        self._spawn(np.arange(count), explode=False, chroma=None)
-
-    def _spawn(self, idx: np.ndarray, explode: bool, chroma: np.ndarray = None):
-        """(Re-)Initialisiert die Partikel an den angegebenen Indizes.
-
-        Args:
-            idx: Array von Partikel-Indizes.
-            explode: True = Explosion vom Zentrum, False = zufaellige Startposition.
+        Alle Zufallswerte stammen aus einem fest gesaeten Generator —
+        identische Ergebnisse bei jedem Lauf, kein globaler RNG-Zustand.
         """
-        n = idx.size
-        if n == 0:
-            return
-        p = self._particles
-        cx, cy = self.width / 2.0, self.height / 2.0
-        angle = np.random.random(n).astype(np.float32) * np.pi * 2
+        n = int(self.params["particle_count"])
+        arms = max(1, int(self.params["spiral_arms"]))
+        rng = np.random.default_rng(self._SEED)
 
-        if explode:
-            # ease_out_expo Geschwindigkeit
-            t = np.random.random(n).astype(np.float32)
-            speed = (1.0 - np.power(2.0, -10.0 * t)) * 12.0 + 3.0
-            speed *= self.params["speed_scale"]
-            p[idx, 0] = cx
-            p[idx, 1] = cy
-            p[idx, 2] = np.cos(angle) * speed
-            p[idx, 3] = np.sin(angle) * speed
-        else:
-            dist = np.random.random(n).astype(np.float32) * 80.0
-            p[idx, 0] = cx + np.cos(angle) * dist
-            p[idx, 1] = cy + np.sin(angle) * dist
-            p[idx, 2] = np.cos(angle) * np.random.random(n) * 1.5
-            p[idx, 3] = np.sin(angle) * np.random.random(n) * 1.5
+        # Radial-Verteilung: Dichte faellt nach aussen ab (Galaxien-Profil)
+        self._rad0 = (0.05 + 0.95 * rng.random(n) ** 1.2).astype(np.float32)
+        # Spiralarme: gleichmaessige Winkelverteilung + Streuung um den Arm
+        arm_idx = (np.arange(n) % arms).astype(np.float32)
+        self._arm_angle = (
+            arm_idx * (2.0 * np.pi / arms) + rng.normal(0.0, 0.55, n)
+        ).astype(np.float32)
+        # Leichte Differentialrotation: innen schneller, Arme bleiben aber
+        # ueber lange Zeit als Struktur lesbar (kein Verwischen zum Ring)
+        self._orbit = (1.0 / (0.7 + 0.6 * self._rad0)).astype(np.float32)
+        # Lebensdauer-Zyklus (Einfall + Respawn), rein zeitanalytisch
+        self._lifespan = (7.0 + rng.random(n) * 9.0).astype(np.float32)
+        self._life_off = rng.random(n).astype(np.float32)
+        # Groesse: viele kleine, wenige grosse Partikel (Basis @720p)
+        self._size0 = (1.6 + rng.random(n) ** 3 * 6.0).astype(np.float32)
+        # Wobble: individuelle Frequenz/Phase/Amplitude
+        self._wob_freq = (0.4 + rng.random(n) * 1.6).astype(np.float32)
+        self._wob_phase = (rng.random(n) * 2.0 * np.pi).astype(np.float32)
+        self._wob_amp = rng.random(n).astype(np.float32)
+        # Farb-Jitter um den Chroma-Basisfarbton
+        self._hue_jit = ((rng.random(n) - 0.5) * 0.12).astype(np.float32)
+        # Sichtbarkeits-Schwelle: steuert die sichtbare Partikelmenge
+        self._vis_thresh = rng.random(n).astype(np.float32)
+        # Seed fuer Funkeln/Dithering im Shader
+        self._seed = (rng.random(n) * 100.0).astype(np.float32)
 
-        p[idx, 4] = 1.0  # life
-        p[idx, 5] = 0.5 + np.random.random(n) * 1.0  # max_life
-        p[idx, 6] = 2.0 + np.random.random(n) * 5.0  # size
-        p[idx, 7] = self._new_hue(chroma) + np.random.random(n) * 0.1  # hue
-        p[idx, 8] = np.random.random(n)  # depth
-        self._trail_valid[idx] = 0
+    @staticmethod
+    def _smoothstep(e0, e1, x):
+        """Vektorisiertes smoothstep (wie GLSL)."""
+        t = np.clip((x - e0) / (e1 - e0), 0.0, 1.0)
+        return t * t * (3.0 - 2.0 * t)
 
     @staticmethod
     def _hsv_to_rgb_array(h: np.ndarray, s, v: np.ndarray) -> np.ndarray:
@@ -227,156 +268,212 @@ traegt Position, Farbe, Groesse und Alpha. Der Fragment-Shader
             rgb[mask, 2] = b[mask]
         return rgb
 
-    def _new_hue(self, chroma: np.ndarray = None) -> float:
-        """Gibt einen neuen Farbton basierend auf color_mode zurueck."""
-        mode = self.params.get('color_mode', 'chroma')
-        if mode == 'chroma':
-            if chroma is not None and chroma.size > 0:
-                return self._color_to_hue(self._chroma_to_color(chroma))
-            return 0.55
-        if mode == 'fixed':
-            primary = self.params.get('primary_color')
-            if primary and isinstance(primary, str) and primary.startswith('#'):
-                return self._color_to_hue(self._hex_to_rgb(primary))
-            return float(self.params.get('base_hue', 0.55))
-        if mode == 'warm':
-            return 0.08 + np.random.random() * 0.06
-        if mode == 'cool':
-            return 0.55 + np.random.random() * 0.1
-        # monochrome
-        return 0.0
-
     def render(self, features: dict, time: float):
-        """Rendert einen Frame mit Partikeln, Trails und Zentrumspuls.
+        """Rendert einen Frame: Galaxien-Partikel, Schockwellen-Ring, Kern.
 
-        Physik, Farben und Instanz-Aufbau sind komplett vektorisiert
-        (NumPy) — keine Python-Schleife ueber Partikel mehr.
+        Die Partikel-Positionen sind analytische Funktionen aus Index, Zeit
+        und geglaetteten Audio-Features — kein Zufallszustand zur Laufzeit.
         """
         f = self._features_at_time(features, time)
-        rms = float(f["rms"])
-        onset = float(f["onset"])
-        chroma = f["chroma"]
+        mode = f.get("mode", "music")
+        u = self._map_features_to_uniforms(f, mode)
+        is_speech = mode == "speech"
 
-        cx, cy = self.width / 2.0, self.height / 2.0
-        count = int(self.params["particle_count"])
-        threshold = self.params["explosion_threshold"]
-        trail_len = int(self.params["trail_length"])
-        glow_size = self.params["glow_size"]
-        glow_strength = self.params["glow_strength"]
-        depth_enabled = self.params["depth_enabled"] > 0.5
-        center_force = self.params["center_force"]
-        friction = self.params["friction"]
-        life_decay = self.params["life_decay"]
-        size_scale = self.params["size_scale"]
-        trail_decay = self.params.get("trail_decay", 0.7)
-
-        p = self._particles
-
-        # Trail-Historie aufzeichnen (Positionen VOR dem Physik-Update)
-        if trail_len > 0:
-            self._trail_hist[:-1] = self._trail_hist[1:]
-            self._trail_hist[-1, :, 0] = p[:, 0]
-            self._trail_hist[-1, :, 1] = p[:, 1]
-            self._trail_hist[-1, :, 2] = p[:, 4]
-            np.minimum(self._trail_valid + 1, trail_len, out=self._trail_valid)
+        # --- Frame-Delta (robust, falls nicht sequentiell gerendert wird) ---
+        fps = float(features.get("fps", 30) or 30)
+        if self._last_time is None or not (0.0 < time - self._last_time <= 0.25):
+            dt = 1.0 / fps
+            first_frame = True
         else:
-            self._trail_valid[:] = 0
+            dt = time - self._last_time
+            first_frame = False
+        self._last_time = time
 
-        # Beat-Explosion
-        if onset > threshold:
-            explode_count = int(count * onset * 0.3)
-            if explode_count > 0:
-                idx = np.random.randint(0, count, explode_count)
-                self._spawn(np.unique(idx), explode=True, chroma=chroma)
+        # --- Geglaettete Feature-Werte (EMA) ---
+        energy_raw = float(u["u_energy"])
+        treble_raw = float(u["u_detail"])
+        flow_raw = float(u["u_flow"])
+        if first_frame:
+            self._energy_s, self._treble_s, self._flow_s = (
+                energy_raw, treble_raw, flow_raw,
+            )
+        else:
+            k = 1.0 - np.exp(-dt * 8.0)
+            self._energy_s += (energy_raw - self._energy_s) * k
+            self._treble_s += (treble_raw - self._treble_s) * k
+            self._flow_s += (flow_raw - self._flow_s) * k
 
-        # === Physik-Update (vektorisiert) ===
-        p[:, 0] += p[:, 2]
-        p[:, 1] += p[:, 3]
-        dx = cx - p[:, 0]
-        dy = cy - p[:, 1]
-        dist = np.sqrt(dx * dx + dy * dy) + 1.0
-        force = center_force * rms
-        p[:, 2] = (p[:, 2] + dx / dist * force) * friction
-        p[:, 3] = (p[:, 3] + dy / dist * force) * friction
-        p[:, 4] -= life_decay * (1.0 + rms)
+        # --- Schockwelle: Musik = Beat/Transient, Sprache = Betonung ---
+        if is_speech:
+            # Anstieg im Voice-Band = Betonung -> sanfter Wirbel-Puls
+            signal = max(0.0, flow_raw - self._prev_voice) * 3.0
+            threshold = 0.18
+            strength_scale = 0.45
+        else:
+            signal = max(float(u["u_impact"]), float(u.get("u_beat_intensity", 0.0)))
+            threshold = 0.35
+            strength_scale = 1.0
+        self._prev_voice = flow_raw
 
-        dead = np.where(p[:, 4] <= 0)[0]
-        if dead.size > 0:
-            self._spawn(dead, explode=False, chroma=chroma)
+        if signal > threshold and self._shock_age > 0.3:
+            self._shock_age = 0.0
+        self._shock_age += dt
+        shock_env = float(np.exp(-self._shock_age * 2.8)) if self._shock_age < 3.0 else 0.0
+        shock_radius = self._shock_age * 1.6  # normierte Front-Position
 
-        # === Farben & Groessen (vektorisiert) ===
-        base_color = self._chroma_to_color(chroma)
-        main_color = tuple(c * 0.7 for c in base_color)
-        color_mode = self.params.get('color_mode', 'chroma')
-        base_saturation = 0.0 if color_mode == 'monochrome' else float(self.params.get('color_saturation', 0.7))
+        # --- Rotation: Musik = Energie, Sprache = ruhiger Flow ---
+        vortex_speed = float(self.params["vortex_speed"])
+        if is_speech:
+            rot_rate = vortex_speed * (0.10 + 0.55 * self._flow_s)
+        else:
+            rot_rate = vortex_speed * (0.25 + 1.6 * self._energy_s)
+        self._rot_phase += rot_rate * dt
+
+        # --- Geometrie-Konstanten ---
+        cx, cy = self.width / 2.0, self.height / 2.0
+        radius = min(self.width, self.height) * 0.55
+        tilt = float(self.params["galaxy_tilt"])
+        tilt_angle = -0.42  # feste Kipp-Rotation der Galaxien-Ebene
+        cos_t, sin_t = np.cos(tilt_angle), np.sin(tilt_angle)
+
+        twist = float(self.params["spiral_twist"])
+        infall = max(float(self.params["infall_speed"]), 1e-4)
+        wobble = float(self.params["wobble"])
+        shock_str = float(self.params["shockwave_strength"]) * strength_scale
+        sparkle = float(self.params["sparkle"]) * (0.3 if is_speech else 1.0)
+        hue_spread = float(self.params["hue_spread"])
+        point_size = float(self.params["point_size"])
+        core_glow = float(self.params["core_glow"])
+
+        # Aktiver Pegel: Musik = Energie, Sprache = Voice-Flow
+        level = self._flow_s if is_speech else self._energy_s
+
+        # === Partikel-Positionen (analytisch, vektorisiert) ===
+        # Lebenszyklus: Einfall von aussen nach innen, dann Respawn
+        life = np.mod(time * infall / self._lifespan + self._life_off, 1.0)
+        r_norm = self._rad0 * (1.0 - 0.80 * life ** 1.6) + 0.04
+        # Radial-Wobble
+        r_norm = r_norm + wobble * 0.015 * self._wob_amp * np.sin(
+            time * self._wob_freq + self._wob_phase
+        )
+        # Spiralwinkel: Arm + Twist + Vortex-Rotation + Wobble
+        angle = (
+            self._arm_angle
+            + self._rad0 * twist
+            + self._rot_phase * self._orbit
+            + wobble * 0.05 * np.sin(time * self._wob_freq * 0.7 + self._wob_phase * 1.3)
+        )
+
+        # Schockwelle: Partikel nahe der Front werden nach aussen geschleudert
+        band = np.exp(-((r_norm - shock_radius) ** 2) / 0.012)
+        r_disp = r_norm + shock_str * 0.30 * shock_env * band
+
+        # Gekippte Galaxien-Ebene -> Pixelkoordinaten
+        gx = np.cos(angle) * r_disp
+        gy = np.sin(angle) * r_disp * tilt
+        px = cx + (gx * cos_t - gy * sin_t) * radius
+        py = cy + (gx * sin_t + gy * cos_t) * radius
+
+        # === Sichtbarkeit & Alpha ===
+        # Sichtbare Menge skaliert mit dem Pegel (Pausen = fast ruhend)
+        vis = (self._vis_thresh < (0.42 + 0.62 * level)).astype(np.float32)
+        fade = self._smoothstep(0.0, 0.08, life) * self._smoothstep(1.0, 0.90, life)
+        # Zentrum-nahe Partikel leuchten staerker (Dichte-Eindruck)
+        lum = np.clip(1.25 - r_disp, 0.25, 1.25)
+
+        # Funkeln: deterministischer Groessen-/Alpha-Jitter aus Hash
+        tw_h = np.mod(
+            np.sin(self._seed * 127.1 + np.floor(time * 14.0) * 311.7) * 43758.5453,
+            1.0,
+        )
+        size_jit = 1.0 + sparkle * self._treble_s * (tw_h - 0.5) * 1.8
+        alpha_jit = 1.0 + sparkle * self._treble_s * (np.mod(tw_h * 7.13, 1.0) - 0.5) * 1.2
+
+        alpha = fade * vis * lum * alpha_jit * (0.45 + 0.75 * level)
+        size_px = (
+            self._size0 * size_jit * point_size
+            * (self.height / 720.0)
+            * (0.70 + 0.60 * level)
+            * (1.0 + shock_env * band * 1.5)
+        )
+
+        # === Farben: Chroma-Basiston + Verlauf ueber Radius ===
+        base_color = self._chroma_to_color(f["chroma"])
         base_hue = self._color_to_hue(base_color)
+        color_mode = self.params.get('color_mode', 'chroma')
+        sat = 0.0 if color_mode == 'monochrome' else (
+            float(self.params.get('color_saturation', 0.7)) * (0.75 + 0.25 * level)
+        )
+        hue = base_hue + (r_disp - 0.45) * hue_spread + self._hue_jit + life * 0.15
+        val = (0.50 + 0.60 * level) * lum * (1.0 + shock_env * band)
+        rgb = self._hsv_to_rgb_array(hue, sat, val)
 
-        life_ratio = np.where(p[:, 5] > 0, p[:, 4] / np.maximum(p[:, 5], 1e-6), 0.0)
-        value = life_ratio * (0.5 + rms * 0.3)
-        hue = (base_hue + p[:, 7] * 0.15) % 1.0
-        rgb = self._hsv_to_rgb_array(hue, base_saturation * (0.5 + rms * 0.2), value)
+        # === Instanz-Puffer fuellen ===
+        parts = []
+        n = len(self._rad0)
+        main = np.empty((n, 8), dtype=np.float32)
+        main[:, 0] = px
+        main[:, 1] = py
+        main[:, 2:5] = rgb
+        main[:, 5] = size_px * 2.4  # Quad halb so gross, Halo hat Platz
+        main[:, 6] = np.clip(alpha, 0.0, 1.5)
+        main[:, 7] = self._seed
+        parts.append(main[size_px > 0.05])
 
-        depth_scale = (0.6 + p[:, 8] * 0.4) if depth_enabled else np.ones(count, dtype=np.float32)
-        current_size = p[:, 6] * life_ratio * (0.8 + rms * 0.4) * depth_scale * size_scale
-        total_size = current_size * 1.5 + glow_size * rms
+        # === Schockwellen-Ring ===
+        if shock_env > 0.02 and shock_radius < 1.3:
+            ring_ang = np.linspace(0.0, 2.0 * np.pi, self._RING_POINTS,
+                                   endpoint=False, dtype=np.float32)
+            rgx = np.cos(ring_ang) * shock_radius
+            rgy = np.sin(ring_ang) * shock_radius * tilt
+            ring_px = cx + (rgx * cos_t - rgy * sin_t) * radius
+            ring_py = cy + (rgx * sin_t + rgy * cos_t) * radius
+            ring_col = tuple(min(1.0, c * 0.6 + 0.4) for c in base_color)
+            ring = np.empty((self._RING_POINTS, 8), dtype=np.float32)
+            ring[:, 0] = ring_px
+            ring[:, 1] = ring_py
+            ring[:, 2:5] = ring_col
+            ring[:, 5] = (5.0 + 10.0 * shock_env) * (self.height / 720.0)
+            ring[:, 6] = shock_env * 0.5 * float(self.params["shockwave_strength"])
+            ring[:, 7] = 0.5
+            parts.append(ring)
 
-        instance_parts = []
+        # === Zentraler Kern (drei Schichten) ===
+        flash = 1.0 + shock_env * 2.2
+        res_scale = self.height / 720.0
+        core_white = (1.0, 1.0, 1.0)
 
-        # === Trail-Instanzen ((Slot, Partikel)-Gitter, aeltester Slot zuerst) ===
-        if trail_len > 0:
-            hist = self._trail_hist[self._MAX_TRAIL - trail_len:]  # (T, N, 3)
-            valid = self._trail_valid  # (N,)
-            slots = np.arange(trail_len, dtype=np.int32)[:, None]  # (T, 1)
-            ti = slots - (trail_len - valid[None, :])  # Index innerhalb der Partikel-Liste
-            valid_mask = (ti >= 0) & (hist[:, :, 2] > 0)
-            if valid_mask.any():
-                valid_safe = np.maximum(valid[None, :], 1)
-                t_ratio = (ti + 1) / valid_safe
-                trail_dist = np.maximum(valid[None, :] - 1 - ti, 0)
-                trail_fade = np.power(trail_decay, trail_dist)
-                t_alpha = 0.35 * t_ratio * hist[:, :, 2] * trail_fade
-                t_size = np.maximum(1.0, current_size * 0.4)
+        def _mix(a, b, t):
+            return tuple(a[i] * (1.0 - t) + b[i] * t for i in range(3))
 
-                trails = np.empty((trail_len, count, 7), dtype=np.float32)
-                trails[:, :, 0:2] = hist[:, :, 0:2]
-                trails[:, :, 2:5] = rgb[None, :, :]
-                trails[:, :, 5] = t_size[None, :]
-                trails[:, :, 6] = t_alpha
-                instance_parts.append(trails[valid_mask])
+        core_layers = [
+            # Weiter Halo: sehr dezent, haelt den Hintergrund sichtbar
+            (radius * 0.55, 0.05 + 0.10 * level,
+             tuple(c * 0.30 * core_glow for c in base_color), 0.1),
+            # Mittlerer Glow
+            ((50.0 + 90.0 * level) * res_scale, 0.30 * core_glow,
+             _mix(base_color, core_white, 0.30), 0.3),
+            # Heisser Kern (HDR, blitzt bei Schockwelle auf)
+            ((14.0 + 26.0 * level) * res_scale, 0.85 * core_glow,
+             tuple(c * 1.4 * flash for c in _mix(core_white, base_color, 0.35)), 0.7),
+        ]
+        core = np.empty((len(core_layers), 8), dtype=np.float32)
+        for j, (size, a, col, seed) in enumerate(core_layers):
+            core[j] = [cx, cy, col[0], col[1], col[2], size * 2.4, a, seed]
+        parts.append(core)
 
-        # === Partikel-Instanzen ===
-        part_mask = current_size > 0
-        if part_mask.any():
-            parts = np.empty((count, 7), dtype=np.float32)
-            parts[:, 0] = p[:, 0]
-            parts[:, 1] = p[:, 1]
-            parts[:, 2:5] = rgb
-            parts[:, 5] = total_size
-            parts[:, 6] = life_ratio
-            instance_parts.append(parts[part_mask])
-
-        # === Zentrumspuls-Ringe ===
-        pulse_radius = 15.0 + rms * 25.0
-        rings = np.empty((4, 7), dtype=np.float32)
-        for j in range(4):
-            rings[j] = [cx, cy, main_color[0], main_color[1], main_color[2],
-                        pulse_radius + j * 8.0, (1.0 - j / 4.0) * rms * 0.35]
-        instance_parts.append(rings)
-
-        instances = np.concatenate(instance_parts, axis=0)
+        instances = np.concatenate(parts, axis=0)
         if instances.shape[0] > self._max_instances:
-            instances = instances[:self._max_instances]
+            instances = instances[: self._max_instances]
         instance_count = instances.shape[0]
 
-        # Aufloesung und Brightness an Shader uebergeben
         self._prog["u_resolution"].value = (self.width, self.height)
-        self._prog["u_brightness"].value = self.params.get("brightness", 1.0)
-        self._prog["u_glow_strength"].value = glow_strength
+        self._prog["u_brightness"].value = float(self.params.get("brightness", 1.0))
 
-        # Rendern
         if instance_count > 0:
             self._instance_vbo.write(np.ascontiguousarray(instances).tobytes())
+            # Additive Mischung: Gluehpartikel akkumulieren im HDR-Buffer
             self.ctx.enable(moderngl.BLEND)
-            self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+            self.ctx.blend_func = moderngl.ONE, moderngl.ONE
             self._vao.render(mode=moderngl.TRIANGLE_STRIP, instances=instance_count)
             self.ctx.disable(moderngl.BLEND)

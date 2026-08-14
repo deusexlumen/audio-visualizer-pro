@@ -101,3 +101,48 @@ def test_crossfade_frame_unterscheidet_sich_von_nachbarn(require_gpu):
         assert mid_img.size > 0
     finally:
         r.release()
+
+
+@pytest.mark.gpu
+def test_occlusion_flag_im_crossfade(require_gpu):
+    """Die Deckungs-Meldung gilt im Crossfade nur, wenn BEIDE Szenen eine
+    schreiben — sonst mischt _xfade_prog gegen ein bedeutungsloses alpha=1.0."""
+    from src.gpu_visualizers import get_visualizer
+    from src.render_common import build_features_dict
+
+    feats = _dummy_features(seconds=3)
+    r = GPUBatchRenderer(width=128, height=72, fps=30)
+    try:
+        scenes = [
+            Scene(start=0.0, end=1.0, visualizer="typographic", transition="cut"),
+            Scene(start=1.0, end=3.0, visualizer="nebula_drift",
+                  transition="crossfade", transition_duration=0.8),
+        ]
+        insts = {
+            name: get_visualizer(name)(r.ctx, r.width, r.height)
+            for name in ("typographic", "nebula_drift")
+        }
+        r._ensure_timeline_resources()
+        fd = build_features_dict(feats, feats.frame_count, r.fps)
+        scene_for_frame = [0 if (i / r.fps) < 1.0 else 1
+                           for i in range(feats.frame_count)]
+        applied = {}
+
+        # Reine typographic-Szene: schreibt Deckung
+        r._render_timeline_frame(scenes, scene_for_frame, insts, applied, fd,
+                                 frame_i=10, time=10 / r.fps)
+        assert r._active_occlusion_alpha is True
+
+        # Mitten im Crossfade zu einem Visualizer ohne Deckung: aus
+        mid = int((1.0 + 0.4) * r.fps)
+        r._render_timeline_frame(scenes, scene_for_frame, insts, applied, fd,
+                                 frame_i=mid, time=mid / r.fps)
+        assert r._active_occlusion_alpha is False
+
+        # Nach dem Crossfade: reine nebula_drift-Szene, weiterhin aus
+        late = int(2.5 * r.fps)
+        r._render_timeline_frame(scenes, scene_for_frame, insts, applied, fd,
+                                 frame_i=late, time=late / r.fps)
+        assert r._active_occlusion_alpha is False
+    finally:
+        r.release()

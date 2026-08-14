@@ -4,7 +4,7 @@
 
 **Verwandle Audio in GPU-gerenderte Musikvideos und Podcast-Visuals.**
 
-[![Version](https://img.shields.io/badge/version-v3.1.0-blue)](https://github.com/deusexlumen/audio-visualizer-pro/releases/latest)
+[![Version](https://img.shields.io/badge/version-v3.2.0-blue)](https://github.com/deusexlumen/audio-visualizer-pro/releases/latest)
 [![Download](https://img.shields.io/badge/⬇%20Download-Windows--Installer-success)](https://github.com/deusexlumen/audio-visualizer-pro/releases/latest)
 [![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/tests-282%20passed-brightgreen)](#-tests)
@@ -21,7 +21,7 @@ Ergebnis mit **FFmpeg** zu einem fertigen Video — gesteuert über eine
 
 ## ✨ Highlights
 
-- **18 GPU-Visualizer** (10 Classic + 8 Signature Pro) plus **Visualizer-Studio**: eigene Visualizer aus Bausteinen zusammenklicken, ganz ohne Code.
+- **26 GPU-Visualizer** (10 Classic + 8 Signature Pro + 8 Archetypen) plus **Visualizer-Studio**: eigene Visualizer aus Bausteinen zusammenklicken, ganz ohne Code.
 - **HDR-Render-Pipeline**: Float16 + 4×-MSAA, echter HDR-Bloom, ACES-Tonemapping, 3D-LUTs (`.cube`), Vignette, chromatische Aberration, Film-Grain, Dithering — kein Banding, keine harten Clips.
 - **Szenen-Timeline**: Visualizer wechseln automatisch über die Zeit, aus der Songstruktur abgeleitet (mit Crossfades).
 - **KI-Unterstützung (Gemini, optional)**: Transkription, Zitat-Extraktion mit Zeitstempeln, automatische Visualizer-/Parameter-Empfehlung und ein Voll-KI-Modus.
@@ -128,7 +128,7 @@ Alle Befehle: `python main.py --help`.
 | `particle_swarm` | Physik-basierte Partikel-Schwärme | Dubstep, Trap, Bass |
 | `neon_oscilloscope` | Retro-Oszilloskop mit Neon-Trails | Synthwave, Cyberpunk |
 | `chroma_field` | Partikelfeld basierend auf der Tonart | Jazz, Ambient, Klassik |
-| `typographic` | Kinetisches Type-Grid | Podcasts, Sprache |
+| `typographic` | Nächtliche Skyline; Fenster leuchten im Takt | Podcasts, Sprache |
 | `sacred_mandala` | Rotierende geometrische Muster | Meditation, Spiritual |
 | `liquid_blobs` | Flüssige MetaBall-Animation | Deep House, Liquid DnB |
 | `neon_wave_circle` | Konzentrische Neon-Ringe | Trance, Progressive |
@@ -141,11 +141,28 @@ Alle Befehle: `python main.py --help`.
 | `lumina_core` | Intelligenter Hybrid-Visualizer | Allrounder |
 | `voice_flow` | Sprach-optimierte Visualisierung | Podcasts, Interviews |
 | `spectrum_genesis` | Evolvierendes Spektrum (Peak-Hold, Reflexion) | Elektronische Musik |
-| `speech_focus` | Fokus auf Sprachfrequenzen | Hörbücher, Vorträge |
+| `speech_focus` | Stimm-Linie, im Musik-Modus ein Spektrum-Band | Hörbücher, Vorträge |
 | `bass_temple` | Bass-zentrierte Tempel-Architektur | Bass Music, Trap |
-| `orchestral_swell` | Orchestrale Wellenbewegungen | Filmmusik, Klassik |
+| `orchestral_swell` | Aufsteigende Licht-Vorhänge | Filmmusik, Klassik |
 | `aurora_voice` | Ruhige Aurora-Bänder, kein Beat-Blitzen | Lange Podcasts, Hörbücher |
 | `nebula_drift` | Treibende Nebelwolken + Sternenfeld | Ambient, Big-Room-EDM |
+
+### Archetypen (8, neu in v3.2)
+
+Jeder eine eigene Bildwelt statt einer weiteren Kreis- oder Wellenvariante.
+Alle laufen in beiden Modi: bei Sprache ändert sich die Empfindlichkeit,
+nicht die Optik. Und alle lassen ein Hintergrundbild durchscheinen.
+
+| Name | Beschreibung | Ideal für |
+|------|--------------|-----------|
+| `retro_sun` | Sonne am Horizont über einem Gitterboden | Synthwave, Retro |
+| `dna_helix` | Doppelhelix; jede Querstrebe ist ein Ton | Elektronisch, Ambient |
+| `kaleidoscope` | Winkel-Faltung, Sektorfarbe aus der Tonart | Psychedelic, Trance |
+| `spirograph` | Kurvenfigur, deren Form aus der Tonart entsteht | Klassik, Melodisches |
+| `voronoi_cells` | Wanderndes Zellnetz, Zellen gehören je einem Ton | Minimal, Techno |
+| `ink_bloom` | Tinte in Wasser: Schlieren und Fäden | Ambient, Downtempo |
+| `silk_ribbons` | Wehende Bänder mit Glanzkante | Chill, Neo-Soul |
+| `scissor_lattice` | Scherengitter, schnappt auf dem Beat auf | Industrial, Beat-Musik |
 
 ### 🧩 Visualizer-Studio
 
@@ -236,8 +253,8 @@ pip install pyinstaller
 python build/build.py            # → dist/AudioVisualizerPro/ (onedir)
 
 # Windows-Installer (benötigt Inno Setup):
-ISCC build/installer.iss /DMyAppVersion=3.1.0
-# → dist/installer/AudioVisualizerPro-Setup-3.1.0.exe
+ISCC build/installer.iss /DMyAppVersion=3.2.0
+# → dist/installer/AudioVisualizerPro-Setup-3.2.0.exe
 ```
 
 Build-Details und bekannte Stolpersteine (librosa/numba/soundfile-Bundling)
@@ -292,5 +309,5 @@ Aufgebaut auf [ModernGL](https://moderngl.readthedocs.io/) ·
 - **Weiterführend:** [Installation](docs/INSTALLATION.md) · [Changelog](CHANGELOG.md) · [Architektur (AGENTS.md)](AGENTS.md)
 
 <div align="center">
-<sub>Audio Visualizer Pro v3.1.0 · mit ❤️ und KI erstellt</sub>
+<sub>Audio Visualizer Pro v3.2.0 · mit ❤️ und KI erstellt</sub>
 </div>

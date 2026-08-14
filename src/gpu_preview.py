@@ -42,6 +42,8 @@ def render_gpu_preview(
     viz_offset_x: float = 0.0,
     viz_offset_y: float = 0.0,
     viz_scale: float = 1.0,
+    viz_luma_knee_lo: float = 0.02,
+    viz_luma_knee_hi: float = 0.25,
     features: AudioFeatures = None,
     cancel_check=None,
     timeline=None,
@@ -64,6 +66,9 @@ def render_gpu_preview(
         viz_offset_x: Horizontaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
         viz_offset_y: Vertikaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
         viz_scale: Skalierungsfaktor des Visualizers (0.5 bis 2.0).
+        viz_luma_knee_lo: Helligkeit, ab der die Visualizer-Ebene ueber einem
+            Hintergrundbild sichtbar wird (darunter voll transparent).
+        viz_luma_knee_hi: Helligkeit, ab der sie voll deckend ist.
         cancel_check: Optionales Callable; gibt es True zurueck, wird die
             Vorschau abgebrochen (Rueckgabe None). Erlaubt kooperativen
             Abbruch verworfener Previews aus dem Worker-Thread.
@@ -158,11 +163,25 @@ def render_gpu_preview(
 
         # Visualizer von viz_fbo auf main fbo blitten (mit Offset/Scale)
         renderer.fbo.use()
+        # Gleiche Regel wie im Haupt-Renderer: ueber einem Hintergrundbild
+        # bestimmt die Helligkeit die Deckung, sonst wuerde der schwarze
+        # Anteil des Visualizers das Bild vollstaendig uebermalen.
+        blit_kwargs = {}
+        if bg_texture is not None:
+            blit_kwargs = {
+                "alpha_from_luma": True,
+                "luma_knee_lo": viz_luma_knee_lo,
+                "luma_knee_hi": viz_luma_knee_hi,
+                "occlusion_from_alpha": bool(
+                    getattr(viz, "WRITES_OCCLUSION_ALPHA", False)
+                ),
+            }
         renderer._blit_viz_to_fbo(
             renderer.viz_fbo.color_attachments[0],
             offset_x=viz_offset_x,
             offset_y=viz_offset_y,
             scale=viz_scale,
+            **blit_kwargs,
         )
 
         pp = postprocess or {}

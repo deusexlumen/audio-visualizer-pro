@@ -9,6 +9,8 @@ from PyQt6.QtWidgets import (
 )
 
 from src.app_logging import get_logger
+from src.gui.quote_editor import QuoteEditorDialog
+from src.quote_timing import snap_quotes
 from src.types import Quote
 
 logger = get_logger(__name__)
@@ -96,6 +98,10 @@ class QuotesPanel(QWidget):
         list_layout = QVBoxLayout(list_box)
         self.list_quotes = QListWidget()
         self.list_quotes.setMaximumHeight(180)
+        self.list_quotes.setToolTip(
+            "Doppelklick oeffnet den Editor mit Wellenform und Wiedergabe."
+        )
+        self.list_quotes.itemDoubleClicked.connect(self._on_list_double_click)
         list_layout.addWidget(self.list_quotes)
 
         from src.gui.icons import get_icon
@@ -113,8 +119,17 @@ class QuotesPanel(QWidget):
 
         self.btn_edit = QPushButton(" Bearbeiten")
         self.btn_edit.setIcon(get_icon("edit"))
+        self.btn_edit.setToolTip("Text und Zeitfenster bearbeiten, Ausschnitt anhoeren.")
         self.btn_edit.clicked.connect(self._on_edit)
         list_btn_row.addWidget(self.btn_edit)
+
+        self.btn_snap_all = QPushButton(" Zeiten einrasten")
+        self.btn_snap_all.setToolTip(
+            "Verschiebt alle Zitatgrenzen auf die naechste erkannte Sprech-Kante "
+            "(rein lokal aus der Audio-Analyse, ohne KI)."
+        )
+        self.btn_snap_all.clicked.connect(self._on_snap_all)
+        list_btn_row.addWidget(self.btn_snap_all)
         list_layout.addLayout(list_btn_row)
 
         layout.addWidget(list_box)
@@ -170,6 +185,7 @@ class QuotesPanel(QWidget):
             self._update_button_states()
         if key == "quotes":
             self._refresh_list()
+            self._update_button_states()
 
     def _update_button_states(self):
         has_audio = bool(self.state.audio_path)
@@ -177,13 +193,16 @@ class QuotesPanel(QWidget):
         has_gemini = self.gemini is not None
         self.btn_extract.setEnabled(has_audio and has_features and has_gemini)
         self.btn_transcribe.setEnabled(has_audio and has_gemini)
+        self.btn_snap_all.setEnabled(has_features and bool(self.state.quotes))
         if not has_gemini:
             self.lbl_status.setText("KI nicht verfügbar. Prüfe API-Key.")
 
     def _refresh_list(self):
         self.list_quotes.clear()
         for q in self.state.quotes:
-            text = f"{q.text[:40]}{'...' if len(q.text) > 40 else ''} ({q.start_time:.1f}s - {q.end_time:.1f}s)"
+            dur = q.end_time - q.start_time
+            text = (f"{q.text[:40]}{'...' if len(q.text) > 40 else ''} "
+                    f"({q.start_time:.2f}s - {q.end_time:.2f}s, {dur:.1f}s)")
             self.list_quotes.addItem(text)
 
     def _on_enabled_changed(self, state):
@@ -223,10 +242,19 @@ class QuotesPanel(QWidget):
 
     def _on_add(self):
         duration = getattr(self.state.features, "duration", 10.0) or 10.0
-        text, ok = QInputDialog.getText(self, "Zitat hinzufügen", "Text:")
-        if ok and text:
-            new_quote = Quote(text=text, start_time=duration * 0.3, end_time=duration * 0.3 + 3.0, confidence=1.0)
-            self.state.quotes = self.state.quotes + [new_quote]
+        start = duration * 0.3
+        placeholder = Quote(text="Neues Zitat", start_time=start,
+                            end_time=min(start + 3.0, duration), confidence=1.0)
+        dialog = QuoteEditorDialog(
+            placeholder,
+            audio_path=self.state.audio_path,
+            features=self.state.features,
+            parent=self,
+        )
+        if dialog.exec():
+            quotes = self.state.quotes + [dialog.result_quote()]
+            quotes.sort(key=lambda x: x.start_time)
+            self.state.quotes = quotes
 
     def _on_remove(self):
         row = self.list_quotes.currentRow()
@@ -239,12 +267,40 @@ class QuotesPanel(QWidget):
         row = self.list_quotes.currentRow()
         if row < 0 or row >= len(self.state.quotes):
             return
+        self._edit_quote_at(row)
+
+    def _edit_quote_at(self, row: int):
+        """Oeffnet den Zitat-Editor (Text + Zeitfenster + Abhoeren)."""
         q = self.state.quotes[row]
-        text, ok = QInputDialog.getText(self, "Zitat bearbeiten", "Text:", text=q.text)
-        if ok and text:
+        dialog = QuoteEditorDialog(
+            q,
+            audio_path=self.state.audio_path,
+            features=self.state.features,
+            parent=self,
+        )
+        if dialog.exec():
             quotes = list(self.state.quotes)
-            quotes[row] = Quote(text=text, start_time=q.start_time, end_time=q.end_time, confidence=q.confidence)
+            quotes[row] = dialog.result_quote()
+            quotes.sort(key=lambda x: x.start_time)
             self.state.quotes = quotes
+
+    def _on_list_double_click(self, _item):
+        self._on_edit()
+
+    def _on_snap_all(self):
+        """Rastet alle Zitate auf die erkannten Sprech-Kanten ein."""
+        if not self.state.quotes or self.state.features is None:
+            return
+        snapped = snap_quotes(self.state.quotes, self.state.features)
+        moved = sum(
+            1 for a, b in zip(self.state.quotes, snapped)
+            if abs(a.start_time - b.start_time) > 0.01
+            or abs(a.end_time - b.end_time) > 0.01
+        )
+        self.state.quotes = snapped
+        self.lbl_status.setText(
+            f"{moved} von {len(snapped)} Zitaten auf Sprechgrenzen eingerastet."
+        )
 
     def _on_style_changed(self):
         qc = self.state.quote_config
@@ -274,6 +330,7 @@ class QuotesPanel(QWidget):
             "audio_duration": getattr(self.state.features, "duration", None),
             "max_quotes": None,
             "use_cache": not self.chk_no_cache.isChecked(),
+            "features": self.state.features,
         }
 
     # --- Transkription ---

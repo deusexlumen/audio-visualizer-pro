@@ -56,6 +56,11 @@ def create_gl_context() -> "moderngl.Context":
         ) from e
 
 
+def _declares_occlusion_alpha(viz) -> bool:
+    """Ob ein Visualizer eine echte Deckung in f_color.a schreibt."""
+    return bool(getattr(viz, "WRITES_OCCLUSION_ALPHA", False))
+
+
 class GPUBatchRenderer:
     """GPU-Renderer fuer Audio-Visualisierungen mit ModernGL.
 
@@ -160,6 +165,8 @@ class GPUBatchRenderer:
         viz_offset_x: float = 0.0,
         viz_offset_y: float = 0.0,
         viz_scale: float = 1.0,
+        viz_luma_knee_lo: float = 0.02,
+        viz_luma_knee_hi: float = 0.25,
         progress_callback=None,
         cancel_event=None,
         timeline=None,
@@ -183,6 +190,9 @@ class GPUBatchRenderer:
             viz_offset_x: Horizontaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
             viz_offset_y: Vertikaler Offset in normalisierten Koordinaten (-1.0 bis 1.0).
             viz_scale: Skalierungsfaktor des Visualizers (0.5 bis 2.0).
+            viz_luma_knee_lo: Helligkeit, ab der die Visualizer-Ebene ueber einem
+                Hintergrundbild sichtbar wird (darunter voll transparent).
+            viz_luma_knee_hi: Helligkeit, ab der sie voll deckend ist.
             progress_callback: Optionaler Callback(frame, total_frames) fuer Fortschritts-Updates.
             cancel_event: Optional threading.Event. Wenn gesetzt, wird die Render-Schleife unterbrochen.
             studio_constraints: Optionale Studio-MeasureConstraints (Alpha-Cap, Luma-Alpha, Subjekt-Stärke) — nur im Studio-Pfad gesetzt.
@@ -493,6 +503,7 @@ class GPUBatchRenderer:
                     else:
                         self._render_viz_into(viz, self.viz_fbo, features_dict, time)
                         active_viz_tex = self.viz_fbo.color_attachments[0]
+                        self._active_occlusion_alpha = _declares_occlusion_alpha(viz)
                     if _DEBUG and i == 0:
                         self._save_debug(self.viz_fbo, "debug_step3_after_viz.png")
 
@@ -505,6 +516,20 @@ class GPUBatchRenderer:
                             "luma_knee_lo": studio_constraints.luma_knee_lo,
                             "luma_knee_hi": studio_constraints.luma_knee_hi,
                             "subject_strength": studio_constraints.subject_strength,
+                        }
+                    elif bg_texture is not None:
+                        # Ohne Hintergrundbild bleibt es beim deckenden Blit
+                        # (Schwarz ist dann der gewollte Bildgrund). Sobald ein
+                        # Bild/Video daruntergelegt wird, muss die Helligkeit die
+                        # Deckung bestimmen — sonst uebermalt der schwarze Anteil
+                        # der Visualizer das Bild vollstaendig.
+                        blit_kwargs = {
+                            "alpha_from_luma": True,
+                            "luma_knee_lo": viz_luma_knee_lo,
+                            "luma_knee_hi": viz_luma_knee_hi,
+                            "occlusion_from_alpha": getattr(
+                                self, "_active_occlusion_alpha", False
+                            ),
                         }
                     self._blit_viz_to_fbo(
                         active_viz_tex,
@@ -1319,6 +1344,7 @@ class GPUBatchRenderer:
             uniform float u_viz_alpha_from_luma;  // 0.0 = Bestand, 1.0 = Studio (C14)
             uniform float u_luma_knee_lo;
             uniform float u_luma_knee_hi;
+            uniform float u_viz_occlusion_from_alpha;  // 1.0 = tex.a ist Deckung
             uniform float u_subject_strength;     // Default 0.0 = keine Maskierung
             in vec2 v_uv;
             out vec4 f_color;
@@ -1332,6 +1358,10 @@ class GPUBatchRenderer:
                 if (u_viz_alpha_from_luma > 0.5) {
                     float luma = dot(tex.rgb, vec3(0.2126, 0.7152, 0.0722));
                     a_viz = smoothstep(u_luma_knee_lo, u_luma_knee_hi, luma);
+                    // Visualizer mit WRITES_OCCLUSION_ALPHA melden dunkle, aber
+                    // undurchsichtige Formen (Silhouetten) ueber tex.a an. Luma
+                    // allein kann "dunkel UND deckend" nicht ausdruecken.
+                    a_viz = max(a_viz, tex.a * u_viz_occlusion_from_alpha);
                 }
                 // Subjekt-Maske liegt im Bildschirmraum, nicht im Quad-UV-Raum
                 // (der Blit-Quad hat Offset/Scale — v_uv waere falsch).
@@ -1414,6 +1444,7 @@ class GPUBatchRenderer:
         viz = viz_instances.get(scene.visualizer)
         if viz is None:
             # Fallback: leeres FBO
+            self._active_occlusion_alpha = False
             self.viz_fbo.use()
             self.ctx.clear(0.0, 0.0, 0.0, 0.0)
             return self.viz_fbo.color_attachments[0]
@@ -1436,8 +1467,16 @@ class GPUBatchRenderer:
                 alpha = (time - scene.start) / scene.transition_duration
 
         if not in_xfade:
+            self._active_occlusion_alpha = _declares_occlusion_alpha(viz)
             self._render_viz_into(viz, self.viz_fbo, features_dict, time)
             return self.viz_fbo.color_attachments[0]
+
+        # Im Crossfade mischt _xfade_prog auch den Alpha-Kanal. Das ergibt nur
+        # dann eine gueltige Deckung, wenn BEIDE Szenen eine schreiben —
+        # sonst wird gegen das bedeutungslose alpha=1.0 der anderen gemischt.
+        self._active_occlusion_alpha = (
+            _declares_occlusion_alpha(viz) and _declares_occlusion_alpha(prev_viz)
+        )
 
         # Eingehende Szene -> viz_fbo, ausgehende -> viz_fbo_b
         self._render_viz_into(viz, self.viz_fbo, features_dict, time)
@@ -1460,6 +1499,7 @@ class GPUBatchRenderer:
         opacity=1.0, alpha_cap=1.0, alpha_from_luma=False,
         luma_knee_lo=0.02, luma_knee_hi=0.25,
         subject_strength=0.0, subject_mask=None,
+        occlusion_from_alpha=False,
     ):
         """Blittet die Visualizer-Textur auf den aktuellen FBO.
 
@@ -1504,6 +1544,8 @@ class GPUBatchRenderer:
             prog["u_luma_knee_lo"].value = float(luma_knee_lo)
         if "u_luma_knee_hi" in prog:
             prog["u_luma_knee_hi"].value = float(luma_knee_hi)
+        if "u_viz_occlusion_from_alpha" in prog:
+            prog["u_viz_occlusion_from_alpha"].value = 1.0 if occlusion_from_alpha else 0.0
         if "u_subject_strength" in prog:
             prog["u_subject_strength"].value = float(subject_strength)
         prog["u_opacity"].value = opacity
