@@ -5,6 +5,96 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
+## [3.2.0] — 2026-08-14
+
+Visuelle Generalueberholung: acht neue Visualizer, sechs neu gebaut, dazu
+ein Compositing-Fehler behoben, der jedes Hintergrundbild uebermalt hat.
+Zitat-Timing und KI-Optimierung waren beide kaputt und sind repariert.
+
+### Added
+- **Acht neue Visualizer**, jeder ein eigener Archetyp statt einer weiteren
+  Kreis- oder Wellenvariante:
+  `retro_sun` (Horizont mit Gitterboden), `dna_helix` (Doppelhelix, jede
+  Querstrebe ein Chroma-Ton), `kaleidoscope` (Winkel-Faltung),
+  `spirograph` (Kurvenfigur aus der Tonart), `voronoi_cells` (Zellnetz),
+  `ink_bloom` (Tinte in Wasser), `silk_ribbons` (wehende Baender),
+  `scissor_lattice` (Scherengitter mit einem Freiheitsgrad).
+  Alle laufen in beiden Modi; bei Sprache aendert sich die Empfindlichkeit,
+  nicht die Optik. Alle lassen ein Hintergrundbild durchscheinen.
+- **Zitat-Editor** (`src/gui/quote_editor.py`): Wellenform mit erkannten
+  Sprech-Abschnitten, ziehbare Grenzen, Feinschritte, Abspielen des
+  Ausschnitts. Vorher liess sich der Zeitpunkt eines Zitats in der GUI
+  ueberhaupt nicht aendern — nur der Text.
+- **`src/quote_timing.py`**: bestimmt aus dem RMS, wo gesprochen wird, und
+  rastet Zitatgrenzen auf diese Kanten ein. Rein lokal, ohne Netzwerk.
+- **Zwei-Stufen-Zitatextraktion**: das Audio wird einmal in Segmente mit
+  Zeitstempeln transkribiert, die Auswahl laeuft danach auf reinem Text.
+  Die KI gibt keine Sekunden mehr aus; die Zeit wird lokal berechnet.
+  Zitate, die nicht woertlich im Transkript stehen, werden verworfen.
+- **`WRITES_OCCLUSION_ALPHA`** in `BaseGPUVisualizer`: Visualizer mit
+  dunklen, aber undurchsichtigen Formen (Silhouetten) melden ihre Deckung
+  selbst. Bisher nutzt das nur `typographic`.
+- Neue Parameter: `silhouette_opacity` (typographic), `viz_luma_knee_lo/hi`
+  (Renderer), `lead_in_fade` und `min_display_duration` (Zitat-Overlay).
+
+### Fixed
+- **Hintergrundbilder wurden vollstaendig uebermalt.** Die Visualizer-Ebene
+  wurde mit `alpha = 1.0` geblittet, jedes schwarze Pixel war deckend.
+  Betraf alle Visualizer. Ueber einem Hintergrundbild bestimmt jetzt die
+  Helligkeit die Deckung.
+- **Silhouetten verschwanden ueber Hintergrundbildern.** Luma-Alpha kann
+  "dunkel UND deckend" nicht ausdruecken; die Skyline in `typographic`
+  loeste sich in ein Fenster-Raster auf.
+- **KI-Optimierung hat noch nie einen Parameter gesetzt.** Drei Fehler:
+  das Antwort-Schema nutzte `additionalProperties` (von der Gemini-API
+  abgelehnt, jeder Aufruf endete in einer Exception); der Fallback holte
+  Werte aus `config/default.json`, die zu einem anderen Visualizer gehoeren
+  und komplett weggefiltert wurden; und die erwarteten JSON-Schluessel
+  standen nirgends im Prompt. Zusaetzlich war `background.blur` auf 1.0
+  geclamped, obwohl der Regler bis 20 geht.
+- **Modus-Erkennung**: alle Audios wurden als `music` klassifiziert, der
+  Sprach-Zweig war toter Code. Ursache waren Schwellen aus einer Zeit ohne
+  Pre-Emphasis-Filter. Jetzt scorebasiert mit Hybrid-Zone.
+- **Tempo-Schaetzung** lieferte ausnahmslos 120 BPM.
+- **`fwidth` in divergentem Kontrollfluss** in drei Shadern
+  (`scissor_lattice`, `spirograph`, `retro_sun`): Ableitungen sind laut
+  GLSL undefiniert, wenn die vier Pixel eines Blocks verschiedene Zweige
+  nehmen. Auf Standbildern kaum sichtbar, im Video flimmert es.
+- **`PyQt6.QtMultimedia`** stand im PyInstaller-Build auf der
+  Ausschlussliste — im installierten Programm waere die Wiedergabe im
+  Zitat-Editor stillschweigend tot gewesen.
+- Zwei Shader hingen verkehrt herum im Bild (`orchestral_swell`,
+  `speech_focus`): `gl_FragCoord.y = 0` liegt oben.
+
+### Changed
+- **Bestehende Projekte rendern anders.** Zwei Verhaltensaenderungen, die
+  ein erneutes Rendern eines alten `.avproj` sichtbar veraendern:
+  1. Ohne Hintergrundbild zeigt der Himmel jetzt die gewaehlte
+     `background_color`, wo Visualizer vorher hartes Schwarz gemalt haben.
+  2. Zitat-Einblendungen liegen anders: die Blenden liegen jetzt
+     ausserhalb der Sprechzeit (der Text steht, wenn der Satz beginnt,
+     statt erst 0,6 s spaeter), und kurze Zitate bekommen Lesezeit — aber
+     nur nach hinten und nie ueber den Beginn des naechsten Zitats.
+     Mit `lead_in_fade = false` gilt wieder das alte Verhalten.
+- Sechs Visualizer neu gebaut statt nachgebessert: `pulsing_core`
+  (Neon-Tunnel), `particle_swarm` (Galaxie/Vortex), `speech_focus`
+  (Stimm-Linie, im Musik-Modus ein Spektrum-Band), `typographic`
+  (Metropolis-Skyline), `liquid_blobs` (Plasma-Metaballs),
+  `orchestral_swell` (Swell-Vorhaenge).
+- Zitat-Extraktion laeuft mit `temperature = 0` — zwei Klicks auf dieselbe
+  Datei liefern jetzt dasselbe Ergebnis.
+- `CACHE_VERSION` auf 9 erhoeht: die Korrektur an Modus und Tempo aendert
+  gecachte Features, alle bestehenden Caches werden neu berechnet.
+
+### Docs
+- `docs/internal/zitat-timing.md`: wie die Zeitstempel gemessen wurden
+  (Fenster ausschneiden und separat transkribieren) und was dabei
+  herauskam.
+- `docs/internal/ki-optimierung.md`: die drei Fehler im Detail.
+- `docs/internal/mode-detection.md`: Messwerte und Kalibrierung.
+- `docs/internal/visual-redesign-phase2.md`: Design-Prinzipien und alle
+  beim Bauen gefundenen Fehler.
+
 ## [3.1.0] — 2026-07-12
 
 Windows-Distribution (Phase 7 des Ausbauplans v3.0): PyInstaller-Build +
