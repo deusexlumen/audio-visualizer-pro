@@ -129,6 +129,13 @@ def _check_ffmpeg(parent) -> None:
 
 def run_app(argv=None):
     setup_logging()
+    # Eine Startzeile ins Log: bei Support-Fragen ist als Erstes wichtig,
+    # welche Version lief und ob es der installierte Build war.
+    from src.gui import __version__
+    logger.info(
+        f"[App] Audio Visualizer Pro {__version__} gestartet "
+        f"({'installiert' if getattr(sys, 'frozen', False) else 'aus dem Quellcode'})"
+    )
     _install_exception_handlers()
     app = QApplication(argv or sys.argv)
     app.setStyle("Fusion")
