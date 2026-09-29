@@ -32,6 +32,8 @@
 5. **Zoom-Phase** (Ebenen, float64) wird **einmal vor der Frame-Schleife** aus `rms` und `beat_intensity` berechnet: pro Frame `(|speed| + energy·rms)/fps + beat·beat_intensity/Beat-Fläche`, aufsummiert, Richtung = Vorzeichen von `speed`. Jeder Beat bringt genau `beat` Ebenen, unabhängig von der Framerate. Die Phase hängt nur von früheren Frames ab → Vorschau bei Zeit t = Export-Frame bei t.
 6. **Periodizität:** Die Abbildung ist in der Phase u exakt periodisch mit Periode 1 (eine Ebene). Der Shader bekommt `u mod 1` (auf der CPU in float64 gefaltet) — keine Präzisionsprobleme bei stundenlangen Songs.
 7. **Nur ganzzahlige Arme** schließen nahtlos (Fraktal-Zoom-Erkenntnis). Schema (`int`), Einstellungen (runden + klemmen) und GUI-Regler (ganzzahliger Slider) erzwingen das.
+8. **Der Kern wird ersetzt:** Alles innerhalb von `R_out / K` (beim Standard K = 2,5 ein Kreis mit 20 % der kurzen Bildseite als Radius) zeigt die nächste, kleinere Ebene statt des Originals — viele Visualizer haben dort ihren leuchtenden Mittelpunkt. Höherer Zoom-Faktor = kleinerer ersetzter Kern; „Stärke“ unter 100 % lässt das Original durchscheinen. So gewollt (das *ist* der Droste-Effekt), in der GUI-Tooltip erwähnt. Bei einem Hintergrundfoto passt der Ringrand nicht zu sich selbst; die Überblendung (`spiral_feather`) zeigt sich dann als weicher runder Übergang zwischen den Ebenen — erwartet, im Probebild bei der Planung sichtbar.
+9. **Studio-Modus schaltet den Spiral-Zoom ab** (mit Warnung im Sidecar): Der Studio-Pfad misst Sichtbarkeit von Hintergrund und Motiv Pixel für Pixel (`src/studio/probe.py` hat eine eigene Render-Schleife); ein verbogenes Motiv machte diese Messungen ungültig.
 
 ## Global Constraints
 
@@ -50,7 +52,7 @@
 2. **Hochformat 9:16 und 4K:** Dasselbe Bild in jeder Auflösung, keine Abtastung außerhalb des Bildes. → Task 1 (`test_same_picture_at_every_resolution`, `test_samples_stay_inside_the_frame`).
 3. **Einstündiger Song:** Phase wird groß (Tausende Ebenen); der Shader darf nur `u mod 1` sehen. → Task 1 (`test_period_is_one_level`) und Task 2 (`test_long_song_u_stays_in_unit_interval`).
 4. **Hintergrundfoto vorhanden:** Effekt läuft mit Foto, Foto dreht mit, nichts wird schwarz. → Task 5 (`test_real_preview_off_is_bitidentical_on_differs[True]`).
-5. **Alte Configs / alte `.avproj` ohne Spiral-Schlüssel:** Effekt bleibt aus, Bild bitgleich. → Task 4 (`test_old_config_without_spiral_keys_stays_off`), Task 5 (`test_batch_render_without_spiral_never_calls_pass`, `test_real_preview_off_is_bitidentical_on_differs`), Task 6 (`test_old_project_without_spiral_keys_keeps_effect_off`).
+5. **Alte Configs / alte `.avproj` ohne Spiral-Schlüssel:** Effekt bleibt aus, Bild bitgleich. → Task 4 (`test_old_config_without_spiral_keys_stays_off`), Task 5 (`test_batch_render_without_spiral_never_calls_pass`, `test_real_preview_off_is_bitidentical_on_differs`), Task 7 (`test_old_project_without_spiral_keys_keeps_effect_off`).
 
 ---
 
@@ -65,6 +67,8 @@
 | `config/music_spiral_zoom.json` (neu) | Beispiel-Preset zum Ausprobieren |
 | `src/gpu_renderer.py` (ändern) | `_apply_spiral`, Phase vor der Schleife, Aufruf vor Bloom, `release()` |
 | `src/gpu_preview.py` (ändern) | derselbe Aufruf in der Live-Vorschau |
+| `src/studio/engine.py` (ändern) | Studio-Modus schaltet den Effekt ab (Messungen brauchen unverbogenes Bild) |
+| `tests/test_studio_spiral.py` (neu) | Studio-Abschaltung |
 | `src/gui/state.py` (ändern) | `SPIRAL_STATE_KEYS`, Felder, `get_postprocess`, `to_dict` |
 | `src/gui/main_window.py` (ändern) | Spiral-Schlüssel lösen Vorschau und „*“-Marker aus |
 | `src/gui/params_panel.py` (ändern) | Gruppe „Spiral-Zoom“ mit Checkbox + 7 Reglern |
@@ -1052,7 +1056,7 @@ git commit -m "feat(spiral): Schema-Felder und Beispiel-Preset music_spiral_zoom
 
 **Interfaces:**
 - Consumes: `SpiralZoomPass` (Task 3), `SpiralSettings`, `compute_spiral_phase`, `phase_at_time` (Task 1/2).
-- Produces: `GPUBatchRenderer._apply_spiral(settings: SpiralSettings, u: float) -> None` (legt den Pass beim ersten aktiven Aufruf an; verbiegt `self.fbo`). Wird genau an zwei Stellen aufgerufen — Export-Schleife und Vorschau —, jeweils direkt vor dem Bloom. Timeline- und Studio-Pfad laufen durch dieselbe Stelle und bekommen den Effekt automatisch.
+- Produces: `GPUBatchRenderer._apply_spiral(settings: SpiralSettings, u: float) -> None` (legt den Pass beim ersten aktiven Aufruf an; verbiegt `self.fbo`). Wird an zwei Stellen aufgerufen — Export-Schleife und Vorschau —, jeweils direkt vor dem Bloom. Der Timeline-Pfad läuft durch dieselbe Stelle und bekommt den Effekt automatisch. Die dritte Render-Schleife (`src/studio/probe.py`) bekommt ihn bewusst **nicht**; Task 6 schaltet ihn im Studio ab.
 
 - [ ] **Step 1: Failing Tests schreiben**
 
@@ -1302,7 +1306,126 @@ git commit -m "feat(spiral): Spiral-Zoom in Export und Live-Vorschau einhaengen"
 
 ---
 
-### Task 6: GUI-Zustand und Hauptfenster
+### Task 6: Studio-Modus schaltet den Spiral-Zoom ab
+
+**Files:**
+- Modify: `src/studio/engine.py` (neue Funktion vor `def run_studio` ~Z. 155; Aufruf nach `mask_warnings: list[str] = []` ~Z. 173)
+- Test: `tests/test_studio_spiral.py`
+
+**Interfaces:**
+- Consumes: nichts aus früheren Tasks außer dem Schlüssel `spiral_enabled`.
+- Produces: `src.studio.engine.disable_spiral_for_studio(postprocess: dict | None) -> tuple[dict, list[str]]` (Kopie mit `spiral_enabled = False` + Warnungen fürs Sidecar).
+
+Warum: `run_studio` misst mit `ProbeRenderer` (eigene Render-Schleife ohne Spiral-Pass) und rendert danach über `GPUBatchRenderer.render()` (mit Spiral-Pass). Ohne Abschalten würden Messung und Ergebnis auseinanderlaufen, und die Subjekt-Maske passte nicht mehr zum verbogenen Foto.
+
+- [ ] **Step 1: Failing Tests schreiben**
+
+`tests/test_studio_spiral.py`:
+
+```python
+"""Studio-Modus: Spiral-Zoom wird abgeschaltet (Messungen setzen ein unverbogenes Bild voraus)."""
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from src.studio.engine import disable_spiral_for_studio, run_studio
+
+
+def test_helper_switches_spiral_off_with_warning():
+    pp, warnings = disable_spiral_for_studio({"spiral_enabled": True, "bloom_intensity": 0.5})
+    assert pp["spiral_enabled"] is False
+    assert pp["bloom_intensity"] == 0.5
+    assert len(warnings) == 1
+    assert "Spiral-Zoom" in warnings[0]
+
+
+def test_helper_leaves_other_configs_alone():
+    original = {"contrast": 1.2}
+    pp, warnings = disable_spiral_for_studio(original)
+    assert pp == original
+    assert pp is not original  # Kopie, Aufrufer-Dict bleibt unberuehrt
+    assert warnings == []
+    assert disable_spiral_for_studio(None) == ({}, [])
+
+
+class _Stop(Exception):
+    pass
+
+
+def test_run_studio_measures_without_spiral():
+    """Schon der Probe-Solve bekommt spiral_enabled = False."""
+    seen = {}
+
+    def fake_solve(probe, viz_factory, features_dict, plan, postprocess, *args, **kwargs):
+        seen.update(postprocess)
+        raise _Stop
+
+    with patch("src.studio.engine.check_feasibility", return_value=MagicMock(should_render=True)), \
+         patch("src.studio.engine.build_sample_plan", return_value=MagicMock()), \
+         patch("src.studio.engine.solve_constraints", side_effect=fake_solve), \
+         patch("src.studio.probe.ProbeRenderer"):
+        with pytest.raises(_Stop):
+            run_studio(
+                audio_path="song.mp3", visualizer="lumina_core", features=None,
+                features_dict={}, output_path="out.mp4",
+                postprocess={"spiral_enabled": True, "spiral_arms": 1},
+            )
+    assert seen["spiral_enabled"] is False
+```
+
+- [ ] **Step 2: Tests laufen lassen, Fehlschlag prüfen**
+
+Run: `pytest tests/test_studio_spiral.py -v`
+Expected: FAIL mit `ImportError: cannot import name 'disable_spiral_for_studio'`
+
+- [ ] **Step 3: Funktion und Aufruf in `src/studio/engine.py`**
+
+Direkt vor `def run_studio(`:
+
+```python
+def disable_spiral_for_studio(postprocess: dict | None) -> tuple[dict, list[str]]:
+    """Schaltet den Spiral-Zoom fuer den Studio-Modus ab.
+
+    Der Spiral-Zoom verbiegt Hintergrund und Motiv. Die Studio-Messungen
+    (Sichtbarkeit, Subjekt-Maske) setzen ein unverbogenes Bild voraus, und
+    der ProbeRenderer hat keinen Spiral-Pass — Messung und Commit-Render
+    liefen sonst auseinander. Gibt eine Kopie und ggf. eine Warnung zurueck.
+    """
+    pp = dict(postprocess or {})
+    if not pp.get("spiral_enabled"):
+        return pp, []
+    pp["spiral_enabled"] = False
+    return pp, [
+        "Spiral-Zoom im Studio-Modus deaktiviert: er verbiegt Hintergrund "
+        "und Motiv, die Messungen waeren ungueltig."
+    ]
+```
+
+In `run_studio` direkt nach `mask_warnings: list[str] = []`:
+
+```python
+    postprocess, spiral_warnings = disable_spiral_for_studio(postprocess)
+    mask_warnings.extend(spiral_warnings)
+```
+
+(`mask_warnings` landet bereits im Sidecar unter `"warnings"`.)
+
+- [ ] **Step 4: Tests laufen lassen**
+
+Run: `pytest tests/test_studio_spiral.py tests/test_studio_engine.py tests/test_studio_integration.py -v`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/studio/engine.py tests/test_studio_spiral.py
+git commit -m "feat(studio): Spiral-Zoom im Studio-Modus abschalten (Messungen unverbogen)"
+```
+
+---
+
+### Task 7: GUI-Zustand und Hauptfenster
 
 **Files:**
 - Modify: `src/gui/state.py` (Modulkopf, `_STATE_KEYS` Z. 11-26, `__init__` Z. 56-65, `get_postprocess` Z. 115-127, `to_dict` Z. 145-175)
@@ -1474,14 +1597,14 @@ git commit -m "feat(gui): Spiral-Zoom im App-Zustand, Projektdatei und Vorschau-
 
 ---
 
-### Task 7: GUI-Regler „Spiral-Zoom“
+### Task 8: GUI-Regler „Spiral-Zoom“
 
 **Files:**
 - Modify: `src/gui/params_panel.py` (nach `layout.addWidget(pp_box)` ~Z. 168; `_on_state_changed` vor `elif key == "resolution":` ~Z. 403; neue Hilfsmethoden)
 - Test: `tests/test_gui_params_panel.py` (Tests anhängen)
 
 **Interfaces:**
-- Consumes: `AppState.pp_spiral_*`, `SPIRAL_STATE_KEYS` (Task 6); `self._make_labeled_slider`, `self._set`, `self._updating` (Bestand).
+- Consumes: `AppState.pp_spiral_*`, `SPIRAL_STATE_KEYS` (Task 7); `self._make_labeled_slider`, `self._set`, `self._updating` (Bestand).
 - Produces: `ParamsPanel.chk_spiral: QCheckBox`, `ParamsPanel.spiral_sliders: dict[str, tuple[QSlider, QLabel, int, str]]` (State-Schlüssel → Slider, Label, Faktor, Format).
 
 - [ ] **Step 1: Failing Tests anhängen**
@@ -1552,7 +1675,8 @@ In `src/gui/params_panel.py` direkt nach `layout.addWidget(pp_box)`:
             ("pp_spiral_arms", "Spiralarme", -3, 3, 1, "{:+d}",
              "0 = gerader Zoom, sonst Anzahl der Spiralarme (Vorzeichen = Drehsinn)."),
             ("pp_spiral_ratio", "Zoom-Faktor", 150, 600, 100, "{:.2f}x",
-             "Wie viel kleiner jede Ebene gegenueber der vorigen ist."),
+             "Wie viel kleiner jede Ebene gegenueber der vorigen ist. Hoeher = "
+             "kleinerer Kreis in der Bildmitte, der durch die naechste Ebene ersetzt wird."),
             ("pp_spiral_rotation", "Drehung", -90, 90, 1, "{:+d}°",
              "Drehung pro Ebene."),
             ("pp_spiral_speed", "Tempo", -200, 200, 100, "{:+.2f}",
@@ -1634,14 +1758,14 @@ git commit -m "feat(gui): Regler-Gruppe Spiral-Zoom im Parameter-Panel"
 
 ---
 
-### Task 8: Doku, Gesamtlauf und Sichtprüfung
+### Task 9: Doku, Gesamtlauf und Sichtprüfung
 
 **Files:**
 - Modify: `CHANGELOG.md` (neuer Abschnitt oberhalb `## [3.2.0]`)
 - Modify: `README.md:25` (Feature-Zeile HDR-Pipeline) und Z. 207 (Preset-Liste)
 
 **Interfaces:**
-- Consumes: alles aus Task 1–7.
+- Consumes: alles aus Task 1–8.
 - Produces: Doku; keine Code-Schnittstellen.
 
 - [ ] **Step 1: CHANGELOG ergänzen**
