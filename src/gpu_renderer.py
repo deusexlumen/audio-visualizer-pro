@@ -20,6 +20,8 @@ from .analyzer import AudioAnalyzer
 from .app_logging import get_logger
 from .ffmpeg_locator import get_ffmpeg_path, get_ffprobe_path
 from .gpu_bloom import BloomPass, load_cube_lut
+from .gpu_spiral import SpiralZoomPass
+from .spiral_zoom import SpiralSettings, compute_spiral_phase, phase_at_time
 from .render_common import build_features_dict
 from .types import AudioFeatures, Quote
 from .gpu_visualizers import get_visualizer
@@ -125,6 +127,11 @@ class GPUBatchRenderer:
         except Exception as e:
             logger.warning(f"[GPU] Bloom nicht verfuegbar: {e}")
             self._bloom = None
+
+        # Spiral-Zoom-Pass (Droste/Escher): erst beim ersten aktiven Frame
+        # angelegt — ist der Effekt aus, belegt er keinerlei GPU-Speicher.
+        # False = Anlegen ist fehlgeschlagen, nicht jeden Frame neu versuchen.
+        self._spiral = None
 
         # LUT-Zustand (3D-Textur wird bei Bedarf geladen und gecached).
         # Platzhalter-LUT, damit der sampler3D immer gueltig gebunden ist.
@@ -301,6 +308,15 @@ class GPUBatchRenderer:
         # Feature-Dictionary fuer den Visualizer vorbereiten
         # (gemeinsame Logik mit dem Preview-Renderer in render_common.py)
         features_dict = build_features_dict(features, frame_count, self.fps)
+
+        # Spiral-Zoom: Phase einmal vorab aus den Features (zustandslos,
+        # Vorschau bei Zeit t == Export-Frame bei t)
+        spiral = SpiralSettings.from_postprocess(postprocess)
+        spiral_phase = None
+        if spiral.is_active:
+            spiral_phase = compute_spiral_phase(
+                features_dict["rms"], features_dict["beat_intensity"], self.fps, spiral
+            )
 
         # Temporaere Videodatei fuer den Video-Stream (ohne Audio)
         temp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
@@ -506,6 +522,15 @@ class GPUBatchRenderer:
                         self._active_occlusion_alpha = _declares_occlusion_alpha(viz)
                     if _DEBUG and i == 0:
                         self._save_debug(self.viz_fbo, "debug_step3_after_viz.png")
+
+                    # Spiral-Zoom verbiegt nur die Visualizer-Ebene (vor dem
+                    # Blit) — ein Hintergrundbild bleibt ruhig stehen
+                    if spiral_phase is not None:
+                        self._apply_spiral(
+                            spiral,
+                            phase_at_time(spiral_phase, time, self.fps),
+                            self._viz_fbo_holding(active_viz_tex),
+                        )
 
                     self.fbo.use()
                     blit_kwargs = {}
@@ -1202,6 +1227,29 @@ class GPUBatchRenderer:
         )
         self._pp_vao, self._pp_vbo = create_textured_quad(self.ctx, self._pp_prog)
 
+    def _viz_fbo_holding(self, tex):
+        """FBO, deren Farbtextur tex ist (viz_fbo oder Timeline-Ueberblendung)."""
+        blend = getattr(self, "viz_fbo_blend", None)
+        if blend is not None and tex is blend.color_attachments[0]:
+            return blend
+        return self.viz_fbo
+
+    def _apply_spiral(self, settings: SpiralSettings, u: float, target_fbo):
+        """Verbiegt target_fbo (Visualizer-Ebene) per Spiral-Zoom.
+
+        Legt den Pass beim ersten aktiven Aufruf an.
+        """
+        if not settings.is_active:
+            return
+        if self._spiral is None:
+            try:
+                self._spiral = SpiralZoomPass(self.ctx, self.width, self.height)
+            except Exception as e:
+                logger.warning(f"[GPU] Spiral-Zoom nicht verfuegbar: {e}")
+                self._spiral = False
+        if self._spiral:
+            self._spiral.apply(target_fbo, settings, u)
+
     def _apply_bloom(self, intensity=0.6, threshold=1.0, radius=1.0):
         """Berechnet HDR-Bloom aus der Szene und addiert ihn auf self.fbo."""
         if self._bloom is None:
@@ -1662,6 +1710,9 @@ class GPUBatchRenderer:
             if hasattr(self, "_bloom") and self._bloom:
                 self._bloom.release()
                 self._bloom = None
+            if getattr(self, "_spiral", None):
+                self._spiral.release()
+            self._spiral = None
             for lut_attr in ("_lut_texture", "_lut_placeholder"):
                 obj = getattr(self, lut_attr, None)
                 if obj:
