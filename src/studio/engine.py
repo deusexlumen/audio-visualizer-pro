@@ -152,6 +152,23 @@ def verify_commit(probe_target, viz_factory, features_dict, timestamps,
     return metrics
 
 
+def disable_spiral_for_studio(postprocess: dict | None) -> tuple[dict, list[str]]:
+    """Schaltet den Spiral-Zoom fuer den Studio-Modus ab.
+
+    Die Studio-Messungen (Beitrag des Visualizers, Abstand zum Motiv) laufen
+    im ProbeRenderer, der keinen Spiral-Pass hat — Messung und Commit-Render
+    liefen sonst auseinander. Gibt eine Kopie und ggf. eine Warnung zurueck.
+    """
+    pp = dict(postprocess or {})
+    if not pp.get("spiral_enabled"):
+        return pp, []
+    pp["spiral_enabled"] = False
+    return pp, [
+        "Spiral-Zoom im Studio-Modus deaktiviert: die Studio-Messungen "
+        "laufen ohne Spiral-Pass und passten sonst nicht zum Ergebnis."
+    ]
+
+
 def run_studio(audio_path, visualizer, features, features_dict, output_path,
                params=None, postprocess=None, constraints=None,
                thresholds=None, mode="music", background_image=None,
@@ -171,6 +188,8 @@ def run_studio(audio_path, visualizer, features, features_dict, output_path,
     postprocess = dict(postprocess or {})
 
     mask_warnings: list[str] = []
+    postprocess, spiral_warnings = disable_spiral_for_studio(postprocess)
+    mask_warnings.extend(spiral_warnings)
     if background_image and is_video_background(background_image):
         # C17: Degradation statt Abbruch — M3 aus, Rest aktiv (Spec §14)
         subject_mask = None
