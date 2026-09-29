@@ -167,6 +167,58 @@ class ParamsPanel(QWidget):
             pp_layout.addWidget(pp_label, pp_row, 2)
         layout.addWidget(pp_box)
 
+        # Spiral-Zoom (Droste/Escher) — verbiegt die Visualizer-Ebene
+        spiral_box = QGroupBox("Spiral-Zoom")
+        spiral_layout = QGridLayout(spiral_box)
+        self.chk_spiral = QCheckBox("Endloser Zoom ins Bild")
+        self.chk_spiral.setChecked(bool(self.state.pp_spiral_enabled))
+        self.chk_spiral.setToolTip(
+            "Stapelt den Visualizer endlos in sich selbst und zoomt im Takt hinein. "
+            "Ein Hintergrundbild bleibt ruhig stehen."
+        )
+        self.chk_spiral.toggled.connect(self._on_spiral_toggled)
+        spiral_layout.addWidget(self.chk_spiral, 0, 0, 1, 3)
+
+        # (State-Schluessel, Anzeigename, Min, Max, Faktor Slider->Wert, Format, Tooltip)
+        spiral_rows = [
+            ("pp_spiral_arms", "Spiralarme", -3, 3, 1, "{:+d}",
+             "0 = gerader Zoom, sonst Anzahl der Spiralarme (Vorzeichen = Drehsinn)."),
+            ("pp_spiral_ratio", "Zoom-Faktor", 150, 600, 100, "{:.2f}x",
+             "Wie viel kleiner jede Ebene gegenueber der vorigen ist. Hoeher = "
+             "kleinerer Kreis in der Bildmitte, der durch die naechste Ebene ersetzt wird."),
+            ("pp_spiral_rotation", "Drehung", -90, 90, 1, "{:+d}°",
+             "Drehung pro Ebene."),
+            ("pp_spiral_speed", "Tempo", -200, 200, 100, "{:+.2f}",
+             "Ebenen pro Sekunde; negativ = heraus zoomen."),
+            ("pp_spiral_energy", "Energie-Schub", 0, 200, 100, "{:.2f}",
+             "Laute Stellen zoomen schneller."),
+            ("pp_spiral_beat", "Beat-Schub", 0, 100, 100, "{:.2f}",
+             "Jeder Beat schiebt den Zoom um diesen Teil einer Ebene weiter."),
+            ("pp_spiral_mix", "Staerke", 0, 100, 100, "{:.0%}",
+             "Mischung mit dem unveraenderten Bild."),
+        ]
+        self.spiral_sliders = {}
+        for row, (key, name, lo, hi, factor, fmt, tip) in enumerate(spiral_rows, start=1):
+            slider, label = self._make_labeled_slider(
+                lo, hi, int(round(getattr(self.state, key) * factor))
+            )
+            slider.setToolTip(tip)
+            self.spiral_sliders[key] = (slider, label, factor, fmt)
+            slider.valueChanged.connect(
+                lambda v, k=key, f=factor: self._set(k, self._spiral_value(v, f))
+            )
+            slider.valueChanged.connect(
+                lambda v, lbl=label, f=factor, fm=fmt: lbl.setText(
+                    fm.format(self._spiral_value(v, f))
+                )
+            )
+            label.setText(fmt.format(self._spiral_value(slider.value(), factor)))
+            spiral_layout.addWidget(QLabel(name), row, 0)
+            spiral_layout.addWidget(slider, row, 1)
+            spiral_layout.addWidget(label, row, 2)
+        self._update_spiral_enabled_ui()
+        layout.addWidget(spiral_box)
+
         # Intro-Einstellungen
         intro_box = QGroupBox("Intro")
         intro_layout = QGridLayout(intro_box)
@@ -400,6 +452,12 @@ class ParamsPanel(QWidget):
                 self.slider_vignette_pp.setValue(int(self.state.pp_vignette * 100))
             elif key == "pp_chromatic":
                 self.slider_chromatic.setValue(int(self.state.pp_chromatic * 100))
+            elif key == "pp_spiral_enabled":
+                self.chk_spiral.setChecked(bool(self.state.pp_spiral_enabled))
+                self._update_spiral_enabled_ui()
+            elif key in self.spiral_sliders:
+                slider, _, factor, _ = self.spiral_sliders[key]
+                slider.setValue(int(round(getattr(self.state, key) * factor)))
             elif key == "resolution":
                 self.combo_resolution.setCurrentText(
                     f"{self.state.resolution[0]}x{self.state.resolution[1]}"
@@ -554,6 +612,22 @@ class ParamsPanel(QWidget):
             "high": "High",
             "lossless": "Lossless",
         }.get(quality, "High")
+
+    @staticmethod
+    def _spiral_value(slider_value: int, factor: int):
+        """Slider-Wert -> State-Wert (Faktor 1 bleibt ganzzahlig, z.B. Spiralarme)."""
+        return int(slider_value) if factor == 1 else slider_value / factor
+
+    def _on_spiral_toggled(self, checked: bool):
+        self._update_spiral_enabled_ui()
+        self._set("pp_spiral_enabled", bool(checked))
+
+    def _update_spiral_enabled_ui(self):
+        """Regler nur aktiv, wenn der Effekt eingeschaltet ist."""
+        on = self.chk_spiral.isChecked()
+        for slider, label, _, _ in self.spiral_sliders.values():
+            slider.setEnabled(on)
+            label.setEnabled(on)
 
     def _set(self, key: str, value):
         if self._updating:
