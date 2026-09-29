@@ -91,3 +91,18 @@ def test_spiral_keys_emit_changed(qtbot):
     s.changed.connect(received.append)
     s.pp_spiral_ratio = 4.0
     assert "pp_spiral_ratio" in received
+
+
+def test_apply_old_project_switches_running_spiral_off():
+    """GUI-Ladepfad (apply_dict): ein altes Projekt ohne Spiral-Schluessel
+    setzt einen in der Sitzung eingeschalteten Spiral-Zoom zurueck."""
+    old = AppState().to_dict()
+    for key in SPIRAL_STATE_KEYS:
+        old.pop(key)
+    s = AppState()
+    s.pp_spiral_enabled = True
+    s.pp_spiral_ratio = 4.0
+    s.apply_dict(old)
+    assert s.pp_spiral_enabled is False
+    assert s.pp_spiral_ratio == SpiralSettings().ratio
+    assert not SpiralSettings.from_postprocess(s.get_postprocess()).is_active

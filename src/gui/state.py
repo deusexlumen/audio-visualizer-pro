@@ -249,6 +249,14 @@ class AppState(QObject):
             elif key in self._STATE_KEYS:
                 setattr(self, key, value)
 
+        # Projekte von vor dem Spiral-Zoom enthalten dessen Schluessel nicht:
+        # fehlende auf die Standardwerte (aus) setzen, statt die Werte der
+        # laufenden Sitzung zu behalten.
+        spiral_defaults = SpiralSettings()
+        for key in SPIRAL_STATE_KEYS:
+            if key not in data:
+                setattr(self, key, getattr(spiral_defaults, key[len("pp_spiral_"):]))
+
     @classmethod
     def from_dict(cls, data: dict):
         s = cls()
