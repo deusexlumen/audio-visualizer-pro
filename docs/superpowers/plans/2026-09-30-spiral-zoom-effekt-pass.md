@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ein neuer, abschaltbarer Nachbearbeitungs-Effekt „Spiral-Zoom“ verbiegt das **fertige Bild — Hintergrund(foto) plus Visualizer —** zu einem endlosen Zoom ins Bild hinein (Droste) bzw. zu einer Escher-Spirale; das Zoom-Tempo folgt Lautstärke und Beats.
+**Goal:** Ein neuer, abschaltbarer Effekt „Spiral-Zoom“ verbiegt die **Visualizer-Ebene** zu einem endlosen Zoom ins Bild hinein (Droste) bzw. zu einer Escher-Spirale; ein Hintergrundfoto bleibt ruhig stehen. Das Zoom-Tempo folgt Lautstärke und Beats.
 
-**Architecture:** Reine Mathematik (Einstellungen, Shader-Uniforms, CPU-Gegenstück des Shaders, Zoom-Phase aus Audio) in `src/spiral_zoom.py`, portiert aus dem Schwesterprojekt Fraktal-Zoom (`src/zoom-math/escher.ts`). Ein eigener GPU-Pass `src/gpu_spiral.py` (Aufbau wie `gpu_bloom.py`) kopiert die HDR-Szene in eine Mipmap-Textur und zeichnet sie verbogen zurück. Renderer und Vorschau rufen ihn an genau einer Stelle auf: nach dem Visualizer-Blit, vor dem Bloom. Konfiguration läuft über das bestehende `postprocess`-Dict (`spiral_*`-Schlüssel).
+**Architecture:** Reine Mathematik (Einstellungen, Shader-Uniforms, CPU-Gegenstück des Shaders, Zoom-Phase aus Audio) in `src/spiral_zoom.py`, portiert aus dem Schwesterprojekt Fraktal-Zoom (`src/zoom-math/escher.ts`). Ein eigener GPU-Pass `src/gpu_spiral.py` (Aufbau wie `gpu_bloom.py`) kopiert eine HDR-Ebene in eine Mipmap-Textur und zeichnet sie verbogen zurück (inklusive Alpha). Renderer und Vorschau wenden ihn auf die Visualizer-FBO an — nach dem Visualizer-Render, **vor** dem Blit über den Hintergrund. Konfiguration läuft über das bestehende `postprocess`-Dict (`spiral_*`-Schlüssel).
 
 **Tech Stack:** Python 3.11, ModernGL (GLSL `#version 330`), NumPy, Pydantic v2, PyQt6, pytest (+ `pytest-qt`).
 
@@ -12,7 +12,7 @@
 
 ## Entscheidungen
 
-1. **Ebene:** Der Pass verbiegt die ganze Szene (Hintergrund + Visualizer), nicht nur den Visualizer. Ein Hintergrundfoto dreht also mit. Zitat-Overlays liegen danach (CPU, `_emit_frame`) und bleiben gerade. *(Offene Rückfrage an den Nutzer, siehe Übergabe. Die Alternative „nur Visualizer“ wäre derselbe Pass, aufgerufen auf `active_viz_tex` vor dem Blit.)*
+1. **Ebene (Nutzer-Entscheidung 2026-09-29): nur der Visualizer.** Das Hintergrundfoto dreht **nicht** mit. Der Pass arbeitet in place auf der FBO, die `active_viz_tex` hält (`viz_fbo`, bei Timeline-Überblendung `viz_fbo_blend`), direkt vor `_blit_viz_to_fbo`. Alpha wird mit verbogen, damit Luma-/Occlusion-Alpha im Blit weiter stimmt. Offset/Skalierung des Visualizers wirken danach im Blit (die Spirale sitzt in der Mitte des Visualizers). Zitat-Overlays liegen danach (CPU) und bleiben gerade.
 2. **Standard aus.** Ist der Effekt aus, wird nichts kopiert, nichts gezeichnet, nichts angelegt — die Ausgabe ist bitgleich zu heute (Golden-Set bleibt unberührt).
 3. **Geometrie** relativ zu `min(Breite, Höhe)`, Zentrum = Bildmitte, Außenradius `R_out = 0.5 · min(B, H)`, Innenradius `R = R_out / K`. Alle Abtastpunkte liegen im Inkreis — der Pass liest nie außerhalb des Bildes. Die Ecken entstehen aus der Rekursion.
 4. **Parameter** (Schlüssel im `postprocess`-Dict, Bereich, Standard):
@@ -32,8 +32,8 @@
 5. **Zoom-Phase** (Ebenen, float64) wird **einmal vor der Frame-Schleife** aus `rms` und `beat_intensity` berechnet: pro Frame `(|speed| + energy·rms)/fps + beat·beat_intensity/Beat-Fläche`, aufsummiert, Richtung = Vorzeichen von `speed`. Jeder Beat bringt genau `beat` Ebenen, unabhängig von der Framerate. Die Phase hängt nur von früheren Frames ab → Vorschau bei Zeit t = Export-Frame bei t.
 6. **Periodizität:** Die Abbildung ist in der Phase u exakt periodisch mit Periode 1 (eine Ebene). Der Shader bekommt `u mod 1` (auf der CPU in float64 gefaltet) — keine Präzisionsprobleme bei stundenlangen Songs.
 7. **Nur ganzzahlige Arme** schließen nahtlos (Fraktal-Zoom-Erkenntnis). Schema (`int`), Einstellungen (runden + klemmen) und GUI-Regler (ganzzahliger Slider) erzwingen das.
-8. **Der Kern wird ersetzt:** Alles innerhalb von `R_out / K` (beim Standard K = 2,5 ein Kreis mit 20 % der kurzen Bildseite als Radius) zeigt die nächste, kleinere Ebene statt des Originals — viele Visualizer haben dort ihren leuchtenden Mittelpunkt. Höherer Zoom-Faktor = kleinerer ersetzter Kern; „Stärke“ unter 100 % lässt das Original durchscheinen. So gewollt (das *ist* der Droste-Effekt), in der GUI-Tooltip erwähnt. Bei einem Hintergrundfoto passt der Ringrand nicht zu sich selbst; die Überblendung (`spiral_feather`) zeigt sich dann als weicher runder Übergang zwischen den Ebenen — erwartet, im Probebild bei der Planung sichtbar.
-9. **Studio-Modus schaltet den Spiral-Zoom ab** (mit Warnung im Sidecar): Der Studio-Pfad misst Sichtbarkeit von Hintergrund und Motiv Pixel für Pixel (`src/studio/probe.py` hat eine eigene Render-Schleife); ein verbogenes Motiv machte diese Messungen ungültig.
+8. **Der Kern wird ersetzt:** Alles innerhalb von `R_out / K` (beim Standard K = 2,5 ein Kreis mit 20 % der kurzen Bildseite als Radius) zeigt die nächste, kleinere Ebene statt des Originals — viele Visualizer haben dort ihren leuchtenden Mittelpunkt. Höherer Zoom-Faktor = kleinerer ersetzter Kern; „Stärke“ unter 100 % lässt das Original durchscheinen. So gewollt (das *ist* der Droste-Effekt), in der GUI-Tooltip erwähnt.
+9. **Studio-Modus schaltet den Spiral-Zoom ab** (mit Warnung im Sidecar): Der Studio-Pfad misst den Beitrag des Visualizers Pixel für Pixel mit einer eigenen Render-Schleife ohne Spiral-Pass (`src/studio/probe.py`); Messung und Commit-Render liefen sonst auseinander.
 
 ## Global Constraints
 
@@ -51,7 +51,7 @@
 1. **Stille / Podcast ohne Beats:** Die Phase läuft nur mit dem Grund-Tempo weiter, bei `speed = 0` steht der Tunnel still — kein Crash, keine NaNs. → Tests in Task 2 (`test_silence_and_no_beats_gives_constant_speed`, `test_everything_zero_is_standstill`, `test_nan_and_length_mismatch`).
 2. **Hochformat 9:16 und 4K:** Dasselbe Bild in jeder Auflösung, keine Abtastung außerhalb des Bildes. → Task 1 (`test_same_picture_at_every_resolution`, `test_samples_stay_inside_the_frame`).
 3. **Einstündiger Song:** Phase wird groß (Tausende Ebenen); der Shader darf nur `u mod 1` sehen. → Task 1 (`test_period_is_one_level`) und Task 2 (`test_long_song_u_stays_in_unit_interval`).
-4. **Hintergrundfoto vorhanden:** Effekt läuft mit Foto, Foto dreht mit, nichts wird schwarz. → Task 5 (`test_real_preview_off_is_bitidentical_on_differs[True]`).
+4. **Hintergrundfoto vorhanden:** Effekt läuft mit Foto, das Foto bleibt unverändert, nichts wird schwarz. → Task 5 (`test_real_preview_off_is_bitidentical_on_differs[True]`, `test_real_preview_photo_stays_still`).
 5. **Alte Configs / alte `.avproj` ohne Spiral-Schlüssel:** Effekt bleibt aus, Bild bitgleich. → Task 4 (`test_old_config_without_spiral_keys_stays_off`), Task 5 (`test_batch_render_without_spiral_never_calls_pass`, `test_real_preview_off_is_bitidentical_on_differs`), Task 7 (`test_old_project_without_spiral_keys_keeps_effect_off`).
 
 ---
@@ -265,7 +265,7 @@ In `compute_beat_intensity` die Zeile `decay_frames = max(3, int(fps * 0.1))` er
 Spiral-Zoom (Droste/Escher) — reine Mathematik, ohne GPU.
 
 Portiert aus dem Schwesterprojekt Fraktal-Zoom (src/zoom-math/escher.ts).
-Der Effekt-Pass verbiegt das fertige Bild (Hintergrund + Visualizer) in
+Der Effekt-Pass verbiegt die Visualizer-Ebene (nicht den Hintergrund) in
 logarithmisch-polaren Koordinaten: ein Ring um die Bildmitte wird endlos
 ineinander gestapelt. Mit Spiralarmen != 0 wird daraus eine Escher-Spirale.
 
@@ -771,16 +771,18 @@ Expected: FAIL mit `ModuleNotFoundError: No module named 'src.gpu_spiral'` (ohne
 """
 Spiral-Zoom-Pass (Droste/Escher) fuer den GPU-Renderer.
 
-Verbiegt die fertige HDR-Szene (Hintergrund + Visualizer) in
+Verbiegt eine HDR-Ebene (im Renderer: die Visualizer-Ebene vor dem Blit
+ueber den Hintergrund) in
 logarithmisch-polaren Koordinaten. Mathematik und CPU-Gegenstueck stehen in
 src/spiral_zoom.py — dieser Shader muss spiral_map() exakt folgen
 (tests/test_gpu_spiral.py vergleicht beide).
 
 Ablauf pro Frame:
-1. Szene in eine eigene Textur kopieren (aus der Ziel-Textur kann man nicht
+1. Ebene in eine eigene Textur kopieren (aus der Ziel-Textur kann man nicht
    gleichzeitig lesen) und Mipmaps bauen — tiefe Ebenen werden stark
    verkleinert und wuerden ohne Mipmaps flimmern.
-2. Vollbild-Pass zurueck in die Szene, Blending aus (ueberschreiben).
+2. Vollbild-Pass zurueck in die Ebene, Blending aus (ueberschreiben).
+   Alpha wird mit verbogen (Luma-/Occlusion-Alpha im Blit bleibt gueltig).
 
 HDR bleibt erhalten: kein clamp, kein sRGB — Tonemapping macht zentral der
 Renderer.
@@ -841,10 +843,10 @@ void main() {
 
 
 class SpiralZoomPass:
-    """Droste/Escher-Verbiegung einer HDR-Szene (in place).
+    """Droste/Escher-Verbiegung einer HDR-Ebene (in place).
 
-    Der Aufrufer rendert die Szene in ein f16-FBO und ruft danach
-    apply(scene_fbo, settings, u) auf — vor Bloom und Tonemapping.
+    Der Aufrufer rendert die Ebene in ein f16-FBO und ruft danach
+    apply(fbo, settings, u) auf — im Renderer vor dem Visualizer-Blit.
     """
 
     def __init__(self, ctx: moderngl.Context, width: int, height: int):
@@ -1050,13 +1052,17 @@ git commit -m "feat(spiral): Schema-Felder und Beispiel-Preset music_spiral_zoom
 ### Task 5: Renderer und Live-Vorschau
 
 **Files:**
-- Modify: `src/gpu_renderer.py` (Imports ~Z. 19-28; `__init__` ~Z. 122-127; `render()` nach `features_dict` ~Z. 303 und in der Schleife nach `_blit_viz_to_fbo` ~Z. 540; neue Methode neben `_apply_bloom` ~Z. 1205; `release()` ~Z. 1662)
-- Modify: `src/gpu_preview.py` (Imports ~Z. 20; nach `_blit_viz_to_fbo` ~Z. 184)
+- Modify: `src/gpu_renderer.py` (Imports ~Z. 19-28; `__init__` ~Z. 122-127; `render()` nach `features_dict` ~Z. 303 und in der Schleife nach dem Visualizer-Render ~Z. 507-510; neue Methoden neben `_apply_bloom` ~Z. 1205; `release()` ~Z. 1662)
+- Modify: `src/gpu_preview.py` (Imports ~Z. 20; nach dem Visualizer-Render, vor dem Blit ~Z. 164)
 - Test: `tests/test_spiral_render_integration.py`
 
 **Interfaces:**
 - Consumes: `SpiralZoomPass` (Task 3), `SpiralSettings`, `compute_spiral_phase`, `phase_at_time` (Task 1/2).
-- Produces: `GPUBatchRenderer._apply_spiral(settings: SpiralSettings, u: float) -> None` (legt den Pass beim ersten aktiven Aufruf an; verbiegt `self.fbo`). Wird an zwei Stellen aufgerufen — Export-Schleife und Vorschau —, jeweils direkt vor dem Bloom. Der Timeline-Pfad läuft durch dieselbe Stelle und bekommt den Effekt automatisch. Die dritte Render-Schleife (`src/studio/probe.py`) bekommt ihn bewusst **nicht**; Task 6 schaltet ihn im Studio ab.
+- Produces:
+  - `GPUBatchRenderer._apply_spiral(settings: SpiralSettings, u: float, target_fbo) -> None` — legt den Pass beim ersten aktiven Aufruf an und verbiegt `target_fbo` in place.
+  - `GPUBatchRenderer._viz_fbo_holding(tex) -> Framebuffer` — die FBO, deren Farbtextur `tex` ist (`viz_fbo` oder bei Timeline-Überblendung `viz_fbo_blend`).
+
+Aufgerufen an zwei Stellen — Export-Schleife und Vorschau —, jeweils **nach dem Visualizer-Render und vor `_blit_viz_to_fbo`**. So wird nur die Visualizer-Ebene verbogen; das Hintergrundbild bleibt ruhig (Entscheidung 1). Der Timeline-Pfad liefert `active_viz_tex` aus `viz_fbo` oder `viz_fbo_blend` und bekommt den Effekt über `_viz_fbo_holding` automatisch. Die dritte Render-Schleife (`src/studio/probe.py`) bekommt ihn bewusst **nicht**; Task 6 schaltet ihn im Studio ab.
 
 - [ ] **Step 1: Failing Tests schreiben**
 
@@ -1072,6 +1078,8 @@ import pytest
 
 import src.gpu_preview as gpu_preview
 from src.gpu_renderer import GPUBatchRenderer
+from src.gpu_visualizers import VISUALIZER_MAP
+from src.gpu_visualizers.base import BaseGPUVisualizer
 from src.render_common import compute_beat_intensity
 from src.spiral_zoom import SpiralSettings, compute_spiral_phase
 from tests.test_gpu_preview import _make_mock_renderer, dummy_features  # noqa: F401
@@ -1100,7 +1108,7 @@ def _render_mocked(mock_run, mock_popen, mock_create_ctx, ctx, features, postpro
             preview_duration=0.1,  # 3 Frames
             postprocess=postprocess,
         )
-    return spy
+    return spy, renderer
 
 
 @patch("src.gpu_renderer.moderngl.create_standalone_context")
@@ -1109,7 +1117,7 @@ def _render_mocked(mock_run, mock_popen, mock_create_ctx, ctx, features, postpro
 def test_batch_render_applies_spiral_per_frame(
     mock_run, mock_popen, mock_create_ctx, mock_gl_context, mock_features, tmp_path
 ):
-    spy = _render_mocked(
+    spy, renderer = _render_mocked(
         mock_run, mock_popen, mock_create_ctx, mock_gl_context, mock_features, SPIRAL_ON, tmp_path
     )
     s = SpiralSettings.from_postprocess(SPIRAL_ON)
@@ -1118,9 +1126,10 @@ def test_batch_render_applies_spiral_per_frame(
     )
     assert spy.call_count == 3
     for call, u in zip(spy.call_args_list, expected):
-        settings, got_u = call.args
+        settings, got_u, target = call.args
         assert settings == s
         assert got_u == pytest.approx(u)
+        assert target is renderer.viz_fbo  # Visualizer-Ebene, nicht die Szene
 
 
 @patch("src.gpu_renderer.moderngl.create_standalone_context")
@@ -1129,7 +1138,7 @@ def test_batch_render_applies_spiral_per_frame(
 def test_batch_render_without_spiral_never_calls_pass(
     mock_run, mock_popen, mock_create_ctx, mock_gl_context, mock_features, tmp_path
 ):
-    spy = _render_mocked(
+    spy, _ = _render_mocked(
         mock_run, mock_popen, mock_create_ctx, mock_gl_context, mock_features,
         {"bloom_intensity": 0.6}, tmp_path,
     )
@@ -1150,9 +1159,10 @@ def test_preview_uses_same_phase_as_export_frame(mock_renderer_cls, mock_analyze
         dummy_features.rms, compute_beat_intensity(dummy_features.beat_frames, 300, 30), 30, s
     )
     mock_renderer._apply_spiral.assert_called_once()
-    settings, u = mock_renderer._apply_spiral.call_args.args
+    settings, u, target = mock_renderer._apply_spiral.call_args.args
     assert settings == s
     assert u == pytest.approx(full[150])  # 10 s * 0.5 = 5 s = Frame 150
+    assert target is mock_renderer.viz_fbo
 
 
 @patch("src.gpu_preview.AudioAnalyzer")
@@ -1167,44 +1177,70 @@ def test_preview_without_spiral_never_calls_pass(mock_renderer_cls, mock_analyze
     mock_renderer._apply_spiral.assert_not_called()
 
 
+def _gradient_photo(tmp_path) -> str:
+    from PIL import Image
+
+    grad = np.linspace(0, 255, 160).astype(np.uint8)
+    img = np.stack([np.tile(grad, (90, 1))] * 3, axis=-1)
+    path = str(tmp_path / "bg.png")
+    Image.fromarray(img).save(path)
+    return path
+
+
+def _preview(**kw) -> np.ndarray:
+    img = gpu_preview.render_gpu_preview(
+        audio_path="dummy.mp3", width=160, height=90, fps=30,
+        preview_time_percent=0.5, background_opacity=1.0, **kw,
+    )
+    return np.asarray(img, dtype=np.int16)
+
+
 @pytest.mark.gpu
 @pytest.mark.parametrize("with_bg", [False, True])
 def test_real_preview_off_is_bitidentical_on_differs(tmp_path, dummy_features, with_bg):
     """Echte GPU: aus = bitgleich zu ohne Schluessel; an = sichtbar anders (auch mit Foto)."""
-    from PIL import Image
-
-    bg = None
-    if with_bg:
-        grad = np.linspace(0, 255, 160).astype(np.uint8)
-        img = np.stack([np.tile(grad, (90, 1))] * 3, axis=-1)
-        bg = str(tmp_path / "bg.png")
-        Image.fromarray(img).save(bg)
     common = dict(
-        audio_path="dummy.mp3", visualizer_type="spectrum_bars", width=160, height=90,
-        fps=30, features=dummy_features, preview_time_percent=0.5,
-        background_image=bg, background_opacity=1.0,
+        visualizer_type="spectrum_bars", features=dummy_features,
+        background_image=_gradient_photo(tmp_path) if with_bg else None,
     )
-    base = np.asarray(gpu_preview.render_gpu_preview(**common), dtype=np.int16)
-    off = np.asarray(
-        gpu_preview.render_gpu_preview(
-            **common, postprocess={"spiral_enabled": False, "spiral_arms": 2}
-        ),
-        dtype=np.int16,
-    )
-    on = np.asarray(
-        gpu_preview.render_gpu_preview(
-            **common, postprocess={"spiral_enabled": True, "spiral_arms": 1, "spiral_rotation": 30}
-        ),
-        dtype=np.int16,
+    base = _preview(**common)
+    off = _preview(**common, postprocess={"spiral_enabled": False, "spiral_arms": 2})
+    on = _preview(
+        **common, postprocess={"spiral_enabled": True, "spiral_arms": 1, "spiral_rotation": 30}
     )
     assert np.array_equal(base, off)
     assert np.abs(on - base).mean() > 0.5
+
+
+class _LeererViz(BaseGPUVisualizer):
+    """Zeichnet nichts: die Visualizer-Ebene bleibt transparent."""
+
+    def _setup(self):
+        pass
+
+    def render(self, features, time):
+        pass
+
+
+@pytest.mark.gpu
+def test_real_preview_photo_stays_still(tmp_path, dummy_features, monkeypatch):
+    """Nur der Visualizer wird verbogen: ohne Visualizer-Inhalt bleibt das Foto bitgleich."""
+    monkeypatch.setitem(VISUALIZER_MAP, "_leer_test", _LeererViz)
+    common = dict(
+        visualizer_type="_leer_test", features=dummy_features,
+        background_image=_gradient_photo(tmp_path),
+    )
+    off = _preview(**common)
+    on = _preview(
+        **common, postprocess={"spiral_enabled": True, "spiral_arms": 1, "spiral_rotation": 30}
+    )
+    assert np.array_equal(off, on)
 ```
 
 - [ ] **Step 2: Tests laufen lassen, Fehlschlag prüfen**
 
 Run: `pytest tests/test_spiral_render_integration.py -v`
-Expected: FAIL — `AttributeError: <class 'GPUBatchRenderer'> does not have the attribute '_apply_spiral'` bzw. `AssertionError: Expected '_apply_spiral' to have been called once`
+Expected: FAIL — `AttributeError: <class 'GPUBatchRenderer'> does not have the attribute '_apply_spiral'` bzw. `AssertionError: Expected '_apply_spiral' to have been called once`. `test_real_preview_photo_stays_still` besteht schon vorher (ohne Pass ändert sich nichts) — er sichert ab, dass der Einbau das Foto nicht anfasst.
 
 - [ ] **Step 3: Renderer anbinden (`src/gpu_renderer.py`)**
 
@@ -1237,20 +1273,34 @@ In `render()` direkt nach `features_dict = build_features_dict(features, frame_c
             )
 ```
 
-In der Frame-Schleife nach dem `_blit_viz_to_fbo(...)`-Aufruf und dem folgenden `_DEBUG`-Block, **vor** `pp = postprocess or {}`:
+In der Frame-Schleife direkt nach dem `_DEBUG`-Block mit `debug_step3_after_viz.png` und **vor** dem folgenden `self.fbo.use()` (also vor dem Blit):
 
 ```python
-                    # Spiral-Zoom verbiegt die fertige Szene (Hintergrund +
-                    # Visualizer) vor Bloom und Tonemapping
+                    # Spiral-Zoom verbiegt nur die Visualizer-Ebene (vor dem
+                    # Blit) — ein Hintergrundbild bleibt ruhig stehen
                     if spiral_phase is not None:
-                        self._apply_spiral(spiral, phase_at_time(spiral_phase, time, self.fps))
+                        self._apply_spiral(
+                            spiral,
+                            phase_at_time(spiral_phase, time, self.fps),
+                            self._viz_fbo_holding(active_viz_tex),
+                        )
 ```
 
-Neue Methode direkt vor `def _apply_bloom`:
+Neue Methoden direkt vor `def _apply_bloom`:
 
 ```python
-    def _apply_spiral(self, settings: SpiralSettings, u: float):
-        """Verbiegt self.fbo per Spiral-Zoom (legt den Pass bei Bedarf an)."""
+    def _viz_fbo_holding(self, tex):
+        """FBO, deren Farbtextur tex ist (viz_fbo oder Timeline-Ueberblendung)."""
+        blend = getattr(self, "viz_fbo_blend", None)
+        if blend is not None and tex is blend.color_attachments[0]:
+            return blend
+        return self.viz_fbo
+
+    def _apply_spiral(self, settings: SpiralSettings, u: float, target_fbo):
+        """Verbiegt target_fbo (Visualizer-Ebene) per Spiral-Zoom.
+
+        Legt den Pass beim ersten aktiven Aufruf an.
+        """
         if not settings.is_active:
             return
         if self._spiral is None:
@@ -1260,7 +1310,7 @@ Neue Methode direkt vor `def _apply_bloom`:
                 logger.warning(f"[GPU] Spiral-Zoom nicht verfuegbar: {e}")
                 self._spiral = False
         if self._spiral:
-            self._spiral.apply(self.fbo, settings, u)
+            self._spiral.apply(target_fbo, settings, u)
 ```
 
 In `release()` direkt nach dem Bloom-Block (`self._bloom = None`):
@@ -1279,17 +1329,19 @@ Import ergänzen (nach `from .render_common import build_features_dict`):
 from .spiral_zoom import SpiralSettings, compute_spiral_phase, phase_at_time
 ```
 
-Nach dem `renderer._blit_viz_to_fbo(...)`-Aufruf, **vor** `pp = postprocess or {}`:
+Nach dem Visualizer-Render (`if getattr(renderer, "viz_ms_fbo", None) is not None: ... else: ...`) und **vor** dem Kommentar `# Visualizer von viz_fbo auf main fbo blitten (mit Offset/Scale)`:
 
 ```python
-        # Spiral-Zoom wie im Haupt-Renderer (vor Bloom); gleiche Phase wie
-        # der Export-Frame zum Vorschau-Zeitpunkt
+        # Spiral-Zoom wie im Haupt-Renderer: nur die Visualizer-Ebene, vor
+        # dem Blit; gleiche Phase wie der Export-Frame zum Vorschau-Zeitpunkt
         spiral = SpiralSettings.from_postprocess(postprocess)
         if spiral.is_active:
             spiral_phase = compute_spiral_phase(
                 features_dict["rms"], features_dict["beat_intensity"], fps, spiral
             )
-            renderer._apply_spiral(spiral, phase_at_time(spiral_phase, preview_time, fps))
+            renderer._apply_spiral(
+                spiral, phase_at_time(spiral_phase, preview_time, fps), renderer.viz_fbo
+            )
 ```
 
 - [ ] **Step 5: Tests laufen lassen**
@@ -1301,7 +1353,7 @@ Expected: PASS (Golden-Corpus unverändert = Effekt aus ist bitgleich)
 
 ```bash
 git add src/gpu_renderer.py src/gpu_preview.py tests/test_spiral_render_integration.py
-git commit -m "feat(spiral): Spiral-Zoom in Export und Live-Vorschau einhaengen"
+git commit -m "feat(spiral): Spiral-Zoom auf die Visualizer-Ebene in Export und Vorschau"
 ```
 
 ---
@@ -1316,7 +1368,7 @@ git commit -m "feat(spiral): Spiral-Zoom in Export und Live-Vorschau einhaengen"
 - Consumes: nichts aus früheren Tasks außer dem Schlüssel `spiral_enabled`.
 - Produces: `src.studio.engine.disable_spiral_for_studio(postprocess: dict | None) -> tuple[dict, list[str]]` (Kopie mit `spiral_enabled = False` + Warnungen fürs Sidecar).
 
-Warum: `run_studio` misst mit `ProbeRenderer` (eigene Render-Schleife ohne Spiral-Pass) und rendert danach über `GPUBatchRenderer.render()` (mit Spiral-Pass). Ohne Abschalten würden Messung und Ergebnis auseinanderlaufen, und die Subjekt-Maske passte nicht mehr zum verbogenen Foto.
+Warum: `run_studio` misst mit `ProbeRenderer` (eigene Render-Schleife ohne Spiral-Pass) und rendert danach über `GPUBatchRenderer.render()` (mit Spiral-Pass). Ohne Abschalten würden Messung und Ergebnis auseinanderlaufen.
 
 - [ ] **Step 1: Failing Tests schreiben**
 
@@ -1387,9 +1439,8 @@ Direkt vor `def run_studio(`:
 def disable_spiral_for_studio(postprocess: dict | None) -> tuple[dict, list[str]]:
     """Schaltet den Spiral-Zoom fuer den Studio-Modus ab.
 
-    Der Spiral-Zoom verbiegt Hintergrund und Motiv. Die Studio-Messungen
-    (Sichtbarkeit, Subjekt-Maske) setzen ein unverbogenes Bild voraus, und
-    der ProbeRenderer hat keinen Spiral-Pass — Messung und Commit-Render
+    Die Studio-Messungen (Beitrag des Visualizers, Abstand zum Motiv) laufen
+    im ProbeRenderer, der keinen Spiral-Pass hat — Messung und Commit-Render
     liefen sonst auseinander. Gibt eine Kopie und ggf. eine Warnung zurueck.
     """
     pp = dict(postprocess or {})
@@ -1397,8 +1448,8 @@ def disable_spiral_for_studio(postprocess: dict | None) -> tuple[dict, list[str]
         return pp, []
     pp["spiral_enabled"] = False
     return pp, [
-        "Spiral-Zoom im Studio-Modus deaktiviert: er verbiegt Hintergrund "
-        "und Motiv, die Messungen waeren ungueltig."
+        "Spiral-Zoom im Studio-Modus deaktiviert: die Studio-Messungen "
+        "laufen ohne Spiral-Pass und passten sonst nicht zum Ergebnis."
     ]
 ```
 
@@ -1664,8 +1715,8 @@ In `src/gui/params_panel.py` direkt nach `layout.addWidget(pp_box)`:
         self.chk_spiral = QCheckBox("Endloser Zoom ins Bild")
         self.chk_spiral.setChecked(bool(self.state.pp_spiral_enabled))
         self.chk_spiral.setToolTip(
-            "Stapelt das ganze Bild (Hintergrund + Visualizer) endlos in sich selbst "
-            "und zoomt im Takt hinein."
+            "Stapelt den Visualizer endlos in sich selbst und zoomt im Takt hinein. "
+            "Ein Hintergrundbild bleibt ruhig stehen."
         )
         self.chk_spiral.toggled.connect(self._on_spiral_toggled)
         spiral_layout.addWidget(self.chk_spiral, 0, 0, 1, 3)
@@ -1776,9 +1827,9 @@ Oberhalb von `## [3.2.0] — 2026-08-14` einfügen:
 ## [Unreleased]
 
 ### Added
-- **Spiral-Zoom (Droste/Escher)** als neuer Nachbearbeitungs-Effekt: das
-  fertige Bild — Hintergrund und Visualizer — steckt endlos in sich selbst
-  und zoomt im Takt hinein; mit Spiralarmen wird daraus eine Escher-Spirale.
+- **Spiral-Zoom (Droste/Escher)** als neuer Effekt: der Visualizer steckt
+  endlos in sich selbst und zoomt im Takt hinein; mit Spiralarmen wird daraus
+  eine Escher-Spirale. Ein Hintergrundbild bleibt ruhig stehen.
   Tempo aus Grundgeschwindigkeit, Lautstaerke und Beats, vorab berechnet,
   daher Vorschau == Export. Standardmaessig aus; aus = bitgleich zu vorher.
   Mathematik portiert aus dem Schwesterprojekt Fraktal-Zoom, mit
@@ -1793,7 +1844,7 @@ Oberhalb von `## [3.2.0] — 2026-08-14` einfügen:
 Zeile 25 (`- **HDR-Render-Pipeline**: …`) am Ende um diesen Satz erweitern:
 
 ```markdown
- Optional **Spiral-Zoom** (Droste/Escher): das ganze Bild steckt endlos in sich selbst und zoomt im Takt.
+ Optional **Spiral-Zoom** (Droste/Escher): der Visualizer steckt endlos in sich selbst und zoomt im Takt, das Hintergrundbild bleibt ruhig.
 ```
 
 Zeile 207 (Musik-Presets): `` `music_spiral_zoom` `` an die Liste anhängen.
@@ -1814,14 +1865,14 @@ Mit einem echten Song (Pfad anpassen):
 # 1) 5-Sekunden-Vorschau mit dem Beispiel-Preset
 python main.py render song.mp3 --config config/music_spiral_zoom.json --preview -o spiral_test.mp4
 
-# 2) Dasselbe mit Hintergrundfoto (Foto dreht mit)
+# 2) Dasselbe mit Hintergrundfoto (Foto bleibt ruhig, nur der Visualizer dreht)
 python main.py render song.mp3 --config config/music_spiral_zoom.json --preview -bg bild.jpg --background-opacity 1.0 -o spiral_test_foto.mp4
 
 # 3) GUI: Gruppe "Spiral-Zoom" -> Haken setzen, Regler bewegen, Vorschau muss sich aendern
 python gui.py
 ```
 
-Worauf achten: Zoom läuft ruckfrei; an den Ebenen-Übergängen keine harte Kante; links der Bildmitte keine Naht; bei Beats ein spürbarer Schub; mit Foto kein schwarzes Bild; Effekt aus sieht exakt aus wie vorher.
+Worauf achten: Zoom läuft ruckfrei; an den Ebenen-Übergängen keine harte Kante; links der Bildmitte keine Naht; bei Beats ein spürbarer Schub; mit Foto bleibt das Foto ruhig und nichts wird schwarz; Effekt aus sieht exakt aus wie vorher.
 
 - [ ] **Step 5: Commit**
 
@@ -1834,6 +1885,6 @@ git commit -m "docs: Spiral-Zoom in Changelog und README"
 
 ## Später (bewusst nicht in diesem Plan)
 
-- **Nur-Visualizer-Variante** (Foto bleibt still): derselbe `SpiralZoomPass`, aufgerufen auf `active_viz_tex` in eine eigene FBO vor `_blit_viz_to_fbo`.
+- **Ganzes-Bild-Variante** (Foto dreht mit): derselbe `SpiralZoomPass`, aufgerufen auf `self.fbo` nach dem Blit, vor dem Bloom — per Schalter wählbar.
 - **Kaleidoskop-Tunnel** aus Fraktal-Zoom (`kaleido.ts`): Winkel-Faltung im selben Log-Polar-Raum, als zusätzlicher Modus des Passes.
 - **Eigenes Zentrum** (Zoom nicht in die Bildmitte), KI-Vorschläge für Spiral-Parameter, Szenen-spezifische Spiral-Werte in der Timeline.
