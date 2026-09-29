@@ -22,7 +22,7 @@ from src.gui.ki_panel import KIPanel
 from src.gui.params_panel import ParamsPanel
 from src.gui.preview_widget import PreviewWidget
 from src.gui.quotes_panel import QuotesPanel
-from src.gui.state import AppState
+from src.gui.state import AppState, SPIRAL_STATE_KEYS
 from src.gui.styles import build_app_stylesheet, Theme
 from src.gui.timeline_widget import TimelineWidget
 
@@ -437,20 +437,23 @@ class MainWindow(QMainWindow):
         "resolution", "render_fps", "codec", "quality", "gpu_encode",
         "intro_enabled", "intro_path", "intro_fade_duration",
         "quotes", "quotes_enabled", "quote_config",
-    })
+    }) | frozenset(SPIRAL_STATE_KEYS)
+
+    # State-Keys, die eine neue Vorschau ausloesen
+    _PREVIEW_KEYS = frozenset({
+        "visualizer_type", "viz_params", "viz_offset_x", "viz_offset_y", "viz_scale",
+        "bg_blur", "bg_vignette", "bg_opacity",
+        "pp_contrast", "pp_saturation", "pp_brightness", "pp_warmth", "pp_grain",
+        "pp_exposure", "pp_bloom", "pp_bloom_threshold", "pp_vignette", "pp_chromatic",
+        "background_path", "preview_time_percent",
+        "quotes", "quotes_enabled", "quote_config", "ki_suggested_colors",
+        "color_mode", "base_hue", "color_saturation", "brightness",
+    }) | frozenset(SPIRAL_STATE_KEYS)
 
     def _on_state_changed(self, key: str):
         if key in self._PROJECT_KEYS and not self._dirty:
             self._set_dirty(True)
-        if key in {
-            "visualizer_type", "viz_params", "viz_offset_x", "viz_offset_y", "viz_scale",
-            "bg_blur", "bg_vignette", "bg_opacity",
-            "pp_contrast", "pp_saturation", "pp_brightness", "pp_warmth", "pp_grain",
-            "pp_exposure", "pp_bloom", "pp_bloom_threshold", "pp_vignette", "pp_chromatic",
-            "background_path", "preview_time_percent",
-            "quotes", "quotes_enabled", "quote_config", "ki_suggested_colors",
-            "color_mode", "base_hue", "color_saturation", "brightness",
-        }:
+        if key in self._PREVIEW_KEYS:
             self._preview_timer.start(150)
 
     def _on_time_changed(self, percent: float):

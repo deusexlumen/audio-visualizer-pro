@@ -3,6 +3,13 @@
 from PyQt6.QtCore import QObject, pyqtSignal
 from src.quote_overlay import QuoteOverlayConfig
 from src.types import Quote
+from src.spiral_zoom import SpiralSettings
+
+# Spiral-Zoom-Regler; im postprocess-Dict heissen sie ohne "pp_"-Praefix
+SPIRAL_STATE_KEYS = (
+    "pp_spiral_enabled", "pp_spiral_arms", "pp_spiral_ratio", "pp_spiral_rotation",
+    "pp_spiral_speed", "pp_spiral_energy", "pp_spiral_beat", "pp_spiral_mix",
+)
 
 
 class AppState(QObject):
@@ -23,7 +30,7 @@ class AppState(QObject):
         "status_message", "status_kind",
         "ki_prompt", "ki_suggested_colors", "ki_status", "ki_error",
         "ki_optimizing", "quotes_extracting",
-    })
+    }) | frozenset(SPIRAL_STATE_KEYS)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -63,6 +70,15 @@ class AppState(QObject):
         self.pp_bloom_threshold: float = 1.0
         self.pp_vignette: float = 0.0
         self.pp_chromatic: float = 0.0
+        _spiral = SpiralSettings()
+        self.pp_spiral_enabled: bool = _spiral.enabled
+        self.pp_spiral_arms: int = _spiral.arms
+        self.pp_spiral_ratio: float = _spiral.ratio
+        self.pp_spiral_rotation: float = _spiral.rotation
+        self.pp_spiral_speed: float = _spiral.speed
+        self.pp_spiral_energy: float = _spiral.energy
+        self.pp_spiral_beat: float = _spiral.beat
+        self.pp_spiral_mix: float = _spiral.mix
 
         self.preview_time_percent: float = 0.3
         self.preview_fps: int = 30
@@ -124,6 +140,7 @@ class AppState(QObject):
             "bloom_threshold": self.pp_bloom_threshold,
             "vignette": self.pp_vignette,
             "chromatic_aberration": self.pp_chromatic,
+            **{key[len("pp_"):]: getattr(self, key) for key in SPIRAL_STATE_KEYS},
         }
 
     def get_params(self) -> dict:
@@ -173,6 +190,7 @@ class AppState(QObject):
             "pp_bloom_threshold": self.pp_bloom_threshold,
             "pp_vignette": self.pp_vignette,
             "pp_chromatic": self.pp_chromatic,
+            **{key: getattr(self, key) for key in SPIRAL_STATE_KEYS},
             "preview_time_percent": self.preview_time_percent,
             "preview_fps": self.preview_fps,
             "resolution": list(self.resolution),

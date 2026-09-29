@@ -236,3 +236,11 @@ def test_first_supported_drop_filters_extensions(qtbot, tmp_path):
     assert Path(window._first_supported_drop(make_event([song]))) == Path(song)
     assert Path(window._first_supported_drop(make_event([projekt]))) == Path(projekt)
     assert window._first_supported_drop(make_event([readme])) is None
+
+
+def test_spiral_keys_trigger_preview_and_dirty_marker():
+    from src.gui.main_window import MainWindow
+    from src.gui.state import SPIRAL_STATE_KEYS
+
+    assert set(SPIRAL_STATE_KEYS) <= MainWindow._PREVIEW_KEYS
+    assert set(SPIRAL_STATE_KEYS) <= MainWindow._PROJECT_KEYS
