@@ -3,7 +3,14 @@
 import numpy as np
 import pytest
 
-from src.spiral_zoom import SpiralSettings, spiral_map, spiral_uniforms
+from src.render_common import compute_beat_intensity
+from src.spiral_zoom import (
+    SpiralSettings,
+    compute_spiral_phase,
+    phase_at_time,
+    spiral_map,
+    spiral_uniforms,
+)
 
 W, H = 1920, 1080
 
@@ -132,3 +139,75 @@ class TestSpiralMap:
         q, w = normalized(*size)
         np.testing.assert_allclose(q, q_ref, atol=1e-9)
         np.testing.assert_allclose(w, w_ref, atol=1e-9)
+
+
+class TestPhase:
+    def test_silence_and_no_beats_gives_constant_speed(self):
+        s = _on(speed=0.5, energy=1.0, beat=1.0)
+        ph = compute_spiral_phase(np.zeros(300), np.zeros(300), 30, s)
+        assert ph[0] == 0.0
+        assert ph[30] == pytest.approx(0.5)  # 1 s * 0.5 Ebenen/s
+
+    def test_everything_zero_is_standstill(self):
+        s = _on(speed=0.0, energy=0.0, beat=0.0)
+        ph = compute_spiral_phase(np.zeros(100), np.zeros(100), 30, s)
+        assert np.all(ph == 0.0)
+
+    def test_monotonic_in_direction(self):
+        rng = np.random.default_rng(3)
+        rms = rng.random(600)
+        beats = compute_beat_intensity(np.arange(0, 600, 15), 600, 30)
+        fwd = compute_spiral_phase(rms, beats, 30, _on(speed=0.3))
+        back = compute_spiral_phase(rms, beats, 30, _on(speed=-0.3))
+        assert np.all(np.diff(fwd) > 0)
+        assert np.all(np.diff(back) < 0)
+        np.testing.assert_allclose(back, -fwd)
+
+    @pytest.mark.parametrize("fps", [24, 30, 60])
+    def test_each_beat_adds_exactly_beat_levels(self, fps):
+        beats = compute_beat_intensity(np.array([fps]), 3 * fps, fps)
+        s = _on(speed=0.0, energy=0.0, beat=0.7)
+        ph = compute_spiral_phase(np.zeros(3 * fps), beats, fps, s)
+        assert ph[-1] == pytest.approx(0.7)
+
+    def test_fps_independent(self):
+        s = _on(speed=0.4, energy=0.8)
+        a = compute_spiral_phase(np.full(300, 0.5), np.zeros(300), 30, s)
+        b = compute_spiral_phase(np.full(600, 0.5), np.zeros(600), 60, s)
+        assert a[150] == pytest.approx(b[300])  # beide nach 5 s
+
+    def test_prefix_consistent(self):
+        """Eine gekuerzte Vorschau (preview_mode) liefert dieselben Werte."""
+        rng = np.random.default_rng(4)
+        rms = rng.random(300)
+        bf = np.arange(0, 300, 20)
+        s = _on(speed=0.3, energy=0.5, beat=0.2)
+        full = compute_spiral_phase(rms, compute_beat_intensity(bf, 300, 30), 30, s)
+        short = compute_spiral_phase(rms[:90], compute_beat_intensity(bf, 90, 30), 30, s)
+        np.testing.assert_array_equal(short, full[:90])
+
+    def test_nan_and_length_mismatch(self):
+        rms = np.array([0.5, np.nan, 0.5, 0.5])
+        beats = np.array([0.0, 1.0, 0.0])
+        ph = compute_spiral_phase(rms, beats, 30, _on())
+        assert len(ph) == 3
+        assert np.all(np.isfinite(ph))
+        assert len(compute_spiral_phase([], [], 30, _on())) == 0
+
+    def test_phase_at_time_matches_render_frame(self):
+        ph = np.arange(300, dtype=np.float64) * 0.01
+        for i in (0, 45, 299):
+            assert phase_at_time(ph, i / 30, 30) == ph[i]
+        assert phase_at_time(ph, 99.0, 30) == ph[-1]
+        assert phase_at_time(ph, -1.0, 30) == ph[0]
+        assert phase_at_time(np.zeros(0), 1.0, 30) == 0.0
+
+    def test_long_song_u_stays_in_unit_interval(self):
+        """1 h bei 60 fps mit Hoechsttempo: der Shader sieht trotzdem nur [0, 1)."""
+        n = 3600 * 60
+        s = _on(speed=2.0, energy=2.0)
+        ph = compute_spiral_phase(np.ones(n), np.zeros(n), 60, s)
+        assert ph[-1] > 10_000
+        u = spiral_uniforms(s, W, H, ph[-1])["u_u"]
+        assert 0.0 <= u < 1.0
+        assert u == pytest.approx(ph[-1] - np.floor(ph[-1]))

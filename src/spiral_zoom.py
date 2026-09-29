@@ -185,3 +185,38 @@ def spiral_map(uni: dict, px, py) -> dict:
         "jac_in": rad_in * m_abs / zr,
         "w_in": w_in,
     }
+
+
+def compute_spiral_phase(rms, beat_intensity, fps: int, settings: SpiralSettings) -> np.ndarray:
+    """Zoom-Phase in Ebenen fuer jeden Frame (float64, beginnt bei 0).
+
+    Pro Frame waechst die Phase um |speed|/fps + energy*rms/fps
+    + beat*beat_intensity/Beat-Flaeche. Die Beat-Flaeche ist die Summe einer
+    einzelnen Beat-Huellkurve (compute_beat_intensity) — so bringt jeder Beat
+    genau `beat` Ebenen, unabhaengig von der Framerate. Das Vorzeichen von
+    speed bestimmt die Richtung fuer alle drei Anteile.
+
+    Die Phase haengt nur von frueheren Frames ab: eine gekuerzte Vorschau
+    liefert dieselben Werte wie der volle Export.
+    """
+    rms = np.clip(np.nan_to_num(np.asarray(rms, dtype=np.float64)), 0.0, 1.0)
+    beats = np.clip(np.nan_to_num(np.asarray(beat_intensity, dtype=np.float64)), 0.0, 1.0)
+    n = min(len(rms), len(beats))
+    if n == 0:
+        return np.zeros(0, dtype=np.float64)
+    fps = max(int(fps), 1)
+    beat_area = (beat_decay_frames(fps) + 1) / 2.0
+    rate = (abs(settings.speed) + settings.energy * rms[:n]) / fps
+    rate = rate + settings.beat * beats[:n] / beat_area
+    direction = -1.0 if settings.speed < 0 else 1.0
+    phase = np.zeros(n, dtype=np.float64)
+    phase[1:] = np.cumsum(rate[:-1])
+    return direction * phase
+
+
+def phase_at_time(phase: np.ndarray, t: float, fps: int) -> float:
+    """Phase zum Zeitpunkt t (Frame = round(t * fps), an die Grenzen geklemmt)."""
+    if len(phase) == 0:
+        return 0.0
+    i = int(round(t * fps))
+    return float(phase[min(max(i, 0), len(phase) - 1)])
