@@ -65,7 +65,7 @@
 | `src/gpu_spiral.py` (neu) | `SpiralZoomPass`: Kopie + Mipmaps + Vollbild-Shader |
 | `config/schemas.py` (ändern) | `spiral_*`-Felder in `PostProcessConfig` |
 | `config/music_spiral_zoom.json` (neu) | Beispiel-Preset zum Ausprobieren |
-| `src/gpu_renderer.py` (ändern) | `_apply_spiral`, Phase vor der Schleife, Aufruf vor Bloom, `release()` |
+| `src/gpu_renderer.py` (ändern) | `_apply_spiral`, `_viz_fbo_holding`, Phase vor der Schleife, Aufruf auf der Visualizer-Ebene vor dem Blit, `release()` |
 | `src/gpu_preview.py` (ändern) | derselbe Aufruf in der Live-Vorschau |
 | `src/studio/engine.py` (ändern) | Studio-Modus schaltet den Effekt ab (Messungen brauchen unverbogenes Bild) |
 | `tests/test_studio_spiral.py` (neu) | Studio-Abschaltung |

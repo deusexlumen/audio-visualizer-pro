@@ -174,7 +174,10 @@ class ParamsPanel(QWidget):
         self.chk_spiral.setChecked(bool(self.state.pp_spiral_enabled))
         self.chk_spiral.setToolTip(
             "Stapelt den Visualizer endlos in sich selbst und zoomt im Takt hinein. "
-            "Ein Hintergrundbild bleibt ruhig stehen."
+            "Ein Hintergrundbild bleibt ruhig stehen.\n"
+            "Wirkt am besten bei runden Visualizern in der Bildmitte: was ausserhalb "
+            "des Mittelkreises liegt (z.B. Balken am Bildrand), wird durch die "
+            "Wiederholung ersetzt."
         )
         self.chk_spiral.toggled.connect(self._on_spiral_toggled)
         spiral_layout.addWidget(self.chk_spiral, 0, 0, 1, 3)
