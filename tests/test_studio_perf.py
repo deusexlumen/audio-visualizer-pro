@@ -12,6 +12,22 @@ import pytest
 CI_FACTOR = 4.0
 
 
+def _best_ms(fn, repeats: int = 5) -> float:
+    """Beste von n Messungen nach einem Aufwaermlauf (in ms).
+
+    Eine Einzelmessung erfasst im Volllauf der Suite auch Scheduler-Pausen
+    und Garbage-Collection anderer Tests und schwankte dadurch ueber das
+    Budget. Das Minimum misst den Code selbst; das Budget bleibt gleich.
+    """
+    fn()
+    best = float("inf")
+    for _ in range(repeats):
+        start = time.perf_counter()
+        fn()
+        best = min(best, (time.perf_counter() - start) * 1000)
+    return best
+
+
 def test_metrik_pro_sample_budget():
     """≤ 15 ms CPU pro Sample @854 px (Spec §13)."""
     from src.studio.metrics import (contribution, overlay_energy,
@@ -23,13 +39,13 @@ def test_metrik_pro_sample_budget():
     # (480x854 liegt bereits auf dem Messraster, kein Downscale).
     mask = (rng.random((480, 854)) > 0.5).astype(np.float32)
 
-    start = time.perf_counter()
-    ra, rb = to_measure_raster(a), to_measure_raster(b)
-    c = contribution(ra, rb)
-    overlay_energy(c)
-    subject_disturbance(c, mask)
-    elapsed_ms = (time.perf_counter() - start) * 1000
-    assert elapsed_ms <= 15 * CI_FACTOR
+    def sample():
+        ra, rb = to_measure_raster(a), to_measure_raster(b)
+        c = contribution(ra, rb)
+        overlay_energy(c)
+        subject_disturbance(c, mask)
+
+    assert _best_ms(sample) <= 15 * CI_FACTOR
 
 
 def test_feasibility_budget():
