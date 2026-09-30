@@ -159,8 +159,10 @@ def disable_spiral_for_studio(postprocess: dict | None) -> tuple[dict, list[str]
     im ProbeRenderer, der keinen Spiral-Pass hat — Messung und Commit-Render
     liefen sonst auseinander. Gibt eine Kopie und ggf. eine Warnung zurueck.
     """
+    from ..spiral_zoom import SpiralSettings
+
     pp = dict(postprocess or {})
-    if not pp.get("spiral_enabled"):
+    if not SpiralSettings.from_postprocess(pp).is_active:
         return pp, []
     pp["spiral_enabled"] = False
     return pp, [

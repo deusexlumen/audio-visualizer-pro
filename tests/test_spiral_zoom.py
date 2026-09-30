@@ -47,6 +47,14 @@ class TestSettings:
         assert s.speed == SpiralSettings().speed  # Unsinn -> Default
         assert s.mix == SpiralSettings().mix
 
+    @pytest.mark.parametrize("raw,expected", [
+        ("false", False), ("0", False), ("aus", False), ("", False), (None, False),
+        ("true", True), ("1", True), ("an", True), (True, True), (0, False), (1, True),
+    ])
+    def test_enabled_flag_parses_text(self, raw, expected):
+        """Handgeschriebene Configs/KI koennen Text liefern: "false" heisst aus."""
+        assert SpiralSettings.from_postprocess({"spiral_enabled": raw}).enabled is expected
+
     def test_mix_zero_is_inactive(self):
         assert _on(mix=0.0).is_active is False
         assert _on(mix=0.5).is_active is True

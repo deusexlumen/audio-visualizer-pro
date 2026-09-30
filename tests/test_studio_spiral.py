@@ -24,6 +24,14 @@ def test_helper_leaves_other_configs_alone():
     assert disable_spiral_for_studio(None) == ({}, [])
 
 
+def test_helper_reads_flag_like_renderer():
+    """Text "false" ist aus (wie im Renderer) — keine unnoetige Warnung."""
+    _, warnings = disable_spiral_for_studio({"spiral_enabled": "false"})
+    assert warnings == []
+    _, warnings = disable_spiral_for_studio({"spiral_enabled": True, "spiral_mix": 0.0})
+    assert warnings == []  # Staerke 0 = wirkungslos, nichts abzuschalten
+
+
 class _Stop(Exception):
     pass
 

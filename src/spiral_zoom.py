@@ -61,6 +61,13 @@ def _num(value, default: float) -> float:
     return v if math.isfinite(v) else default
 
 
+def _flag(value) -> bool:
+    """Wahrheitswert aus bool, Zahl oder Text ("false"/"0"/"aus" = aus)."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "ja", "an", "yes", "on")
+    return bool(value)
+
+
 @dataclass(frozen=True)
 class SpiralSettings:
     """Einstellungen des Spiral-Zoom-Passes (Bereiche siehe Modul-Konstanten)."""
@@ -95,7 +102,7 @@ class SpiralSettings:
         # (lnK >= -ln(1 - feather)), sonst springt das Bild an der Naht.
         feather = min(feather, 1.0 - 1.0 / ratio)
         return cls(
-            enabled=bool(pp.get("spiral_enabled", d.enabled)),
+            enabled=_flag(pp.get("spiral_enabled", d.enabled)),
             arms=int(_clamp(arms, ARMS_MIN, ARMS_MAX)),
             ratio=ratio,
             rotation=_clamp(
