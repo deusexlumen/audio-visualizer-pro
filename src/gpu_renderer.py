@@ -1241,7 +1241,7 @@ class GPUBatchRenderer:
         """
         if not settings.is_active:
             return
-        if self._spiral is None:
+        if getattr(self, "_spiral", None) is None:
             try:
                 self._spiral = SpiralZoomPass(self.ctx, self.width, self.height)
             except Exception as e:

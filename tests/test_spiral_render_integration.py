@@ -166,6 +166,16 @@ def test_real_preview_photo_stays_still(tmp_path, dummy_features, monkeypatch):
     assert np.array_equal(off, on)
 
 
+def test_apply_spiral_creates_pass_lazily_without_init():
+    """Auch ein Renderer ohne __init__ (z.B. in Tests) legt den Pass an."""
+    renderer = GPUBatchRenderer.__new__(GPUBatchRenderer)
+    renderer.ctx, renderer.width, renderer.height = MagicMock(), 64, 64
+    target = MagicMock()
+    renderer._apply_spiral(SpiralSettings(enabled=True), 0.25, target)
+    assert renderer._spiral  # Pass angelegt
+    target.use.assert_called()  # und auf das Ziel gezeichnet
+
+
 def test_timeline_crossfade_spirals_the_blend_layer():
     """Bei Timeline-Ueberblendung liegt der Visualizer in viz_fbo_blend."""
     renderer = GPUBatchRenderer.__new__(GPUBatchRenderer)  # ohne GL-Kontext
