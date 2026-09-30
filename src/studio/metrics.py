@@ -49,8 +49,17 @@ def to_measure_raster(frame: np.ndarray, long_edge: int = MEASURE_LONG_EDGE) -> 
 
 def contribution(a_linear: np.ndarray, b_linear: np.ndarray) -> np.ndarray:
     """Post-FX-wirksamer Visualizer-Einfluss pro Pixel (H, W, float32)."""
-    diff = np.abs(a_linear.astype(np.float32) - b_linear.astype(np.float32))
-    return np.clip(diff.mean(axis=-1), 0.0, 1.0)
+    diff = np.abs(
+        np.asarray(a_linear, dtype=np.float32) - np.asarray(b_linear, dtype=np.float32)
+    )
+    if diff.shape[-1] != 3:
+        return np.clip(diff.mean(axis=-1), 0.0, 1.0)
+    # Schnellpfad RGB: Kanalsumme statt mean(axis=-1) (strided, ~3x langsamer)
+    # und Begrenzen ohne weitere Kopie — Perf-Budget Spec §13.
+    out = diff[..., 0] + diff[..., 1]
+    out += diff[..., 2]
+    out *= np.float32(1.0 / 3.0)
+    return np.minimum(out, 1.0, out=out)
 
 
 def overlay_energy(contrib: np.ndarray) -> float:
