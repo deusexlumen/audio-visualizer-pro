@@ -78,6 +78,33 @@ def test_ring_is_identity_even_with_blending_left_on(gl):
     )
 
 
+def test_alpha_is_warped_with_color(gl):
+    """Deckung (Alpha) wandert mit der Farbe — wichtig fuer den Luma-/
+    Occlusion-Alpha-Blit ueber ein Hintergrundbild."""
+    img = _gradient()
+    img[..., 3] = 0.2 + 0.6 * img[..., 0]  # Alpha-Verlauf von links nach rechts
+    fbo = _scene(gl, img)
+    s = SpiralSettings(enabled=True, arms=1, rotation=30.0, ratio=2.5)
+    SpiralZoomPass(gl, W, H).apply(fbo, s, 0.37)
+    out = _read(fbo).reshape(-1, 4)
+
+    px, py = _pixel_grid()
+    m = spiral_map(spiral_uniforms(s, W, H, 0.37), px, py)
+    w_in = m["w_in"]
+    expected = (0.2 + 0.6 * m["q"][:, 0] / W) * (1 - w_in) + (0.2 + 0.6 * m["q_in"][:, 0] / W) * w_in
+    c = np.array([W / 2, H / 2])
+    r_lim = 0.85 * 0.5 * min(W, H)
+    uses_in = w_in > 0
+    ok = (
+        (m["jac"] <= 4.0)
+        & (np.linalg.norm(m["q"] - c, axis=1) <= r_lim)
+        & (~uses_in | ((m["jac_in"] <= 4.0) & (np.linalg.norm(m["q_in"] - c, axis=1) <= r_lim)))
+        & (np.hypot(px - W / 2, py - H / 2) >= 4.0)
+    )
+    assert ok.sum() > 200
+    np.testing.assert_allclose(out[ok, 3], expected[ok], atol=0.01)
+
+
 @pytest.mark.parametrize("arms", [0, 1, -2])
 @pytest.mark.parametrize("rotation", [0.0, 30.0])
 @pytest.mark.parametrize("u", [0.0, 0.37])
