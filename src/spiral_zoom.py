@@ -89,17 +89,22 @@ class SpiralSettings:
         pp = pp or {}
         d = cls()
         arms = int(round(_num(pp.get("spiral_arms"), d.arms)))
+        ratio = _clamp(_num(pp.get("spiral_ratio"), d.ratio), RATIO_MIN, RATIO_MAX)
+        feather = _clamp(_num(pp.get("spiral_feather"), d.feather), FEATHER_MIN, FEATHER_MAX)
+        # Die Ueberblendung darf nicht breiter sein als eine Ebene
+        # (lnK >= -ln(1 - feather)), sonst springt das Bild an der Naht.
+        feather = min(feather, 1.0 - 1.0 / ratio)
         return cls(
             enabled=bool(pp.get("spiral_enabled", d.enabled)),
             arms=int(_clamp(arms, ARMS_MIN, ARMS_MAX)),
-            ratio=_clamp(_num(pp.get("spiral_ratio"), d.ratio), RATIO_MIN, RATIO_MAX),
+            ratio=ratio,
             rotation=_clamp(
                 _num(pp.get("spiral_rotation"), d.rotation), -ROTATION_MAX_DEG, ROTATION_MAX_DEG
             ),
             speed=_clamp(_num(pp.get("spiral_speed"), d.speed), -SPEED_MAX, SPEED_MAX),
             energy=_clamp(_num(pp.get("spiral_energy"), d.energy), 0.0, ENERGY_MAX),
             beat=_clamp(_num(pp.get("spiral_beat"), d.beat), 0.0, BEAT_MAX),
-            feather=_clamp(_num(pp.get("spiral_feather"), d.feather), FEATHER_MIN, FEATHER_MAX),
+            feather=feather,
             mix=_clamp(_num(pp.get("spiral_mix"), d.mix), 0.0, 1.0),
         )
 

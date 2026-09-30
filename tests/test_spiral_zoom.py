@@ -120,6 +120,24 @@ class TestSpiralMap:
             used = m["w_in"] > 0
             assert np.all(np.linalg.norm(m["q_in"][used] - c, axis=1) <= r_out + 1e-6)
 
+    @pytest.mark.parametrize("ratio,feather", [(1.5, 0.5), (1.8, 0.5), (1.5, 0.4), (2.5, 0.15)])
+    def test_no_seam_between_levels(self, ratio, feather):
+        """Die Ebenen-Naht bleibt stetig — auch wenn eine Config die
+        Ueberblendung breiter waehlt als eine Ebene (feather > 1 - 1/K)."""
+        s = SpiralSettings.from_postprocess(
+            {"spiral_enabled": True, "spiral_ratio": ratio, "spiral_feather": feather}
+        )
+        uni = spiral_uniforms(s, W, H, 0.3)
+        r = np.linspace(5.0, 0.5 * H, 20000)
+        m = spiral_map(uni, W / 2 + r * np.cos(0.7), H / 2 + r * np.sin(0.7))
+        c = np.array([W / 2, H / 2])
+
+        def val(q):  # glatte Testfarbe: Abstand zur Mitte relativ zu R_out
+            return np.linalg.norm(q - c, axis=1) / (0.5 * H)
+
+        blended = val(m["q"]) * (1 - m["w_in"]) + val(m["q_in"]) * m["w_in"]
+        assert np.max(np.abs(np.diff(blended))) < 0.02
+
     @pytest.mark.parametrize("size", [(480, 270), (3840, 2160), (1080, 1920)])
     def test_same_picture_at_every_resolution(self, size):
         """Normierte Punkte (relativ zu min(B, H)) bilden in jeder Aufloesung gleich ab."""
