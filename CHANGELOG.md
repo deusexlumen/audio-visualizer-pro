@@ -5,6 +5,21 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 Das Format basiert auf [Keep a Changelog](https://keepachangelog.com/de/1.0.0/),
 und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
+## [Unreleased]
+
+### Added
+- **Spiral-Zoom (Droste/Escher)** als neuer Effekt: der Visualizer steckt
+  endlos in sich selbst und zoomt im Takt hinein; mit Spiralarmen wird daraus
+  eine Escher-Spirale. Ein Hintergrundbild bleibt ruhig stehen.
+  Tempo aus Grundgeschwindigkeit, Lautstaerke und Beats, vorab berechnet,
+  daher Vorschau == Export. Standardmaessig aus; aus = bitgleich zu vorher.
+  Mathematik portiert aus dem Schwesterprojekt Fraktal-Zoom, mit
+  CPU-Gegenstueck und GPU-Vergleichstest (`src/spiral_zoom.py`,
+  `src/gpu_spiral.py`). Neue GUI-Gruppe „Spiral-Zoom“, neue
+  `spiral_*`-Schluessel im `postprocess`-Block, Beispiel-Preset
+  `config/music_spiral_zoom.json`. Im Studio-Modus wird der Effekt
+  abgeschaltet (Warnung im Sidecar).
+
 ## [3.2.0] — 2026-08-14
 
 Visuelle Generalueberholung: acht neue Visualizer, sechs neu gebaut, dazu

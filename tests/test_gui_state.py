@@ -1,6 +1,7 @@
 import pytest
 from PyQt6.QtCore import QObject
-from src.gui.state import AppState
+from src.gui.state import AppState, SPIRAL_STATE_KEYS
+from src.spiral_zoom import SpiralSettings
 
 
 def test_state_initial_defaults():
@@ -51,3 +52,57 @@ def test_apply_dict_ignores_unknown_keys():
     s.apply_dict({"version": 99, "zukunfts_feature": True, "bg_blur": 3.0})
     assert s.bg_blur == 3.0
     assert not hasattr(s, "zukunfts_feature")
+
+
+def test_spiral_settings_roundtrip_and_reach_postprocess():
+    s = AppState()
+    s.pp_spiral_enabled = True
+    s.pp_spiral_arms = -2
+    s.pp_spiral_speed = -0.75
+    restored = AppState.from_dict(s.to_dict())
+    assert restored.pp_spiral_enabled is True
+    assert restored.pp_spiral_arms == -2
+    assert restored.pp_spiral_speed == -0.75
+    pp = restored.get_postprocess()
+    assert pp["spiral_enabled"] is True
+    assert pp["spiral_arms"] == -2
+    assert SpiralSettings.from_postprocess(pp).is_active
+
+
+def test_old_project_without_spiral_keys_keeps_effect_off():
+    data = AppState().to_dict()
+    for key in SPIRAL_STATE_KEYS:
+        data.pop(key)
+    restored = AppState.from_dict(data)
+    assert restored.pp_spiral_enabled is False
+    assert not SpiralSettings.from_postprocess(restored.get_postprocess()).is_active
+
+
+def test_spiral_state_defaults_match_renderer_defaults():
+    s = AppState()
+    d = SpiralSettings()
+    for key in SPIRAL_STATE_KEYS:
+        assert getattr(s, key) == getattr(d, key[len("pp_spiral_"):]), key
+
+
+def test_spiral_keys_emit_changed(qtbot):
+    s = AppState()
+    received = []
+    s.changed.connect(received.append)
+    s.pp_spiral_ratio = 4.0
+    assert "pp_spiral_ratio" in received
+
+
+def test_apply_old_project_switches_running_spiral_off():
+    """GUI-Ladepfad (apply_dict): ein altes Projekt ohne Spiral-Schluessel
+    setzt einen in der Sitzung eingeschalteten Spiral-Zoom zurueck."""
+    old = AppState().to_dict()
+    for key in SPIRAL_STATE_KEYS:
+        old.pop(key)
+    s = AppState()
+    s.pp_spiral_enabled = True
+    s.pp_spiral_ratio = 4.0
+    s.apply_dict(old)
+    assert s.pp_spiral_enabled is False
+    assert s.pp_spiral_ratio == SpiralSettings().ratio
+    assert not SpiralSettings.from_postprocess(s.get_postprocess()).is_active

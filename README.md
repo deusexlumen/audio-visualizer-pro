@@ -22,7 +22,7 @@ Ergebnis mit **FFmpeg** zu einem fertigen Video — gesteuert über eine
 ## ✨ Highlights
 
 - **26 GPU-Visualizer** (10 Classic + 8 Signature Pro + 8 Archetypen) plus **Visualizer-Studio**: eigene Visualizer aus Bausteinen zusammenklicken, ganz ohne Code.
-- **HDR-Render-Pipeline**: Float16 + 4×-MSAA, echter HDR-Bloom, ACES-Tonemapping, 3D-LUTs (`.cube`), Vignette, chromatische Aberration, Film-Grain, Dithering — kein Banding, keine harten Clips.
+- **HDR-Render-Pipeline**: Float16 + 4×-MSAA, echter HDR-Bloom, ACES-Tonemapping, 3D-LUTs (`.cube`), Vignette, chromatische Aberration, Film-Grain, Dithering — kein Banding, keine harten Clips. Optional **Spiral-Zoom** (Droste/Escher): der Visualizer steckt endlos in sich selbst und zoomt im Takt, das Hintergrundbild bleibt ruhig.
 - **Szenen-Timeline**: Visualizer wechseln automatisch über die Zeit, aus der Songstruktur abgeleitet (mit Crossfades).
 - **KI-Unterstützung (Gemini, optional)**: Transkription, Zitat-Extraktion mit Zeitstempeln, automatische Visualizer-/Parameter-Empfehlung und ein Voll-KI-Modus.
 - **Moderne GUI**: Dark-Studio-Oberfläche mit Wellenform-Timeline, Live-Vorschau, Drag & Drop und Projektdateien (`.avproj`).
@@ -204,7 +204,7 @@ Bau eigener Visualizer stehen in **[AGENTS.md](AGENTS.md)**.
 
 Presets liegen als JSON in `config/` und werden gegen Pydantic-Schemas validiert:
 
-- **Musik:** `default`, `music_aggressive`, `chromatic_dream`, `neon_cyberpunk`, `sacred_geometry`, `liquid_blobs`, `neon_circle`, `flower_bloom`
+- **Musik:** `default`, `music_aggressive`, `chromatic_dream`, `neon_cyberpunk`, `sacred_geometry`, `liquid_blobs`, `neon_circle`, `flower_bloom`, `music_spiral_zoom`
 - **Podcast:** `podcast_minimal`, `podcast_news`, `podcast_interview`, `podcast_story`, `podcast_mixed`
 
 ```bash

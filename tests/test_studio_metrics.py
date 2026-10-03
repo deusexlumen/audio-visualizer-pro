@@ -51,6 +51,22 @@ def test_contribution_and_m1_m2():
     assert overlay_coverage(contrib, threshold=0.7) == pytest.approx(0.0)
 
 
+@pytest.mark.parametrize("channels", [3, 4])
+def test_contribution_matches_reference_formula(channels):
+    """Schnellpfad liefert dieselben Werte wie clip(mean(|a-b|)) — auch mit
+    HDR-Werten > 1 (werden auf 1 begrenzt), float64-Eingaben und 4 Kanaelen."""
+    rng = np.random.default_rng(5)
+    a = rng.uniform(0.0, 3.0, (37, 53, channels))  # float64, teils > 1
+    b = rng.uniform(0.0, 1.0, (37, 53, channels)).astype(np.float32)
+    ref = np.clip(
+        np.abs(a.astype(np.float32) - b.astype(np.float32)).mean(axis=-1), 0.0, 1.0
+    )
+    got = contribution(a, b)
+    assert got.dtype == np.float32
+    assert got.shape == (37, 53)
+    np.testing.assert_allclose(got, ref, atol=1e-6)
+
+
 def test_m1_zero_for_identical_frames():
     frame = np.random.rand(8, 8, 3).astype(np.float32)
     assert overlay_energy(contribution(frame, frame)) == pytest.approx(0.0)

@@ -1,0 +1,27 @@
+{
+  "audio_file": "input.mp3",
+  "output_file": "spiral_zoom_output.mp4",
+  "visual": {
+    "type": "neon_wave_circle",
+    "resolution": [1920, 1080],
+    "fps": 30,
+    "colors": {
+      "primary": "#00E5FF",
+      "secondary": "#FF3DA5",
+      "background": "#05050F"
+    },
+    "params": {}
+  },
+  "postprocess": {
+    "bloom_intensity": 0.8,
+    "spiral_enabled": true,
+    "spiral_arms": 1,
+    "spiral_ratio": 2.5,
+    "spiral_rotation": 0.0,
+    "spiral_speed": 0.3,
+    "spiral_energy": 0.6,
+    "spiral_beat": 0.25,
+    "spiral_mix": 1.0
+  },
+  "background_color": "#05050F"
+}

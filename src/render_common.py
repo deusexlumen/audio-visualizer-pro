@@ -11,6 +11,11 @@ import numpy as np
 from .types import AudioFeatures
 
 
+def beat_decay_frames(fps: int) -> int:
+    """Laenge der Beat-Huellkurve in Frames (1.0 am Beat, linear auf 0)."""
+    return max(3, int(fps * 0.1))
+
+
 def compute_beat_intensity(beat_frames, frame_count: int, fps: int) -> np.ndarray:
     """Berechnet die Beat-Decay-Envelope (1.0 am Beat, linear abfallend).
 
@@ -26,7 +31,7 @@ def compute_beat_intensity(beat_frames, frame_count: int, fps: int) -> np.ndarra
     if beat_frames is None or len(beat_frames) == 0:
         return beat_intensity
 
-    decay_frames = max(3, int(fps * 0.1))
+    decay_frames = beat_decay_frames(fps)
     for bf in beat_frames:
         if bf >= frame_count:
             continue

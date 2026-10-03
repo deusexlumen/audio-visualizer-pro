@@ -260,3 +260,39 @@ def test_param_groups_rendered(qtbot):
 
     assert "Core" in headers
     assert "Ringe" in headers
+
+
+def test_spiral_controls_write_state(qtbot):
+    state = AppState()
+    panel = ParamsPanel(state)
+    qtbot.addWidget(panel)
+
+    panel.chk_spiral.setChecked(True)
+    assert state.pp_spiral_enabled is True
+
+    panel.spiral_sliders["pp_spiral_ratio"][0].setValue(400)
+    assert state.pp_spiral_ratio == 4.0
+
+    panel.spiral_sliders["pp_spiral_arms"][0].setValue(-2)
+    assert state.pp_spiral_arms == -2
+    assert isinstance(state.pp_spiral_arms, int)
+
+    panel.spiral_sliders["pp_spiral_mix"][0].setValue(40)
+    assert state.pp_spiral_mix == 0.4
+
+
+def test_spiral_controls_follow_state(qtbot):
+    """Projekt laden / KI setzt Werte: Regler und Labels ziehen nach."""
+    state = AppState()
+    panel = ParamsPanel(state)
+    qtbot.addWidget(panel)
+
+    state.pp_spiral_speed = -1.25
+    slider, label, _, _ = panel.spiral_sliders["pp_spiral_speed"]
+    assert slider.value() == -125
+    assert label.text() == "-1.25"
+
+    assert not slider.isEnabled()  # Effekt aus -> Regler grau
+    state.pp_spiral_enabled = True
+    assert panel.chk_spiral.isChecked()
+    assert slider.isEnabled()

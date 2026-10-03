@@ -199,6 +199,16 @@ class PostProcessConfig(BaseModel):
     bloom_radius: float = Field(default=1.0, ge=0.5, le=2.0)
     lut: Optional[str] = None
     lut_strength: float = Field(default=1.0, ge=0.0, le=1.0)
+    # Spiral-Zoom (Droste/Escher) — Bedeutung siehe src/spiral_zoom.py
+    spiral_enabled: bool = False
+    spiral_arms: int = Field(default=0, ge=-3, le=3)
+    spiral_ratio: float = Field(default=2.5, ge=1.5, le=6.0)
+    spiral_rotation: float = Field(default=0.0, ge=-90.0, le=90.0)
+    spiral_speed: float = Field(default=0.3, ge=-2.0, le=2.0)
+    spiral_energy: float = Field(default=0.5, ge=0.0, le=2.0)
+    spiral_beat: float = Field(default=0.2, ge=0.0, le=1.0)
+    spiral_feather: float = Field(default=0.15, ge=0.02, le=0.5)
+    spiral_mix: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class BackgroundConfig(BaseModel):

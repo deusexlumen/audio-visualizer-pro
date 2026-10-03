@@ -18,6 +18,7 @@ from .gpu_visualizers import get_visualizer
 from .gpu_visualizers.base import hex_to_rgb as _hex_to_rgb
 from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
 from .render_common import build_features_dict
+from .spiral_zoom import SpiralSettings, compute_spiral_phase, phase_at_time
 from .types import AudioFeatures
 
 logger = get_logger(__name__)
@@ -160,6 +161,17 @@ def render_gpu_preview(
             renderer.viz_fbo.use()
             renderer.ctx.clear(0.0, 0.0, 0.0, 0.0)
             viz.render(features_dict, preview_time)
+
+        # Spiral-Zoom wie im Haupt-Renderer: nur die Visualizer-Ebene, vor
+        # dem Blit; gleiche Phase wie der Export-Frame zum Vorschau-Zeitpunkt
+        spiral = SpiralSettings.from_postprocess(postprocess)
+        if spiral.is_active:
+            spiral_phase = compute_spiral_phase(
+                features_dict["rms"], features_dict["beat_intensity"], fps, spiral
+            )
+            renderer._apply_spiral(
+                spiral, phase_at_time(spiral_phase, preview_time, fps), renderer.viz_fbo
+            )
 
         # Visualizer von viz_fbo auf main fbo blitten (mit Offset/Scale)
         renderer.fbo.use()
