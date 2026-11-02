@@ -28,6 +28,9 @@ from .gpu_visualizers import get_visualizer
 from .gpu_visualizers.base import hex_to_rgb as _hex_to_rgb
 from .gpu_text_renderer import SDFFontAtlas, GPUTextRenderer
 from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
+from .episode.compositor import EpisodeCompositor
+from .episode.text import EpisodeTextRenderer
+from .episode.timeline import EpisodeTimeline
 
 logger = get_logger(__name__)
 
@@ -178,6 +181,7 @@ class GPUBatchRenderer:
         cancel_event=None,
         timeline=None,
         studio_constraints=None,
+        episode=None,
     ):
         """Rendert ein Video aus Audio-Analyse auf der GPU.
 
@@ -203,6 +207,9 @@ class GPUBatchRenderer:
             progress_callback: Optionaler Callback(frame, total_frames) fuer Fortschritts-Updates.
             cancel_event: Optional threading.Event. Wenn gesetzt, wird die Render-Schleife unterbrochen.
             studio_constraints: Optionale Studio-MeasureConstraints (Alpha-Cap, Luma-Alpha, Subjekt-Stärke) — nur im Studio-Pfad gesetzt.
+            episode: Optionale EpisodeRenderSpec. Dann Folgen-Look: Folgenbild
+                nach dem Postprocess (ohne Tonemap), Text aus der Folgen-Zeitachse;
+                Hintergrund und quotes/quote_config werden ignoriert.
         """
         audio_path = str(audio_path)
         output_path = str(output_path)
@@ -243,6 +250,24 @@ class GPUBatchRenderer:
         logger.info(f"[GPU] Aufloesung: {self.width}x{self.height}")
         if gpu_encode:
             logger.info("[GPU] GPU-Encoding aktiviert (NVENC/AMF/QSV)")
+
+        # Folgen-Look: das Bild kommt erst nach dem Postprocess dazu, die
+        # Szene darunter bleibt schwarz; der alte Zitat-Pfad ist aus.
+        ep_timeline = ep_text = None
+        if episode is not None:
+            background_image = None
+            background_color = "#000000"
+            quotes = None
+            quote_config = None
+            ep_timeline = EpisodeTimeline(episode.chapters, episode.quotes,
+                                          frame_count / self.fps, episode.config)
+            ep_text = EpisodeTextRenderer(ep_timeline, self.width, self.height,
+                                          episode.title, episode.number, episode.config)
+            self._release_episode()
+            self._episode_compositor = EpisodeCompositor(
+                self.ctx, self.width, self.height, episode.image_path)
+            self._episode_fbo = self.ctx.framebuffer(
+                color_attachments=[self.ctx.texture((self.width, self.height), 4)])
 
         # Quotes optional zu Beats synchronisieren
         if sync_quotes_to_beats and quotes and len(features.beat_frames) > 0:
@@ -416,8 +441,20 @@ class GPUBatchRenderer:
                 Returns:
                     False, wenn der Render abgebrochen werden soll.
                 """
+                # Folgen-Look: Marke, Zitat, Buehne und Karte statt Quote-Overlay
+                if ep_text is not None:
+                    try:
+                        arr = np.frombuffer(pixels, dtype=np.uint8).reshape(
+                            (self.height, self.width, 3)
+                        )
+                        pixels = ep_text.apply(arr, frame_time).tobytes()
+                    except Exception as e:
+                        logger.warning(
+                            f"[GPU] Folgen-Text-Fehler bei Frame {frame_i} "
+                            f"({frame_time:.2f}s): {e}"
+                        )
                 # PIL-basierte Quote-Overlays auf das Frame-Array anwenden
-                if quotes and quote_config and quote_config.enabled:
+                elif quotes and quote_config and quote_config.enabled:
                     try:
                         arr = np.frombuffer(pixels, dtype=np.uint8).copy().reshape(
                             (self.height, self.width, 3)
@@ -597,6 +634,13 @@ class GPUBatchRenderer:
                     if _DEBUG and i == 0:
                         self._save_debug(self.post_fbo, "debug_step4_after_postprocess.png")
                     target_fbo = self.post_fbo
+                    if ep_timeline is not None:
+                        self._episode_compositor.render(
+                            self.post_fbo.color_attachments[0],
+                            ep_timeline.state_at(time),
+                            self._episode_fbo,
+                        )
+                        target_fbo = self._episode_fbo
                     if _DEBUG and i == 0:
                         self._save_debug(target_fbo, "debug_step6_final.png")
 
@@ -1681,9 +1725,23 @@ class GPUBatchRenderer:
                 f"Audio-Muxing fehlgeschlagen: {result.stderr}"
             )
 
+    def _release_episode(self):
+        """Compositor und Ziel-FBO des Folgen-Looks freigeben (falls vorhanden)."""
+        comp = getattr(self, "_episode_compositor", None)
+        if comp is not None:
+            comp.release()
+        fbo = getattr(self, "_episode_fbo", None)
+        if fbo is not None:
+            for tex in fbo.color_attachments:
+                tex.release()
+            fbo.release()
+        self._episode_compositor = None
+        self._episode_fbo = None
+
     def release(self):
         """Gibt GPU-Ressourcen explizit frei."""
         try:
+            self._release_episode()
             if hasattr(self, "post_fbo") and self.post_fbo:
                 self.post_fbo.release()
                 self.post_fbo = None

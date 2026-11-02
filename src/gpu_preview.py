@@ -13,6 +13,9 @@ from PIL import Image
 
 from .analyzer import AudioAnalyzer
 from .app_logging import get_logger
+from .episode.compositor import EpisodeCompositor
+from .episode.text import EpisodeTextRenderer
+from .episode.timeline import EpisodeTimeline
 from .gpu_renderer import GPUPreviewRenderer
 from .gpu_visualizers import get_visualizer
 from .gpu_visualizers.base import hex_to_rgb as _hex_to_rgb
@@ -48,6 +51,7 @@ def render_gpu_preview(
     features: AudioFeatures = None,
     cancel_check=None,
     timeline=None,
+    episode=None,
 ):
     """
     Rendert ein einzelnes Frame fuer die Live-Vorschau.
@@ -73,12 +77,20 @@ def render_gpu_preview(
         cancel_check: Optionales Callable; gibt es True zurueck, wird die
             Vorschau abgebrochen (Rueckgabe None). Erlaubt kooperativen
             Abbruch verworfener Previews aus dem Worker-Thread.
+        episode: Optionale EpisodeRenderSpec; dann derselbe Folgen-Look wie
+            im Export (Hintergrund und quotes werden ignoriert).
 
     Returns:
         PIL.Image oder None bei Fehler/Abbruch
     """
     def _cancelled():
         return cancel_check is not None and cancel_check()
+
+    if episode is not None:
+        # Wie im Export: Szene schwarz, Bild kommt nach dem Postprocess
+        background_image = None
+        background_color = "#000000"
+        quotes = None
 
     temp_bg_frame = None
     bg_texture = None
@@ -226,11 +238,32 @@ def render_gpu_preview(
         if _cancelled():
             return None
 
-        pixels = renderer.post_fbo.read(components=3)
+        ep_timeline = None
+        if episode is not None:
+            ep_timeline = EpisodeTimeline(episode.chapters, episode.quotes,
+                                          features.duration, episode.config)
+            # Freigabe uebernimmt renderer.release() im finally
+            renderer._episode_compositor = EpisodeCompositor(
+                renderer.ctx, width, height, episode.image_path)
+            renderer._episode_fbo = renderer.ctx.framebuffer(
+                color_attachments=[renderer.ctx.texture((width, height), 4)])
+            renderer._episode_compositor.render(
+                renderer.post_fbo.color_attachments[0],
+                ep_timeline.state_at(preview_time),
+                renderer._episode_fbo,
+            )
+            pixels = renderer._episode_fbo.read(components=3)
+        else:
+            pixels = renderer.post_fbo.read(components=3)
 
         # Zu PIL Image konvertieren
         img_array = np.frombuffer(pixels, dtype=np.uint8)
         img_array = img_array.reshape((height, width, 3))
+
+        if ep_timeline is not None:
+            text = EpisodeTextRenderer(ep_timeline, width, height, episode.title,
+                                       episode.number, episode.config)
+            img_array = text.apply(img_array, preview_time)
 
         # Quote-Overlays mit PIL anwenden (nach GPU-Rendering)
         if quotes and quote_config and quote_config.enabled:
