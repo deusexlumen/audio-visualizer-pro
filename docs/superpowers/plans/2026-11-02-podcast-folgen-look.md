@@ -38,6 +38,7 @@
 **Files:**
 - Modify: `src/types.py` (`Quote`, neu `Chapter`, `ProjectConfig`)
 - Modify: `config/schemas.py` (`QuoteSchema`, neu `ChapterSchema`, Projekt-Schema)
+- Modify: `src/gui/quote_editor.py:374-380` (`result_quote`), `src/beat_sync.py:72`, `src/quote_refiner.py:111`: Zitate per `quote.model_copy(update={...})` statt `Quote(...)` neu bauen, damit `kind` und `accent_word` erhalten bleiben
 - Test: `tests/test_episode_model.py`
 
 **Interfaces:**
@@ -69,6 +70,10 @@ def test_schema_accepts_episode_fields(tmp_path):
 
 def test_schema_rejects_negative_chapter_start(tmp_path):
     # chapters=[{"start": -1, "title": "x"}] -> ValidationError
+
+def test_stage_survives_editor_beat_sync_and_refiner(qtbot):
+    # Bühnen-Zitat durch QuoteEditorDialog.result_quote, sync_quotes_to_beats, refine_quote_timestamps
+    assert all(r.kind == "stage" and r.accent_word == "stört" for r in results)
 ```
 
 - [ ] **Step 2: Run** `pytest tests/test_episode_model.py -v` → FAIL (`kind` unbekannt / `Chapter` fehlt).
@@ -348,9 +353,11 @@ def test_no_text_outside_windows_except_brand():
 **Interfaces:**
 - Produces: Visualizer `voice_line` (Skelett aus `AGENTS.md`), `PARAMS`: `y_position (0.07, 0.0, 0.5)`, `thickness_px (2.0, 1.0, 8.0)`, `width (0.88, 0.2, 1.0)`, `intensity (1.0, 0.0, 3.0)`. Farbe `colors["primary"]`, Standard `#F2B866`. Treiber `voice_band`, Rückfall `rms`. Horizontal zur Mitte hin am hellsten, an den Enden ausgeblendet; sonst schwarz.
 
-- [ ] **Step 1: Write the failing test** `test_voice_line_brighter_with_voice` (Frame mit `voice_band=0.9` heller als mit `0.0`) und `test_voice_line_only_near_bottom` (Zeilen über 30 % Höhe bleiben schwarz).
+`voice_line` darf nicht in den klassischen oder Musik-Pfad rutschen: neue Konstante `AUTO_EXCLUDED_VISUALIZERS = {"voice_line"}` in `src/gpu_visualizers/__init__.py`. Die KI-Kandidatenliste für `generate_scene_timeline` (`src/gui/workers.py:353`) filtert sie heraus. `list_visualizers()` bleibt unverändert (die Auswahlliste im Parameter-Reiter darf ihn zeigen).
+
+- [ ] **Step 1: Write the failing tests** `test_voice_line_brighter_with_voice` (Frame mit `voice_band=0.9` heller als mit `0.0`), `test_voice_line_only_near_bottom` (Zeilen über 30 % Höhe bleiben schwarz), `test_voice_line_not_offered_to_auto` (SmartMatcher-Empfehlung für Sprach- und Musik-Features ist nie `voice_line`; die Liste an `generate_scene_timeline` enthält ihn nicht).
 - [ ] **Step 2: Run** `pytest tests/test_voice_line.py -v` → FAIL.
-- [ ] **Step 3: Implement** den Visualizer.
+- [ ] **Step 3: Implement** den Visualizer und den Filter. Vorher `grep -rn "list_visualizers\|VISUALIZER_MAP" src tools main.py` laufen lassen und jeden Verbraucher prüfen.
 - [ ] **Step 4: Run** `pytest tests/test_voice_line.py tests/test_visuals.py -v` → PASS.
 - [ ] **Step 5: Commit** `feat(folge): Visualizer voice_line als Stimm-Lichtstrich`
 
@@ -449,6 +456,7 @@ def test_plan_prompt_names_boldest_claims(monkeypatch):
   - `AppState`: neue Schlüssel `look="classic"`, `chapters: list[Chapter]=[]`, `episode_title=""`, `episode_number=""`; `to_dict` schreibt `kind`/`accent_word` je Zitat und `chapters`; `apply_dict`/`from_dict` setzen fehlende Schlüssel auf Standard (Muster wie `SPIRAL_STATE_KEYS`).
   - `EpisodePlanWorker(gemini, audio_path, audio_duration, parent=None)` mit Signalen `plan_ready(object)`, `plan_error(str, str)`; Timeout 300 s.
   - `RenderWorker` reicht `config.get("episode")` als `episode=` durch.
+  - `PreviewWorker` reicht ebenso `episode=` an `render_gpu_preview` durch, damit ▶ in der Prüfliste den Folgen-Look zeigt.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -460,6 +468,7 @@ def test_old_project_dict_loads_defaults():  # dict ohne neue Schlüssel
 def test_state_roundtrip_episode():  # kind, accent_word, chapters bleiben erhalten
 def test_episode_plan_worker_emits_plan(qtbot):  # gemini gemockt
 def test_render_worker_passes_episode(monkeypatch):
+def test_preview_worker_passes_episode(monkeypatch):
 ```
 
 - [ ] **Step 2: Run** `pytest tests/test_episode_cli.py tests/test_gui_state.py tests/test_gui_workers.py -v` → FAIL.
@@ -480,9 +489,9 @@ def test_render_worker_passes_episode(monkeypatch):
 - Consumes: `AppState`-Felder (Task 10), `EpisodePlanWorker` (Task 10), `QuoteEditorDialog` (`src/gui/quote_editor.py`), `image_too_small`, `cover_crop` (Task 5), `EpisodeTimeline.card_conflicts` (Task 4), `youtube_chapter_text`/`write_chapter_file` (Task 3).
 - Produces: `class EpisodePanel(QWidget)` mit `__init__(state, parent=None)`, Signalen `plan_requested()` und `preview_requested(float)`, Methoden `set_plan_error(msg: str)` und `refresh()`.
 
-Inhalt des Reiters: Schalter „Folgen-Look verwenden“ (↔ `state.look`); Felder Folgentitel (leer → `default_episode_title(state.audio_path)` beim Laden des Audios) und Folgennummer; Knopf „KI vorbereiten“; Knöpfe „+ Kapitel“ und „+ Zitat“ (neue Zeile an der aktuellen Abspielzeit, auch nach KI-Fehler nutzbar); Hinweiszeile (Bild zu klein; KI-Fehler). Tabelle nach Zeit: Art (Kapitel / Bühne / Zitat; bei Zitat-Zeilen umschaltbar), Zeit, Text (direkt editierbar), Schlüsselwort (nur Bühne, Auswahl aus Wörtern des Satzes), ▶ (spielt Audio ab dieser Zeit und sendet `preview_requested(t)`), ✕ (löschen). Doppelklick auf die Zeit öffnet `QuoteEditorDialog` (Zitat/Bühne) bzw. ein Zahlenfeld (Kapitel). Konfliktzeilen markiert, Tooltip „Fällt in eine Kapitel-Karte“. Jede Änderung schreibt in `state`.
+Inhalt des Reiters: Schalter „Folgen-Look verwenden“ (↔ `state.look`); Felder Folgentitel (leer → `default_episode_title(state.audio_path)` beim Laden des Audios) und Folgennummer; Knopf „KI vorbereiten“; Knöpfe „+ Kapitel“ und „+ Zitat“ (neue Zeile an der aktuellen Abspielzeit, auch nach KI-Fehler nutzbar); Hinweiszeile (Bild zu klein, mit dem Tipp „In ChatGPT ein Querformat anfordern, z. B. 1536×1024; Wichtiges nicht an den oberen und unteren Rand“; KI-Fehler). Tabelle nach Zeit: Art (Kapitel / Bühne / Zitat; bei Zitat-Zeilen umschaltbar), Zeit, Text (direkt editierbar), Schlüsselwort (nur Bühne, Auswahl aus Wörtern des Satzes), ▶ (spielt Audio ab dieser Zeit und sendet `preview_requested(t)`), ✕ (löschen). Doppelklick auf die Zeit öffnet `QuoteEditorDialog` (Zitat/Bühne) bzw. ein Zahlenfeld (Kapitel). Konfliktzeilen markiert, Tooltip „Fällt in eine Kapitel-Karte“. Jede Änderung schreibt in `state`.
 
-`main_window.py`: Reiter nach „Parameter“; `plan_requested` → `EpisodePlanWorker`; Ergebnis setzt `state.chapters`, `state.quotes`, `state.look = "episode"`; `preview_requested(t)` → bestehende Vorschau bei `t / duration`; Render-Config bekommt `episode` bei `state.look == "episode"` (ohne Bild: Fehlermeldung, kein Render); nach `_finish_render` im Folgen-Modus `write_chapter_file` (Intro-Versatz über `get_media_info(intro)["duration"]` und `main_start_offset`, falls Intro aktiv) und ein Dialog mit dem Text, den Warnungen und einem Knopf „Kopieren“.
+`main_window.py`: Reiter nach „Parameter“; `plan_requested` → `EpisodePlanWorker`; Ergebnis setzt `state.chapters`, `state.quotes`, `state.look = "episode"`; `preview_requested(t)` → bestehende Vorschau bei `t / duration`; Render-Config bekommt `episode` bei `state.look == "episode"` (ohne Bild: Fehlermeldung, kein Render); `spec.quotes` kommt immer aus `state.quotes`, unabhängig von `quotes_enabled` (Standard `False`); im Folgen-Modus sind „Extrahieren“ und „Alle einrasten“ im alten Reiter „Zitate“ gesperrt, weil sie `state.quotes` überschreiben und die Bühnen-Sätze löschen würden; nach `_finish_render` im Folgen-Modus `write_chapter_file` (Intro-Versatz über `get_media_info(intro)["duration"]` und `main_start_offset`, falls Intro aktiv) und ein Dialog mit dem Text, den Warnungen und einem Knopf „Kopieren“.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -496,6 +505,10 @@ def test_panel_warns_small_image(qtbot, state, tmp_path):  # 1024x1024-Bild
 def test_panel_shows_error_keeps_title(qtbot, state):
 def test_panel_add_rows_by_hand(qtbot, state):  # „+ Kapitel“ und „+ Zitat“ legen Einträge in state an
 def test_main_window_render_config_has_episode(qtbot, monkeypatch):
+    # state.quotes_enabled = False, look = "episode"
+    assert config["episode"].quotes  # nicht leer
+def test_panel_edit_time_keeps_stage(qtbot, state):  # Zeit über den Dialog ändern -> kind/accent_word bleiben
+def test_old_quotes_tab_locked_in_episode_mode(qtbot, state):
 def test_main_window_writes_chapter_file_after_render(qtbot, monkeypatch, tmp_path):
 ```
 
