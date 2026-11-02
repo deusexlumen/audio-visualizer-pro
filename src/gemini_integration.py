@@ -580,6 +580,14 @@ class GeminiIntegration:
             None, use_cache, features
         )
 
+    def plan_episode_async(self, audio_path: str, audio_duration: float = None,
+                           use_cache: bool = True,
+                           progress_callback=None) -> concurrent.futures.Future:
+        """Asynchroner Folgen-Plan. Gibt ein Future[EpisodePlan] zurueck."""
+        return self._executor.submit(
+            self.plan_episode, audio_path, audio_duration, use_cache, progress_callback
+        )
+
     def optimize_all_settings_async(self, visualizer_type: str, current_params: dict,
                                      audio_features: dict, colors: dict,
                                      param_specs: dict = None,
@@ -922,6 +930,56 @@ class GeminiIntegration:
             quotes.append(Quote(text=text, start_time=start, end_time=end,
                                 confidence=confidence))
         return quotes
+
+    def plan_episode(self, audio_path: str, audio_duration: float = None,
+                     use_cache: bool = True, progress_callback=None):
+        """Bereitet eine Folge vor: Kapitel, Buehnen-Saetze, Zitate.
+
+        Zeiten entstehen lokal aus dem (gecachten) Segment-Transkript; die
+        KI-Antwort selbst wird ebenfalls gecacht.
+        """
+        from .episode.plan import build_episode_plan
+
+        audio_path = str(audio_path)
+        segments = self.transcribe_segments(
+            audio_path, audio_duration, use_cache=use_cache,
+            progress_callback=progress_callback,
+        )
+        if not segments:
+            raise RuntimeError("Kein Transkript erhalten — Folge kann nicht vorbereitet werden.")
+        duration = audio_duration or max(float(seg.get("end", 0.0)) for seg in segments)
+
+        sig = f"{self.model}|{PROMPT_VERSION}|episode"
+        raw = load_json_result(audio_path, "episode_plan", sig) if use_cache else None
+        if raw is None:
+            if progress_callback:
+                progress_callback("KI waehlt Kapitel, Buehnen-Saetze und Zitate...")
+            raw = self._select_episode_plan(segments, duration)
+            if use_cache and raw:
+                save_json_result(audio_path, "episode_plan", sig, raw)
+        return build_episode_plan(raw, segments, duration)
+
+    def _select_episode_plan(self, segments: List[dict], duration: float) -> dict:
+        """Ein Gemini-Aufruf auf dem Transkript (ohne Audio, ohne Sekunden)."""
+        from .episode.config import EpisodeLookConfig
+        from .episode.plan import EPISODE_PLAN_SCHEMA, episode_plan_prompt
+
+        cfg = EpisodeLookConfig()
+        n_quotes = max(1, round(duration / cfg.quote_interval))
+        prompt = episode_plan_prompt(segments, cfg.min_chapters, cfg.max_chapters, n_quotes)
+        response = self._call_gemini_with_retry(
+            lambda: self.client.models.generate_content(
+                model=self.model,
+                contents=[prompt],
+                config={
+                    "response_mime_type": "application/json",
+                    "response_schema": EPISODE_PLAN_SCHEMA,
+                    "temperature": 0.0,
+                },
+            )
+        )
+        result = self._parse_json_response(response.text)
+        return result if isinstance(result, dict) else {}
 
     @classmethod
     def _window_is_plausible(cls, text: str, start: float, end: float) -> bool:
