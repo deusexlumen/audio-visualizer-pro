@@ -343,14 +343,14 @@ class FullAIWorker(QThread):
             if self.use_gemini and self.gemini is not None and segments:
                 try:
                     self.progress.emit("KI verfeinert die Szenen...")
-                    from src.gpu_visualizers import list_visualizers
+                    from src.gpu_visualizers import auto_visualizer_candidates
                     stats = [
                         {"start": round(s.start, 2), "end": round(s.end, 2), **s.stats}
                         for s in segments
                     ]
                     refined = self.gemini.generate_scene_timeline(
                         segments_stats=stats,
-                        available_visualizers=list_visualizers(),
+                        available_visualizers=auto_visualizer_candidates(),
                         mode=getattr(self.features, "mode", "music"),
                     )
                     for item in refined:

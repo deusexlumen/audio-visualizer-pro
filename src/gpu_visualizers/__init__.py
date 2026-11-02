@@ -256,5 +256,15 @@ def list_visualizers():
     return list(VISUALIZER_MAP.keys())
 
 
+# Visualizer, die nur fuer einen bestimmten Look gedacht sind und nie
+# automatisch (SmartMatcher, KI-Szenen-Timeline) vorgeschlagen werden.
+AUTO_EXCLUDED_VISUALIZERS = frozenset({"voice_line"})
+
+
+def auto_visualizer_candidates():
+    """Visualizer, die Auto-Modus und KI vorschlagen duerfen."""
+    return [n for n in list_visualizers() if n not in AUTO_EXCLUDED_VISUALIZERS]
+
+
 # Registry initial befuellen
 refresh_registry()
