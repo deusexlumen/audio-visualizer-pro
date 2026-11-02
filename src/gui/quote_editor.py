@@ -19,7 +19,6 @@ from PyQt6.QtWidgets import (
 from src.app_logging import get_logger
 from src.gui.styles import Theme
 from src.quote_timing import speech_segments, snap_to_speech
-from src.types import Quote
 
 logger = get_logger(__name__)
 
@@ -372,9 +371,9 @@ class QuoteEditorDialog(QDialog):
     # --- Ergebnis ---
 
     def result_quote(self):
-        return Quote(
-            text=self.txt.toPlainText().strip() or self._quote.text,
-            start_time=self.spin_start.value(),
-            end_time=self.spin_end.value(),
-            confidence=self._quote.confidence,
-        )
+        # model_copy erhaelt kind/accent_word (Folgen-Look)
+        return self._quote.model_copy(update={
+            "text": self.txt.toPlainText().strip() or self._quote.text,
+            "start_time": self.spin_start.value(),
+            "end_time": self.spin_end.value(),
+        })

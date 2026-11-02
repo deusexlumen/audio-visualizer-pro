@@ -59,12 +59,20 @@ class QuoteSchema(BaseModel):
     start_time: float = Field(..., ge=0.0)
     end_time: float = Field(..., ge=0.0)
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    kind: Literal["quote", "stage"] = "quote"
+    accent_word: Optional[str] = None
 
     @model_validator(mode="after")
     def check_end_after_start(self):
         if self.end_time < self.start_time:
             self.end_time = self.start_time + 0.5
         return self
+
+
+class ChapterSchema(BaseModel):
+    """Schema fuer ein Kapitel einer Podcast-Folge."""
+    start: float = Field(..., ge=0.0)
+    title: str = Field(..., min_length=1)
 
 
 class QuoteOverlayConfigSchema(BaseModel):
@@ -336,6 +344,12 @@ class ProjectConfigSchema(BaseModel):
     # Optionale Szenen-Timeline. Ist sie gesetzt, ueberschreibt sie beim
     # Rendern den einzelnen visual.type (Visualizer-Wechsel ueber die Zeit).
     timeline: Optional[TimelineSchema] = None
+
+    # Folgen-Look (Podcast); "classic" = bisheriges Verhalten
+    look: Literal["classic", "episode"] = "classic"
+    chapters: List[ChapterSchema] = Field(default_factory=list)
+    episode_title: Optional[str] = None
+    episode_number: Optional[str] = None
 
     @model_validator(mode="after")
     def flatten_background(self):

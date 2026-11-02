@@ -69,12 +69,11 @@ def sync_quotes_to_beats(quotes: List[Quote], beat_frames: np.ndarray, fps: int,
         
         # Nur verschieben wenn nahe genug
         if abs(nearest_beat_time - quote.start_time) <= shift_threshold:
-            new_quote = Quote(
-                text=quote.text,
-                start_time=nearest_beat_time,
-                end_time=max(nearest_beat_time + 1.0, quote.end_time),
-                confidence=quote.confidence
-            )
+            # model_copy erhaelt kind/accent_word (Folgen-Look)
+            new_quote = quote.model_copy(update={
+                "start_time": nearest_beat_time,
+                "end_time": max(nearest_beat_time + 1.0, quote.end_time),
+            })
             synced.append(new_quote)
         else:
             synced.append(quote)

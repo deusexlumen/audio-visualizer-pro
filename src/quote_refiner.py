@@ -108,11 +108,10 @@ def refine_quote_timestamps(
         new_start = max(0.0, min(new_start, duration - 1.0))
         new_end = max(new_start + 0.5, min(new_end, duration))
 
-        refined.append(Quote(
-            text=q.text,
-            start_time=round(new_start, 2),
-            end_time=round(new_end, 2),
-            confidence=q.confidence,
-        ))
+        # model_copy erhaelt kind/accent_word (Folgen-Look)
+        refined.append(q.model_copy(update={
+            "start_time": round(new_start, 2),
+            "end_time": round(new_end, 2),
+        }))
 
     return refined

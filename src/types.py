@@ -14,6 +14,16 @@ class Quote(BaseModel):
     start_time: float
     end_time: float
     confidence: float = 1.0
+    # Folgen-Look: "stage" = Zitat-Buehne (Satz gross in der Bildmitte)
+    kind: Literal["quote", "stage"] = "quote"
+    # Schluesselwort, das auf der Buehne die Akzentfarbe traegt
+    accent_word: Optional[str] = None
+
+
+class Chapter(BaseModel):
+    """Kapitel einer Podcast-Folge (Start in Sekunden im Hauptvideo)."""
+    start: float
+    title: str
 
 
 class AudioFeatures(BaseModel):
@@ -105,6 +115,12 @@ class ProjectConfig(BaseModel):
 
     intro_video: Optional[str] = None
     intro_fade_duration: float = 1.0
+
+    # Folgen-Look (Podcast): "classic" laesst alles wie bisher
+    look: Literal["classic", "episode"] = "classic"
+    chapters: List[Chapter] = Field(default_factory=list)
+    episode_title: Optional[str] = None
+    episode_number: Optional[str] = None
     
     turbo_mode: bool = False
     frame_skip: int = 1
