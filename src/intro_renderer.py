@@ -102,6 +102,24 @@ def get_media_info(path: str) -> dict:
     }
 
 
+def _effective_fade(intro_duration: float, fade_duration: float) -> float:
+    """Fade darf nicht laenger als das Intro sein."""
+    if fade_duration >= intro_duration:
+        return max(0.1, intro_duration - 0.1)
+    return fade_duration
+
+
+def main_start_offset(intro_duration: float, fade_duration: float) -> float:
+    """Zeitpunkt in der Enddatei, an dem das Hauptvideo beginnt.
+
+    Wird auch fuer den Kapiteltext gebraucht: alle Kapitelzeiten verschieben
+    sich um diesen Wert.
+    """
+    offset = intro_duration - _effective_fade(intro_duration, fade_duration)
+    # Nie 0 (verhindert leere xfade)
+    return offset if offset > 0 else 0.01
+
+
 def _build_filter_complex(
     intro_info: dict,
     main_info: dict,
@@ -119,16 +137,9 @@ def _build_filter_complex(
 
     intro_dur = intro_info["duration"]
     main_dur = main_info["duration"]
-    if fade_duration >= intro_dur:
-        fade_duration = max(0.1, intro_dur - 0.1)
-
-    offset = intro_dur - fade_duration
+    fade_duration = _effective_fade(intro_dur, fade_duration)
+    offset = main_start_offset(intro_dur, fade_duration)
     delay_ms = int(offset * 1000)
-
-    # Sicherstellen, dass offset nicht 0 wird (verhindert leere xfade)
-    if offset <= 0:
-        offset = 0.01
-        delay_ms = 10
 
     intro_has_audio = intro_info.get("has_audio", False)
     main_has_audio = main_info.get("has_audio", False)
