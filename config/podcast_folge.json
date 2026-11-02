@@ -1,0 +1,31 @@
+{
+  "description": "Podcast-Folge im Kino-Look: ein Bild, Lichtstrich der Stimme, Zitate, Buehne und Kapitel-Karten",
+  "audio_file": "input.mp3",
+  "output_file": "podcast_folge.mp4",
+  "look": "episode",
+  "visual": {
+    "type": "voice_line",
+    "resolution": [
+      1920,
+      1080
+    ],
+    "fps": 30,
+    "colors": {
+      "primary": "#F2B866",
+      "secondary": "#F2B866",
+      "background": "#000000"
+    },
+    "params": {
+      "line_color": "#F2B866"
+    }
+  },
+  "postprocess": {
+    "contrast": 1.0,
+    "saturation": 1.0,
+    "film_grain": 0.0,
+    "grain": 0.0,
+    "vignette": 0.0,
+    "chromatic_aberration": 0.0
+  },
+  "background_color": "#000000"
+}

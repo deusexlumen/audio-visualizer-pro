@@ -54,6 +54,7 @@ class PreviewWorker(QThread):
         quotes=None,
         quote_config=None,
         timeline=None,
+        episode=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -61,6 +62,7 @@ class PreviewWorker(QThread):
         self.visualizer_type = visualizer_type
         self.params = params
         self.timeline = timeline
+        self.episode = episode
         self.width = width
         self.height = height
         self.fps = fps
@@ -104,6 +106,7 @@ class PreviewWorker(QThread):
                 quote_config=self.quote_config,
                 cancel_check=self.isInterruptionRequested,
                 timeline=self.timeline,
+                episode=self.episode,
             )
             if img is not None:
                 self.preview_ready.emit(img)
@@ -169,6 +172,7 @@ class RenderWorker(QThread):
                 progress_callback=_progress,
                 cancel_event=self._cancel_event,
                 timeline=self.config.get("timeline"),
+                episode=self.config.get("episode"),
             )
 
             if self._cancel_event.is_set():
@@ -312,6 +316,30 @@ class QuoteExtractWorker(QThread):
             self.quotes_ready.emit(quotes)
         except Exception as e:
             self.quotes_error.emit(str(e), traceback.format_exc())
+
+
+class EpisodePlanWorker(QThread):
+    """KI-Plan einer Folge (Kapitel, Buehnen-Saetze, Zitate) im Hintergrund."""
+
+    plan_ready = pyqtSignal(object)   # src.episode.plan.EpisodePlan
+    plan_error = pyqtSignal(str, str)
+
+    def __init__(self, gemini, audio_path: str, audio_duration: float | None = None,
+                 parent=None):
+        super().__init__(parent)
+        self.gemini = gemini
+        self.audio_path = audio_path
+        self.audio_duration = audio_duration
+
+    def run(self):
+        try:
+            future = self.gemini.plan_episode_async(
+                audio_path=self.audio_path, audio_duration=self.audio_duration,
+            )
+            # Transkription langer Folgen braucht Zeit (wie TranscribeWorker)
+            self.plan_ready.emit(future.result(timeout=300))
+        except Exception as e:
+            self.plan_error.emit(str(e), traceback.format_exc())
 
 
 class FullAIWorker(QThread):

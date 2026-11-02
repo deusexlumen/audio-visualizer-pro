@@ -106,3 +106,34 @@ def test_apply_old_project_switches_running_spiral_off():
     assert s.pp_spiral_enabled is False
     assert s.pp_spiral_ratio == SpiralSettings().ratio
     assert not SpiralSettings.from_postprocess(s.get_postprocess()).is_active
+
+
+def test_old_project_dict_loads_defaults():
+    from src.types import Chapter
+    s = AppState.from_dict({"version": 1, "audio_path": "a.wav"})
+    assert s.look == "classic" and s.chapters == [] and s.episode_title == ""
+    assert s.episode_number == ""
+    live = AppState()
+    live.look = "episode"
+    live.chapters = [Chapter(start=0.0, title="X")]
+    live.apply_dict({"version": 1})
+    assert live.look == "classic" and live.chapters == []
+
+
+def test_state_roundtrip_episode():
+    from src.types import Chapter, Quote
+    s = AppState()
+    s.look = "episode"
+    s.episode_title = "Folge X"
+    s.episode_number = "12"
+    s.chapters = [Chapter(start=0.0, title="Einstieg"), Chapter(start=95.5, title="Mitte")]
+    s.quotes = [Quote(text="Der Mensch stört", start_time=1, end_time=2,
+                      kind="stage", accent_word="stört")]
+    data = s.to_dict()
+    for restored in (AppState.from_dict(data), AppState()):
+        if not restored.chapters:
+            restored.apply_dict(data)
+        assert restored.look == "episode" and restored.episode_number == "12"
+        assert restored.episode_title == "Folge X"
+        assert [(c.start, c.title) for c in restored.chapters] == [(0.0, "Einstieg"), (95.5, "Mitte")]
+        assert restored.quotes[0].kind == "stage" and restored.quotes[0].accent_word == "stört"

@@ -201,3 +201,48 @@ def test_render_worker_emits_finished(qtbot):
 
     mock_renderer.render.assert_called_once()
     mock_renderer.release.assert_called_once()
+
+
+def test_episode_plan_worker_emits_plan(qtbot):
+    from src.episode.plan import EpisodePlan
+    from src.gui.workers import EpisodePlanWorker
+    app = QCoreApplication.instance() or QCoreApplication([])
+    plan = EpisodePlan()
+    gemini = MagicMock()
+    gemini.plan_episode_async.return_value = _mock_future(plan)
+    worker = EpisodePlanWorker(gemini, "/tmp/a.wav", 60.0)
+    with qtbot.waitSignal(worker.plan_ready, timeout=1000) as blocker:
+        worker.start()
+    qtbot.waitUntil(lambda: not worker.isRunning(), timeout=1000)
+    assert blocker.args == [plan]
+    gemini.plan_episode_async.assert_called_once_with(audio_path="/tmp/a.wav", audio_duration=60.0)
+    gemini.plan_episode_async.return_value.result.assert_called_once_with(timeout=300)
+
+
+def test_render_worker_passes_episode(qtbot):
+    app = QCoreApplication.instance() or QCoreApplication([])
+    spec = object()
+    config = {"audio_path": "/tmp/test.wav", "visualizer_type": "voice_line",
+              "output_path": "/tmp/output.mp4", "episode": spec}
+    mock_renderer = MagicMock()
+    with patch("src.gpu_renderer.GPUBatchRenderer", return_value=mock_renderer):
+        worker = RenderWorker(config)
+        with qtbot.waitSignal(worker.render_finished, timeout=1000):
+            worker.start()
+        qtbot.waitUntil(lambda: not worker.isRunning(), timeout=1000)
+    assert mock_renderer.render.call_args.kwargs["episode"] is spec
+
+
+def test_preview_worker_passes_episode(qtbot):
+    app = QCoreApplication.instance() or QCoreApplication([])
+    spec = object()
+    worker = PreviewWorker(audio_path="/tmp/test.wav", visualizer_type="voice_line",
+                           width=320, height=180, fps=30, preview_time_percent=0.3,
+                           episode=spec)
+    with patch("src.gpu_preview.render_gpu_preview") as mock_render:
+        from PIL import Image
+        mock_render.return_value = Image.new("RGB", (320, 180))
+        with qtbot.waitSignal(worker.preview_ready, timeout=1000):
+            worker.start()
+        qtbot.waitUntil(lambda: not worker.isRunning(), timeout=1000)
+    assert mock_render.call_args.kwargs["episode"] is spec

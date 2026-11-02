@@ -2,7 +2,7 @@
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from src.quote_overlay import QuoteOverlayConfig
-from src.types import Quote
+from src.types import Chapter, Quote
 from src.spiral_zoom import SpiralSettings
 
 # Spiral-Zoom-Regler; im postprocess-Dict heissen sie ohne "pp_"-Praefix
@@ -10,6 +10,31 @@ SPIRAL_STATE_KEYS = (
     "pp_spiral_enabled", "pp_spiral_arms", "pp_spiral_ratio", "pp_spiral_rotation",
     "pp_spiral_speed", "pp_spiral_energy", "pp_spiral_beat", "pp_spiral_mix",
 )
+
+# Folgen-Look: Standardwerte, auf die alte Projekte ohne diese Schluessel fallen
+EPISODE_STATE_DEFAULTS = {
+    "look": "classic",
+    "chapters": [],
+    "episode_title": "",
+    "episode_number": "",
+}
+
+
+def _quote_from_dict(q: dict) -> Quote:
+    kind = q.get("kind", "quote")
+    return Quote(
+        text=q.get("text", ""),
+        start_time=float(q.get("start_time", 0.0)),
+        end_time=float(q.get("end_time", 0.0)),
+        confidence=float(q.get("confidence", 1.0)),
+        kind=kind if kind in ("quote", "stage") else "quote",
+        accent_word=q.get("accent_word"),
+    )
+
+
+def _chapters_from(value) -> list:
+    return [Chapter(start=float(c.get("start", 0.0)), title=str(c.get("title", "")))
+            for c in value if isinstance(c, dict) and c.get("title")]
 
 
 class AppState(QObject):
@@ -30,7 +55,7 @@ class AppState(QObject):
         "status_message", "status_kind",
         "ki_prompt", "ki_suggested_colors", "ki_status", "ki_error",
         "ki_optimizing", "quotes_extracting",
-    }) | frozenset(SPIRAL_STATE_KEYS)
+    }) | frozenset(SPIRAL_STATE_KEYS) | frozenset(EPISODE_STATE_DEFAULTS)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -98,6 +123,12 @@ class AppState(QObject):
 
         self.quotes: list = []
         self.quotes_enabled: bool = False
+
+        # Folgen-Look ("classic" = bisheriger Look)
+        self.look: str = "classic"
+        self.chapters: list = []
+        self.episode_title: str = ""
+        self.episode_number: str = ""
 
         # Optionale Szenen-Timeline (src.types.Timeline oder None). Ist sie
         # gesetzt, wechselt der Renderer die Visualizer ueber die Zeit.
@@ -205,9 +236,14 @@ class AppState(QObject):
             "ki_prompt": self.ki_prompt,
             "ki_suggested_colors": self.ki_suggested_colors,
             "quotes": [
-                {"text": q.text, "start_time": q.start_time, "end_time": q.end_time, "confidence": q.confidence}
+                {"text": q.text, "start_time": q.start_time, "end_time": q.end_time,
+                 "confidence": q.confidence, "kind": q.kind, "accent_word": q.accent_word}
                 for q in self.quotes
             ],
+            "look": self.look,
+            "chapters": [{"start": c.start, "title": c.title} for c in self.chapters],
+            "episode_title": self.episode_title,
+            "episode_number": self.episode_number,
             "quotes_enabled": self.quotes_enabled,
             "quote_config": {
                 "enabled": qc.enabled,
@@ -237,15 +273,9 @@ class AppState(QObject):
             elif key == "resolution" and isinstance(value, list):
                 self.resolution = tuple(value)
             elif key == "quotes" and isinstance(value, list):
-                self.quotes = [
-                    Quote(
-                        text=q.get("text", ""),
-                        start_time=float(q.get("start_time", 0.0)),
-                        end_time=float(q.get("end_time", 0.0)),
-                        confidence=float(q.get("confidence", 1.0)),
-                    )
-                    for q in value
-                ]
+                self.quotes = [_quote_from_dict(q) for q in value]
+            elif key == "chapters" and isinstance(value, list):
+                self.chapters = _chapters_from(value)
             elif key in self._STATE_KEYS:
                 setattr(self, key, value)
 
@@ -256,6 +286,10 @@ class AppState(QObject):
         for key in SPIRAL_STATE_KEYS:
             if key not in data:
                 setattr(self, key, getattr(spiral_defaults, key[len("pp_spiral_"):]))
+        # Dasselbe fuer den Folgen-Look: alte Projekte bleiben klassisch
+        for key, default in EPISODE_STATE_DEFAULTS.items():
+            if key not in data:
+                setattr(self, key, list(default) if isinstance(default, list) else default)
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -267,15 +301,9 @@ class AppState(QObject):
             elif key == "resolution" and isinstance(value, list):
                 s.resolution = tuple(value)
             elif key == "quotes" and isinstance(value, list):
-                s.quotes = [
-                    Quote(
-                        text=q.get("text", ""),
-                        start_time=float(q.get("start_time", 0.0)),
-                        end_time=float(q.get("end_time", 0.0)),
-                        confidence=float(q.get("confidence", 1.0)),
-                    )
-                    for q in value
-                ]
+                s.quotes = [_quote_from_dict(q) for q in value]
+            elif key == "chapters" and isinstance(value, list):
+                s.chapters = _chapters_from(value)
             elif key in s._STATE_KEYS:
                 setattr(s, key, value)
         object.__setattr__(s, "_initialized", True)

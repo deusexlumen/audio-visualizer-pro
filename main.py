@@ -19,7 +19,7 @@ from typing import Optional, Any
 
 from config.schemas import load_and_validate_config
 from src.app_logging import setup_logging
-from src.types import Quote
+from src.types import Chapter, Quote
 from src.quote_overlay import QuoteOverlayConfig
 # Modulebene, damit Tests `main.GPUBatchRenderer` patchen können
 from src.gpu_renderer import GPUBatchRenderer
@@ -128,6 +128,10 @@ def _resolve_config(
     cfg_intro_video = intro
     cfg_intro_fade = intro_fade
     cfg_params = {}
+    cfg_look = "classic"
+    cfg_chapters = []
+    cfg_episode_title = None
+    cfg_episode_number = None
 
     if config:
         try:
@@ -153,10 +157,16 @@ def _resolve_config(
                         start_time=q.start_time,
                         end_time=q.end_time,
                         confidence=q.confidence,
+                        kind=q.kind,
+                        accent_word=q.accent_word,
                     )
                     for q in cfg.quotes
                 ]
             cfg_quote_overlay = cfg.quote_overlay
+            cfg_look = cfg.look
+            cfg_chapters = [Chapter(start=c.start, title=c.title) for c in cfg.chapters]
+            cfg_episode_title = cfg.episode_title
+            cfg_episode_number = cfg.episode_number
         except Exception as e:
             raise click.BadParameter(f"Ungueltige Config-Datei '{config}': {e}")
 
@@ -201,6 +211,10 @@ def _resolve_config(
         "postprocess": cfg_postprocess,
         "quotes": cfg_quotes,
         "quote_config": quote_config,
+        "look": cfg_look,
+        "chapters": cfg_chapters,
+        "episode_title": cfg_episode_title,
+        "episode_number": cfg_episode_number,
     }
 
 
@@ -316,7 +330,24 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
     cfg_postprocess = resolved["postprocess"]
     cfg_quotes = resolved["quotes"]
     quote_config = resolved["quote_config"]
-    
+
+    episode = None
+    if resolved["look"] == "episode":
+        from src.episode.chapters import default_episode_title
+        from src.episode.config import EpisodeRenderSpec
+        if not background_image:
+            raise click.BadParameter(
+                "Der Folgen-Look braucht ein Bild: --background-image oder "
+                "'background_image' in der Config setzen."
+            )
+        episode = EpisodeRenderSpec(
+            image_path=background_image,
+            chapters=resolved["chapters"],
+            quotes=cfg_quotes or [],
+            title=resolved["episode_title"] or default_episode_title(audio_file),
+            number=resolved["episode_number"],
+        )
+
     click.echo(f"[GPU] Starte Rendering: {visual} @ {width}x{height} {fps}fps")
     if preview:
         click.echo(f"[GPU] Preview-Modus: {preview_duration}s")
@@ -340,6 +371,7 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
             postprocess=cfg_postprocess,
             quotes=cfg_quotes,
             quote_config=quote_config,
+            episode=episode,
         )
     except click.ClickException:
         raise
@@ -348,6 +380,8 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
 
     click.echo(f"[GPU] Fertig! Output: {output}")
 
+    final_video = output
+    intro_offset = 0.0
     if intro:
         from src.intro_renderer import render_with_intro
         intro_output = str(Path(output).parent / f"{Path(output).stem}_mit_intro{Path(output).suffix}")
@@ -362,6 +396,20 @@ def render(audio_file, visual, output, config, resolution, fps, preview, preview
         except Exception as e:
             raise _freundlicher_fehler(e, "Intro-Erstellung")
         click.echo(f"[Intro] Fertig! Output: {intro_output}")
+        final_video = intro_output
+        if episode is not None and episode.chapters:
+            from src.intro_renderer import get_media_info, main_start_offset
+            intro_offset = main_start_offset(get_media_info(intro)["duration"], intro_fade)
+
+    if episode is not None and episode.chapters:
+        import librosa
+        from src.episode.chapters import write_chapter_file
+        main_duration = preview_duration if preview else librosa.get_duration(path=audio_file)
+        path, warnings = write_chapter_file(final_video, episode.chapters,
+                                            intro_offset + main_duration, intro_offset)
+        click.echo(f"[Kapitel] Fuer die YouTube-Beschreibung: {path}")
+        for warning in warnings:
+            click.echo(f"[Kapitel] Warnung: {warning}")
 
 
 @cli.command()
