@@ -172,7 +172,8 @@ class EpisodePanel(QWidget):
                 self.table.setItem(row, COL_TIME, self._fixed_item(format_timestamp(c.start)))
                 self.table.setItem(row, COL_TEXT, QTableWidgetItem(c.title))
                 self.table.setItem(row, COL_ACCENT, self._fixed_item(""))
-                t = c.start
+                # Vorschau, wenn die Karte ganz eingeblendet ist
+                t, show = c.start, c.start + 1.0
             else:
                 q = self.state.quotes[idx]
                 combo = QComboBox()
@@ -196,10 +197,11 @@ class EpisodePanel(QWidget):
                 if id(q) in conflicts:
                     text_item.setToolTip(f"{CONFLICT_TIP}\n\n{q.text}")
                     text_item.setBackground(QBrush(QColor(*Theme.WARNING, 60)))
-                t = q.start_time
+                # Audio ab Sprechbeginn, Vorschau bei Sprechende (ganzer Text sichtbar)
+                t, show = q.start_time, q.end_time
             play = QPushButton("▶")
             play.setToolTip("Ab hier anhören und Vorschau zeigen")
-            play.clicked.connect(lambda _, s=t: self._play(s))
+            play.clicked.connect(lambda _, a=t, v=show: self._play(a, v))
             self.table.setCellWidget(row, COL_PLAY, play)
             delete = QPushButton("✕")
             delete.setToolTip("Zeile löschen")
@@ -347,9 +349,9 @@ class EpisodePanel(QWidget):
 
     # --- Abspielen ---
 
-    def _play(self, t: float):
-        self._play_audio(t)
-        self.preview_requested.emit(float(t))
+    def _play(self, audio_t: float, preview_t: float):
+        self._play_audio(audio_t)
+        self.preview_requested.emit(float(preview_t))
 
     def _play_audio(self, t: float):
         path = self.state.audio_path

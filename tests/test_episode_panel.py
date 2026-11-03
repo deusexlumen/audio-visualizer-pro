@@ -134,7 +134,16 @@ def test_panel_play_requests_preview(qtbot, state):
     panel = _panel(qtbot, state)
     with qtbot.waitSignal(panel.preview_requested) as blocker:
         panel.table.cellWidget(0, 4).click()
-    assert blocker.args == [pytest.approx(42.0)]
+    # Vorschau dort, wo der ganze Text steht (Sprechende), nicht beim ersten Wort
+    assert blocker.args == [pytest.approx(44.0)]
+
+
+def test_panel_play_chapter_previews_full_card(qtbot, state):
+    state.chapters = [Chapter(start=60.0, title="Mitte")]
+    panel = _panel(qtbot, state)
+    with qtbot.waitSignal(panel.preview_requested) as blocker:
+        panel.table.cellWidget(0, 4).click()
+    assert blocker.args == [pytest.approx(61.0)]
 
 
 def test_panel_toggle_look(qtbot, state):
