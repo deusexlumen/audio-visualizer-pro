@@ -378,3 +378,16 @@ Stabiler Redesign auf Basis des funktionierenden v2.1-Codes. Keine strukturellen
 - **Latest**: `70c2fcb` auf `master`
 
 **Status:** ✅ Alle Plan-Features implementiert, getestet und gepusht.
+
+---
+
+## 2026-11-03 — Folgen-Look für Podcasts (Branch `feature/podcast-folgen-look`)
+
+Spec: `docs/superpowers/specs/2026-11-02-podcast-folgen-look-design.md`, Plan: `docs/superpowers/plans/2026-11-02-podcast-folgen-look.md`.
+
+- **Neu**: `look = "episode"`: ein Bild mit langsamer Kamerafahrt, Lichtstrich der Stimme (`voice_line`), Zitate unten links (Source Serif 4, Wort für Wort), 2–3 Bühnen-Sätze mit Akzentwort, Kapitel-Karten, KI-Plan (`plan_episode`), Prüfliste im Reiter „Folge“, `<video>.kapitel.txt` für YouTube.
+- **Preset**: `config/podcast_folge.json`. CLI: `python main.py render <audio> -c config/podcast_folge.json -bg <bild>`.
+- **Entscheidungen**: Bild wird NACH Bloom/Postprocess gemischt (kein Tonemap, keine Farbsäume); Grading-Regler sind im Folgen-Look neutral, weil der Lichtstrich per Screen über dem Bild liegt. Folgentitel leer = Dateiname. Kamera-Versatz-Grenze `(s-1)/(2s)`.
+- **Tempo**: 60 s bei 1080p: ~96 ms/Frame (lumina_core gleiche Größe: ~108 ms).
+- **Offene Minors**: Intro-Versatz doppelt in der Längenprüfung des letzten Kapitels; CLI `--preview` staucht die Kamerafahrt; KI-Plan meidet Karten nicht für Bühnen-Sätze; Video-Hintergrund im Folgen-Look scheitert erst beim Render; ohne Kapitel kein Hinweis auf fehlenden Kapiteltext.
+- **Tests**: 691 grün.
