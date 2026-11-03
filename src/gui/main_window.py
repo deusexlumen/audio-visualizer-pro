@@ -17,12 +17,13 @@ from PyQt6.QtWidgets import (
 
 from src.app_logging import get_logger
 from src.gui.assets_panel import AssetsPanel
+from src.gui.episode_panel import EpisodePanel
 from src.gui.icons import get_icon, get_app_icon
 from src.gui.ki_panel import KIPanel
 from src.gui.params_panel import ParamsPanel
 from src.gui.preview_widget import PreviewWidget
 from src.gui.quotes_panel import QuotesPanel
-from src.gui.state import AppState, SPIRAL_STATE_KEYS
+from src.gui.state import AppState, EPISODE_STATE_DEFAULTS, SPIRAL_STATE_KEYS
 from src.gui.styles import build_app_stylesheet, Theme
 from src.gui.timeline_widget import TimelineWidget
 
@@ -59,6 +60,7 @@ class MainWindow(QMainWindow):
         self._full_ai_worker = None
         self._render_worker: RenderWorker | None = None
         self._intro_worker: IntroWorker | None = None
+        self._episode_plan_worker = None
 
         self._settings = QSettings("AudioVisualizerPro", "AudioVisualizerPro")
         self._project_path: str | None = None
@@ -100,11 +102,13 @@ class MainWindow(QMainWindow):
         self.params_panel = ParamsPanel(self.state)
         self.ki_panel = KIPanel(self.state, gemini=self.gemini, gemini_error=self.gemini_error)
         self.quotes_panel = QuotesPanel(self.state, gemini=self.gemini)
+        self.episode_panel = EpisodePanel(self.state)
         from src.gui.studio_panel import StudioPanel
         self.studio_panel = StudioPanel(self.state, gemini=self.gemini)
         self.studio_panel.recipe_saved.connect(self._on_recipe_saved)
 
         self.right_tabs.addTab(self._make_scrollable(self.params_panel), "Parameter")
+        self.right_tabs.addTab(self.episode_panel, "Folge")
         self.right_tabs.addTab(self._make_scrollable(self.ki_panel), "KI")
         self.right_tabs.addTab(self._make_scrollable(self.quotes_panel), "Zitate")
         self.right_tabs.addTab(self.studio_panel, "Studio")
@@ -417,6 +421,8 @@ class MainWindow(QMainWindow):
         self.ki_panel.full_ai_requested.connect(self._start_full_ai)
         self.quotes_panel.btn_extract.clicked.connect(self._start_quote_extract)
         self.quotes_panel.btn_transcribe.clicked.connect(self._start_transcribe)
+        self.episode_panel.plan_requested.connect(self._start_episode_plan)
+        self.episode_panel.preview_requested.connect(self._on_episode_preview_requested)
         self.btn_render.clicked.connect(self._on_render_clicked)
         self.btn_cancel.clicked.connect(self._on_cancel_clicked)
         self.btn_preview.clicked.connect(self._start_preview)
@@ -437,7 +443,7 @@ class MainWindow(QMainWindow):
         "resolution", "render_fps", "codec", "quality", "gpu_encode",
         "intro_enabled", "intro_path", "intro_fade_duration",
         "quotes", "quotes_enabled", "quote_config",
-    }) | frozenset(SPIRAL_STATE_KEYS)
+    }) | frozenset(SPIRAL_STATE_KEYS) | frozenset(EPISODE_STATE_DEFAULTS)
 
     # State-Keys, die eine neue Vorschau ausloesen
     _PREVIEW_KEYS = frozenset({
@@ -448,9 +454,15 @@ class MainWindow(QMainWindow):
         "background_path", "preview_time_percent",
         "quotes", "quotes_enabled", "quote_config", "ki_suggested_colors",
         "color_mode", "base_hue", "color_saturation", "brightness",
+        # Titel/Nummer nicht: der Titel wird beim Laden des Audios gesetzt
+        "look", "chapters",
     }) | frozenset(SPIRAL_STATE_KEYS)
 
     def _on_state_changed(self, key: str):
+        # Im Folgen-Look ist der Lichtstrich der einzige Visualizer
+        if key == "look" and self.state.look == "episode" \
+                and self.state.visualizer_type != "voice_line":
+            self.state.visualizer_type = "voice_line"
         if key in self._PROJECT_KEYS and not self._dirty:
             self._set_dirty(True)
         if key in self._PREVIEW_KEYS:
@@ -524,12 +536,109 @@ class MainWindow(QMainWindow):
             quotes=self.state.quotes if self.state.quotes_enabled else None,
             quote_config=self.state.quote_config if self.state.quotes_enabled else None,
             timeline=self.state.timeline,
+            episode=self._episode_spec() if self._episode_ready() else None,
         )
         self._preview_worker.preview_ready.connect(self._on_preview_ready)
         self._preview_worker.preview_error.connect(self._on_preview_error)
         self._preview_worker.finished.connect(lambda: self._cleanup_worker("_preview_worker"))
         self.preview_widget.set_busy(True)
         self._preview_worker.start()
+
+    # --- Folgen-Look ---
+
+    def _episode_ready(self) -> bool:
+        """Folgen-Look aktiv und ein Bild vorhanden."""
+        bg = self.state.background_path
+        return self.state.look == "episode" and bool(bg) and Path(bg).exists()
+
+    def _episode_spec(self):
+        from src.episode.chapters import default_episode_title
+        from src.episode.config import EpisodeRenderSpec
+        # Zitate kommen immer aus state.quotes, unabhaengig von quotes_enabled
+        return EpisodeRenderSpec(
+            image_path=self.state.background_path,
+            chapters=list(self.state.chapters),
+            quotes=list(self.state.quotes),
+            title=self.state.episode_title or default_episode_title(self.state.audio_path or ""),
+            number=self.state.episode_number or None,
+        )
+
+    def _start_episode_plan(self):
+        from src.gui.workers import EpisodePlanWorker
+
+        if self._episode_plan_worker and self._episode_plan_worker.isRunning():
+            return
+        if self.gemini is None:
+            self.episode_panel.set_plan_error(self.gemini_error or "KI nicht verfügbar")
+            return
+        if not self.state.audio_path:
+            self.episode_panel.set_plan_error("Keine Audio-Datei geladen")
+            return
+        self._episode_plan_worker = EpisodePlanWorker(
+            self.gemini, self.state.audio_path, self.state.audio_duration or None, parent=self)
+        self._episode_plan_worker.plan_ready.connect(self._on_episode_plan_ready)
+        self._episode_plan_worker.plan_error.connect(self._on_episode_plan_error)
+        self._episode_plan_worker.finished.connect(
+            lambda: self._cleanup_worker("_episode_plan_worker"))
+        self._set_status("KI bereitet die Folge vor...", "warn")
+        self._episode_plan_worker.start()
+
+    def _on_episode_plan_ready(self, plan):
+        self.state.chapters = list(plan.chapters)
+        self.state.quotes = list(plan.quotes)
+        self.state.look = "episode"
+        self.episode_panel.set_plan_busy(False)
+        self._set_status(
+            f"Folge vorbereitet: {len(plan.chapters)} Kapitel, {len(plan.quotes)} Zitate.", "ok")
+
+    def _on_episode_plan_error(self, msg: str, tb: str = ""):
+        if tb:
+            logger.error(f"[GUI] Folgen-Plan-Fehler:\n{tb}")
+        self.episode_panel.set_plan_error(msg)
+        self._set_status(f"KI-Fehler: {msg}", "error")
+
+    def _on_episode_preview_requested(self, t: float):
+        duration = float(self.state.audio_duration or 0.0)
+        if duration <= 0:
+            return
+        percent = min(1.0, max(0.0, t / duration))
+        self.timeline.set_percent(percent)
+        self.state.preview_time_percent = percent
+        self._start_preview()
+
+    def _write_episode_chapters(self, output_path: str):
+        """Kapiteltext neben das Video schreiben und anzeigen (YouTube-Beschreibung)."""
+        from src.episode.chapters import write_chapter_file
+        offset = 0.0
+        intro = self.state.intro_path
+        if self.state.intro_enabled and intro and Path(intro).exists():
+            from src.intro_renderer import get_media_info, main_start_offset
+            offset = main_start_offset(get_media_info(intro)["duration"],
+                                       self.state.intro_fade_duration)
+        total = offset + float(self.state.audio_duration or 0.0)
+        path, warnings = write_chapter_file(output_path, self.state.chapters, total, offset)
+        self._show_chapter_text(path.read_text(encoding="utf-8").strip(), warnings)
+
+    def _show_chapter_text(self, text: str, warnings: list):
+        from PyQt6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QPlainTextEdit
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Kapitel für YouTube")
+        layout = QVBoxLayout(dlg)
+        layout.addWidget(QLabel("In die Video-Beschreibung kopieren:"))
+        edit = QPlainTextEdit(text)
+        edit.setReadOnly(True)
+        layout.addWidget(edit)
+        if warnings:
+            warn = QLabel("\n".join(warnings))
+            warn.setWordWrap(True)
+            warn.setStyleSheet(f"color: rgb{Theme.WARNING};")
+            layout.addWidget(warn)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        copy = buttons.addButton("Kopieren", QDialogButtonBox.ButtonRole.ActionRole)
+        copy.clicked.connect(lambda: QApplication.clipboard().setText(text))
+        buttons.rejected.connect(dlg.reject)
+        layout.addWidget(buttons)
+        dlg.exec()
 
     def _start_ai_optimize(self):
         from src.gui.workers import AIOptimizeWorker
@@ -683,6 +792,14 @@ class MainWindow(QMainWindow):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = str(out_dir / f"visualization_{ts}.mp4")
 
+        episode = None
+        if self.state.look == "episode":
+            if not self._episode_ready():
+                QMessageBox.critical(self, "Fehler",
+                                     "Der Folgen-Look braucht ein Bild. Bitte links ein Bild wählen.")
+                return
+            episode = self._episode_spec()
+
         w, h = self.state.resolution
         config = {
             "audio_path": self.state.audio_path,
@@ -708,6 +825,7 @@ class MainWindow(QMainWindow):
             "viz_offset_y": self.state.viz_offset_y,
             "viz_scale": self.state.viz_scale,
             "timeline": self.state.timeline,
+            "episode": episode,
         }
 
         self._set_render_ui(True)
@@ -801,6 +919,12 @@ class MainWindow(QMainWindow):
         self._set_render_ui(False)
         self._set_status(f"Fertig: {output_path}", "ok")
 
+        if self.state.look == "episode" and self.state.chapters:
+            try:
+                self._write_episode_chapters(output_path)
+            except Exception as e:
+                logger.warning(f"[GUI] Kapiteltext fehlgeschlagen: {e}")
+
         box = QMessageBox(self)
         box.setWindowTitle("Rendering abgeschlossen")
         box.setIcon(QMessageBox.Icon.Information)
@@ -856,6 +980,7 @@ class MainWindow(QMainWindow):
             self._quote_extract_worker,
             self._render_worker,
             self._intro_worker,
+            self._episode_plan_worker,
         ]
         for worker in workers:
             if worker and worker.isRunning():

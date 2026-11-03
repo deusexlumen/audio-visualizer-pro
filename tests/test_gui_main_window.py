@@ -10,11 +10,12 @@ from src.gui.main_window import MainWindow
 def test_main_window_has_tabs(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window.right_tabs.count() == 4
+    assert window.right_tabs.count() == 5
     assert window.right_tabs.tabText(0) == "Parameter"
-    assert window.right_tabs.tabText(1) == "KI"
-    assert window.right_tabs.tabText(2) == "Zitate"
-    assert window.right_tabs.tabText(3) == "Studio"
+    assert window.right_tabs.tabText(1) == "Folge"
+    assert window.right_tabs.tabText(2) == "KI"
+    assert window.right_tabs.tabText(3) == "Zitate"
+    assert window.right_tabs.tabText(4) == "Studio"
 
 
 def test_render_button_shows_error_without_audio(qtbot):
@@ -244,3 +245,87 @@ def test_spiral_keys_trigger_preview_and_dirty_marker():
 
     assert set(SPIRAL_STATE_KEYS) <= MainWindow._PREVIEW_KEYS
     assert set(SPIRAL_STATE_KEYS) <= MainWindow._PROJECT_KEYS
+
+
+def _episode_window(qtbot, tmp_path, features, with_image=True):
+    from PIL import Image
+    from src.types import Chapter, Quote
+    window = MainWindow()
+    qtbot.addWidget(window)
+    # Keine echte GPU-Vorschau im Hintergrund starten
+    window._preview_timer.timeout.disconnect()
+    audio = tmp_path / "Folge_eins.wav"
+    audio.touch()
+    window.state.audio_path = str(audio)
+    window.state.features = features
+    window.state.audio_duration = 200.0
+    if with_image:
+        img = tmp_path / "bild.png"
+        Image.new("RGB", (2560, 1440)).save(img)
+        window.state.background_path = str(img)
+    window.state.quotes_enabled = False
+    window.state.chapters = [Chapter(start=0.0, title="Einstieg"),
+                             Chapter(start=60.0, title="Mitte"),
+                             Chapter(start=120.0, title="Schluss")]
+    window.state.quotes = [Quote(text="Der Mensch stört", start_time=30, end_time=32,
+                                 kind="stage", accent_word="stört")]
+    window.state.look = "episode"
+    return window
+
+
+def test_main_window_render_config_has_episode(qtbot, tmp_path, dummy_audio_features):
+    window = _episode_window(qtbot, tmp_path, dummy_audio_features)
+    mock_worker = MagicMock()
+    mock_worker.isRunning.return_value = False
+    with patch("src.gui.workers.RenderWorker", return_value=mock_worker) as mock_cls:
+        qtbot.mouseClick(window.btn_render, Qt.MouseButton.LeftButton)
+    config = mock_cls.call_args.args[0]
+    spec = config["episode"]
+    assert spec.quotes and spec.quotes[0].kind == "stage"
+    assert spec.image_path == window.state.background_path
+    assert spec.title == "Folge eins"
+    assert [c.title for c in spec.chapters] == ["Einstieg", "Mitte", "Schluss"]
+
+
+def test_main_window_episode_without_image_blocks_render(qtbot, tmp_path, dummy_audio_features):
+    window = _episode_window(qtbot, tmp_path, dummy_audio_features, with_image=False)
+    with patch("src.gui.workers.RenderWorker") as mock_cls,          patch.object(QMessageBox, "critical", return_value=None) as mock_crit:
+        qtbot.mouseClick(window.btn_render, Qt.MouseButton.LeftButton)
+    mock_cls.assert_not_called()
+    assert "Bild" in mock_crit.call_args[0][2]
+
+
+def test_old_quotes_tab_locked_in_episode_mode(qtbot, tmp_path, dummy_audio_features):
+    window = _episode_window(qtbot, tmp_path, dummy_audio_features)
+    window.quotes_panel.gemini = MagicMock()
+    window.state.look = "episode"
+    assert not window.quotes_panel.btn_extract.isEnabled()
+    assert not window.quotes_panel.btn_snap_all.isEnabled()
+    window.state.look = "classic"
+    assert window.quotes_panel.btn_extract.isEnabled()
+    assert window.quotes_panel.btn_snap_all.isEnabled()
+
+
+def test_main_window_writes_chapter_file_after_render(qtbot, tmp_path, dummy_audio_features):
+    window = _episode_window(qtbot, tmp_path, dummy_audio_features)
+    video = tmp_path / "video.mp4"
+    with patch("src.gui.main_window.QMessageBox"),          patch.object(window, "_show_chapter_text") as mock_show:
+        window._finish_render(str(video))
+    path = tmp_path / "video.kapitel.txt"
+    assert path.read_text(encoding="utf-8").startswith("0:00 Einstieg")
+    text, warnings = mock_show.call_args.args
+    assert "1:00 Mitte" in text and warnings == []
+
+
+def test_episode_plan_result_fills_state(qtbot, tmp_path, dummy_audio_features):
+    from src.episode.plan import EpisodePlan
+    from src.types import Chapter, Quote
+    window = _episode_window(qtbot, tmp_path, dummy_audio_features)
+    window.state.look = "classic"
+    plan = EpisodePlan(chapters=[Chapter(start=0.0, title="Neu")],
+                       quotes=[Quote(text="x y z", start_time=5, end_time=6)])
+    window._on_episode_plan_ready(plan)
+    assert window.state.look == "episode"
+    assert [c.title for c in window.state.chapters] == ["Neu"]
+    assert window.state.quotes[0].text == "x y z"
+    assert window.state.visualizer_type == "voice_line"

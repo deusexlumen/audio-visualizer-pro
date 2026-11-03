@@ -124,10 +124,11 @@ class QuotesPanel(QWidget):
         list_btn_row.addWidget(self.btn_edit)
 
         self.btn_snap_all = QPushButton(" Zeiten einrasten")
-        self.btn_snap_all.setToolTip(
+        self._snap_tip = (
             "Verschiebt alle Zitatgrenzen auf die naechste erkannte Sprech-Kante "
             "(rein lokal aus der Audio-Analyse, ohne KI)."
         )
+        self.btn_snap_all.setToolTip(self._snap_tip)
         self.btn_snap_all.clicked.connect(self._on_snap_all)
         list_btn_row.addWidget(self.btn_snap_all)
         list_layout.addLayout(list_btn_row)
@@ -181,7 +182,7 @@ class QuotesPanel(QWidget):
         self.state.changed.connect(self._on_state_changed)
 
     def _on_state_changed(self, key: str):
-        if key in {"features", "audio_path"}:
+        if key in {"features", "audio_path", "look"}:
             self._update_button_states()
         if key == "quotes":
             self._refresh_list()
@@ -191,9 +192,15 @@ class QuotesPanel(QWidget):
         has_audio = bool(self.state.audio_path)
         has_features = self.state.features is not None
         has_gemini = self.gemini is not None
-        self.btn_extract.setEnabled(has_audio and has_features and has_gemini)
+        # Im Folgen-Look wuerden Extrahieren und Einrasten state.quotes
+        # ueberschreiben und die Buehnen-Saetze loeschen: dort gesperrt
+        episode = getattr(self.state, "look", "classic") == "episode"
+        self.btn_extract.setEnabled(has_audio and has_features and has_gemini and not episode)
         self.btn_transcribe.setEnabled(has_audio and has_gemini)
-        self.btn_snap_all.setEnabled(has_features and bool(self.state.quotes))
+        self.btn_snap_all.setEnabled(has_features and bool(self.state.quotes) and not episode)
+        lock_tip = "Im Folgen-Look gesperrt; Zitate im Reiter „Folge“ bearbeiten." if episode else ""
+        self.btn_extract.setToolTip(lock_tip)
+        self.btn_snap_all.setToolTip(lock_tip or self._snap_tip)
         if not has_gemini:
             self.lbl_status.setText("KI nicht verfügbar. Prüfe API-Key.")
 
