@@ -389,5 +389,6 @@ Spec: `docs/superpowers/specs/2026-11-02-podcast-folgen-look-design.md`, Plan: `
 - **Preset**: `config/podcast_folge.json`. CLI: `python main.py render <audio> -c config/podcast_folge.json -bg <bild>`.
 - **Entscheidungen**: Bild wird NACH Bloom/Postprocess gemischt (kein Tonemap, keine Farbsäume); Grading-Regler sind im Folgen-Look neutral, weil der Lichtstrich per Screen über dem Bild liegt. Folgentitel leer = Dateiname. Kamera-Versatz-Grenze `(s-1)/(2s)`.
 - **Tempo**: 60 s bei 1080p: ~96 ms/Frame (lumina_core gleiche Größe: ~108 ms).
-- **Offene Minors**: Intro-Versatz doppelt in der Längenprüfung des letzten Kapitels; CLI `--preview` staucht die Kamerafahrt; KI-Plan meidet Karten nicht für Bühnen-Sätze; Video-Hintergrund im Folgen-Look scheitert erst beim Render; ohne Kapitel kein Hinweis auf fehlenden Kapiteltext.
+- **Offene Minors**: Intro-Versatz doppelt in der Längenprüfung des letzten Kapitels; CLI `--preview` staucht die Kamerafahrt; Video-Hintergrund im Folgen-Look scheitert erst beim Render; ohne Kapitel kein Hinweis auf fehlenden Kapiteltext.
 - **Tests**: 691 grün.
+- **Nachbesserung (Branch `feature/folge-nachbesserung`)**: Bühnen-Sätze nur als ganzer Satz (Satzanfang bis Satzzeichen, höchstens 20 Wörter) und nie unter einer Kapitel-Karte. Grading- und Hintergrund-Regler sind im Folgen-Look gesperrt (Tooltip erklärt warum).

@@ -117,6 +117,27 @@ def _is_stage_sentence(text: str) -> bool:
     return bool(text) and len(text.split()) <= MAX_STAGE_WORDS         and bool(_SENTENCE_END.search(text))
 
 
+def _starts_sentence(text: str, transcript: str) -> bool:
+    """True, wenn der Text im Transkript am Satzanfang beginnt.
+
+    Nicht wortgleich gefunden (unscharfer Treffer): nicht pruefbar, also erlaubt.
+    """
+    idx = transcript.find(text)
+    if idx < 0:
+        idx = transcript.lower().find(text.lower())
+    if idx <= 0:
+        return True
+    before = transcript[:idx].rstrip().rstrip("\"'“”»«)")
+    return not before or before[-1] in ".!?…"
+
+
+def _under_card(start: float, end: float, chapters: List[Chapter], cfg) -> bool:
+    """True, wenn das sichtbare Fenster eine Kapitel-Karte schneidet (Karte gewinnt)."""
+    shown_until = end + cfg.min_hold
+    return any(start < c.start + cfg.card_duration and max(0.0, c.start - cfg.card_fade) < shown_until
+               for c in chapters)
+
+
 def _chapters(raw_chapters, segments, cfg) -> List[Chapter]:
     found = []
     for item in raw_chapters or []:
@@ -156,15 +177,17 @@ def build_episode_plan(raw: dict, segments: List[dict], duration: Optional[float
     raw = raw if isinstance(raw, dict) else {}
     chapters = _chapters(raw.get("chapters"), segments, cfg)
 
+    transcript = " ".join(" ".join(str(seg.get("text", "")).split()) for seg in segments)
     stages: List[Quote] = []
     for item in raw.get("stage") or []:
         if len(stages) >= MAX_STAGE or not isinstance(item, dict):
             continue
         text = str(item.get("text", "")).strip()
-        if not _is_stage_sentence(text):
+        if not _is_stage_sentence(text) or not _starts_sentence(" ".join(text.split()), transcript):
             continue
         window = _locate(text, segments, duration)
-        if window is None:
+        # Unter einer Kapitel-Karte waere der Buehnen-Satz unsichtbar
+        if window is None or _under_card(window[0], window[1], chapters, cfg):
             continue
         stages.append(Quote(text=text, start_time=window[0], end_time=window[1],
                             kind="stage",

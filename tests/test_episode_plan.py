@@ -151,3 +151,23 @@ def test_plan_prompt_limits_stage_sentences():
     prompt = episode_plan_prompt(SEGMENTS, 3, 8, 2)
     assert "höchstens 20 Wörter" in prompt
     assert "vollständiger Satz" in prompt
+
+
+def test_plan_drops_stage_starting_mid_sentence():
+    # Echter Lauf: "Wissenschaftlern, die im luftleeren Raum ..." begann mitten im Satz
+    segments = [dict(s) for s in SEGMENTS]
+    segments[3] = {"start": 40.0, "end": 45.0,
+                   "text": "Nicht so. Die Gesellschaft verliert ihr Gedächtnis, sagen die Leute."}
+    raw = _raw(stage=[{"text": "verliert ihr Gedächtnis, sagen die Leute.", "accent_word": ""}],
+               quotes=[])
+    assert build_episode_plan(raw, segments, 210.0).quotes == []
+    raw = _raw(stage=[{"text": "Die Gesellschaft verliert ihr Gedächtnis, sagen die Leute.",
+                       "accent_word": ""}], quotes=[])
+    assert len(build_episode_plan(raw, segments, 210.0).quotes) == 1
+
+
+def test_plan_drops_stage_under_chapter_card():
+    # Kapitel bei Segment 2 (30 s): Karte deckt 29.6-34 s ab, Buehne bei 30 s waere unsichtbar
+    raw = _raw(chapters=[{"segment_index": 0, "title": "A"},
+                         {"segment_index": 2, "title": "B"}], quotes=[])
+    assert build_episode_plan(raw, SEGMENTS, 210.0).quotes == []
