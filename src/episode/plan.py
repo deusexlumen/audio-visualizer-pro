@@ -13,6 +13,9 @@ from ..types import Chapter, Quote
 from .config import EpisodeLookConfig
 
 MAX_STAGE = 3
+# Buehnen-Satz: auf einen Blick lesbar und ein ganzer Satz
+MAX_STAGE_WORDS = 20
+_SENTENCE_END = re.compile(r"[.!?][\"'“”»«)]*$")
 MIN_CHAPTER_GAP = 10.0
 
 # Antwort-Schema des Plans (Gemini response_schema)
@@ -76,8 +79,10 @@ def episode_plan_prompt(segments: List[dict], k_min: int, k_max: int, n_quotes: 
         "Kapitel die Nummer des Segments, mit dem es beginnt, und einen kurzen "
         "Namen (höchstens 5 Wörter).",
         "2. Wähle 2–3 Bühnen-Sätze: die kühnsten Behauptungen der Folge, die Sätze, "
-        "die Leute zum Nachdenken bringen. Nicht die beste Zusammenfassung. Nenne "
-        "je Satz ein Schlüsselwort aus dem Satz.",
+        "die Leute zum Nachdenken bringen. Nicht die beste Zusammenfassung. Jeder "
+        f"Bühnen-Satz ist ein vollständiger Satz mit höchstens {MAX_STAGE_WORDS} Wörtern "
+        "und endet mit Punkt, Ausrufe- oder Fragezeichen. Nenne je Satz ein "
+        "Schlüsselwort aus dem Satz.",
         f"3. Wähle etwa {n_quotes} weitere Zitate (prägnant, höchstens 25 Wörter).",
         "",
         "Harte Regeln:",
@@ -105,6 +110,11 @@ def _accent_word(text: str, wanted: str) -> Optional[str]:
         if w.lower() == wanted:
             return w
     return max(words, key=len)
+
+
+def _is_stage_sentence(text: str) -> bool:
+    """Ganzer Satz (Satzzeichen am Ende) mit hoechstens MAX_STAGE_WORDS Woertern."""
+    return bool(text) and len(text.split()) <= MAX_STAGE_WORDS         and bool(_SENTENCE_END.search(text))
 
 
 def _chapters(raw_chapters, segments, cfg) -> List[Chapter]:
@@ -151,7 +161,9 @@ def build_episode_plan(raw: dict, segments: List[dict], duration: Optional[float
         if len(stages) >= MAX_STAGE or not isinstance(item, dict):
             continue
         text = str(item.get("text", "")).strip()
-        window = _locate(text, segments, duration) if text else None
+        if not _is_stage_sentence(text):
+            continue
+        window = _locate(text, segments, duration)
         if window is None:
             continue
         stages.append(Quote(text=text, start_time=window[0], end_time=window[1],

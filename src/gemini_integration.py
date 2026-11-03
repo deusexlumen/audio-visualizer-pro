@@ -949,7 +949,8 @@ class GeminiIntegration:
             raise RuntimeError("Kein Transkript erhalten — Folge kann nicht vorbereitet werden.")
         duration = audio_duration or max(float(seg.get("end", 0.0)) for seg in segments)
 
-        sig = f"{self.model}|{PROMPT_VERSION}|episode"
+        # "episode2": Prompt verlangt ganze Buehnen-Saetze mit hoechstens 20 Woertern
+        sig = f"{self.model}|{PROMPT_VERSION}|episode2"
         raw = load_json_result(audio_path, "episode_plan", sig) if use_cache else None
         if raw is None:
             if progress_callback:

@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QColorDialog, QFrame,
 )
 
-from src.gui.state import AppState
+from src.gui.state import AppState, lock_for_episode
 from src.gui.styles import Theme
 from src.gpu_visualizers import list_visualizers, get_visualizer
 from src.visualizer_wizard import add_create_visualizer_button
@@ -365,6 +365,13 @@ class ParamsPanel(QWidget):
 
         # Zwei-Wege-Bindung mit AppState
         self.state.changed.connect(self._on_state_changed)
+        # Im Folgen-Look wirkt Grading nicht aufs Bild (episode_postprocess)
+        self._episode_locked = [
+            self.slider_contrast, self.slider_saturation, self.slider_brightness,
+            self.slider_warmth, self.slider_vignette_pp, self.slider_chromatic,
+            self.slider_grain,
+        ]
+        lock_for_episode(self._episode_locked, self.state.look == "episode")
 
         # Memory initialisieren und erste Parameter-Regler aufbauen
         self._viz_param_memory[self._current_viz] = dict(self.state.viz_params)
@@ -404,6 +411,9 @@ class ParamsPanel(QWidget):
 
     def _on_state_changed(self, key: str):
         """Reagiert auf Aenderungen im AppState (Zwei-Wege-Bindung)."""
+        if key == "look":
+            lock_for_episode(self._episode_locked, self.state.look == "episode")
+            return
         if self._updating:
             return
 

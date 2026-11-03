@@ -127,3 +127,27 @@ def test_plan_episode_uses_cache(monkeypatch):
     p1 = g.plan_episode("folge.m4a", 210.0)
     p2 = g.plan_episode("folge.m4a", 210.0)
     assert len(calls) == 1 and p1 == p2 and p1.chapters[0].title == "Einstieg"
+
+
+LONG = ("Wir schauen uns heute an wie eine strategische Architektur aus enormem privatem Geld "
+        "und militaerischen Interessen den Grundstein fuer eine voellig neue Form der Kontrolle legte.")
+
+
+def test_plan_drops_stage_fragment():
+    # Echter Lauf: "Denn bevor grosse Ideen ... werden," war kein ganzer Satz
+    raw = _raw(stage=[{"text": "Der echte Mensch stört in diesem geschlossenen",
+                       "accent_word": "stört"}], quotes=[])
+    assert build_episode_plan(raw, SEGMENTS, 210.0).quotes == []
+
+
+def test_plan_drops_long_stage():
+    segments = SEGMENTS[:6] + [{"start": 150.0, "end": 165.0, "text": LONG}] + SEGMENTS[6:]
+    assert len(LONG.split()) > 20
+    raw = _raw(stage=[{"text": LONG, "accent_word": "Kontrolle"}], quotes=[])
+    assert build_episode_plan(raw, segments, 210.0).quotes == []
+
+
+def test_plan_prompt_limits_stage_sentences():
+    prompt = episode_plan_prompt(SEGMENTS, 3, 8, 2)
+    assert "höchstens 20 Wörter" in prompt
+    assert "vollständiger Satz" in prompt

@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.gui.icons import get_icon
-from src.gui.state import AppState
+from src.gui.state import AppState, lock_for_episode
 
 
 class AssetsPanel(QWidget):
@@ -72,6 +72,12 @@ class AssetsPanel(QWidget):
             lambda v: f"{v} %",
         )
         self.slider_opacity.valueChanged.connect(self._on_opacity_changed)
+        # Im Folgen-Look ist das Bild das Folgenbild: Blur/Vignette/Deckkraft wirken nicht
+        self._episode_locked = [self.slider_blur, self.slider_vignette, self.slider_opacity]
+        lock_for_episode(self._episode_locked, self.state.look == "episode")
+        self.state.changed.connect(
+            lambda key: key == "look" and lock_for_episode(
+                self._episode_locked, self.state.look == "episode"))
 
         layout.addWidget(bg_box)
         layout.addStretch()

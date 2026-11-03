@@ -296,3 +296,27 @@ def test_spiral_controls_follow_state(qtbot):
     state.pp_spiral_enabled = True
     assert panel.chk_spiral.isChecked()
     assert slider.isEnabled()
+
+
+def test_grading_sliders_locked_in_episode_look(qtbot):
+    from src.gui.assets_panel import AssetsPanel
+    state = AppState()
+    params = ParamsPanel(state)
+    assets = AssetsPanel(state)
+    qtbot.addWidget(params)
+    qtbot.addWidget(assets)
+    locked = [params.slider_contrast, params.slider_saturation, params.slider_brightness,
+              params.slider_warmth, params.slider_vignette_pp, params.slider_chromatic,
+              params.slider_grain, assets.slider_blur, assets.slider_vignette,
+              assets.slider_opacity]
+    tip_before = params.slider_grain.toolTip()
+
+    state.look = "episode"
+    assert not any(w.isEnabled() for w in locked)
+    assert "Folgen-Look" in params.slider_warmth.toolTip()
+    # Belichtung und Bloom wirken weiter auf den Lichtstrich
+    assert params.slider_exposure.isEnabled() and params.slider_bloom.isEnabled()
+
+    state.look = "classic"
+    assert all(w.isEnabled() for w in locked)
+    assert params.slider_grain.toolTip() == tip_before

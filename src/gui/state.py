@@ -20,6 +20,19 @@ EPISODE_STATE_DEFAULTS = {
 }
 
 
+EPISODE_LOCK_TIP = ("Im Folgen-Look ohne Wirkung: das Bild erscheint wie geliefert. "
+                    "Farben und Stimmung bitte im Bild selbst ändern.")
+
+
+def lock_for_episode(widgets, episode: bool) -> None:
+    """Sperrt Regler, die im Folgen-Look nichts bewirken, und erklaert warum."""
+    for w in widgets:
+        if w.property("base_tip") is None:
+            w.setProperty("base_tip", w.toolTip())
+        w.setEnabled(not episode)
+        w.setToolTip(EPISODE_LOCK_TIP if episode else w.property("base_tip"))
+
+
 def _quote_from_dict(q: dict) -> Quote:
     kind = q.get("kind", "quote")
     return Quote(
