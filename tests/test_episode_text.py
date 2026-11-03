@@ -98,3 +98,18 @@ def test_no_text_outside_windows_except_brand():
     rest[: int(0.12 * H), : int(0.4 * W)] = 0
     assert brand.max() > 40
     assert rest.max() == 0
+
+
+def test_card_long_chapter_name_keeps_gap_below_title():
+    def chapter_top(name):
+        chapters = [Chapter(start=0.0, title=name)]
+        r = EpisodeTextRenderer(EpisodeTimeline(chapters, [], 20.0, EpisodeLookConfig()),
+                                960, 540, "Die Macy Stiftung", "7", EpisodeLookConfig())
+        chap = r._card_layers(0)[3]
+        ys = np.nonzero(chap.alpha[:, :, 0].max(axis=1) > 0.5)[0]
+        return chap.y + ys.min()
+
+    # Ein umbrechender Kapitelname waechst nach unten, nicht in den Titel
+    short = chapter_top("Einstieg")
+    long = chapter_top("Die Macy Konferenzen als Startpunkt der Kontrolle")
+    assert abs(long - short) <= 3

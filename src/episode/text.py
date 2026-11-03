@@ -182,7 +182,7 @@ class EpisodeTextRenderer:
     def _layout(self, words: List[str], font, max_width: int, line_height: float,
                 colors: List[Tuple[int, int, int]], align: str,
                 anchor_xy: Tuple[float, float], valign: str, shadow: Tuple[float, float, float]) -> _TextBlock:
-        """Ordnet Woerter in Zeilen an; anchor_xy ist links unten bzw. Mitte."""
+        """Ordnet Woerter in Zeilen an; valign: "top", "middle" oder "bottom"."""
         measure = lambda s: int(round(font.getlength(s)))  # noqa: E731
         lines = wrap_balanced(words, measure, max_width)
         space = font.getlength(" ")
@@ -196,7 +196,12 @@ class EpisodeTextRenderer:
             left = ax - block_w / 2
         else:
             left = ax
-        top = ay - block_h / 2 if valign == "middle" else ay - block_h
+        if valign == "middle":
+            top = ay - block_h / 2
+        elif valign == "top":
+            top = ay
+        else:
+            top = ay - block_h
         origin = (int(left) - pad, int(top) - pad)
 
         boxes: List[_WordBox] = []
@@ -287,9 +292,10 @@ class EpisodeTextRenderer:
                              [self.accent] * len(label_words), "left",
                              (x, title_top), "bottom", shadow)
         chap_words = f"Kapitel {chapter_index + 1} · {chapter.title}".split()
+        # Von oben verankert: ein umbrechender Kapitelname waechst nach unten
         chap = self._layout(chap_words, chap_font, col_w, 1.3 * chap_size,
                             [TEXT_COLOR] * len(chap_words), "left",
-                            (x, title_bottom + 1.6 * chap_size), "bottom", shadow)
+                            (x, title_bottom + 0.4 * chap_size), "top", shadow)
         layers = [column, label.layer(len(label_words)), title.layer(len(title_words)),
                   chap.layer(len(chap_words))]
         self._cards = {chapter_index: layers}
