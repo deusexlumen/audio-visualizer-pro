@@ -41,3 +41,18 @@ class EpisodeRenderSpec:
     title: str
     number: Optional[str] = None
     config: EpisodeLookConfig = field(default_factory=EpisodeLookConfig)
+
+
+# Im Folgen-Look wirkt das Grading nur auf den Lichtstrich, der per Screen
+# ueber das ganze Bild gelegt wird. Jede Anhebung von Schwarz (Helligkeit,
+# Waerme, Kontrast < 1, LUT, Korn) wuerde das Bild selbst einfaerben.
+_NEUTRAL_GRADING = {
+    "contrast": 1.0, "saturation": 1.0, "brightness": 0.0, "warmth": 0.0,
+    "film_grain": 0.0, "grain": 0.0, "vignette": 0.0, "chromatic_aberration": 0.0,
+    "lut": None,
+}
+
+
+def episode_postprocess(postprocess: Optional[dict]) -> dict:
+    """Postprocess-Werte fuer den Folgen-Look: Grading neutral, Bloom bleibt."""
+    return {**(postprocess or {}), **_NEUTRAL_GRADING}

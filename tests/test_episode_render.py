@@ -39,7 +39,7 @@ def _spec(tmp_path, cfg=None):
     )
 
 
-def _render(tmp_path, spec):
+def _render(tmp_path, spec, postprocess=None):
     wav = tmp_path / "a.wav"
     _write_wav(wav, seconds=2)
     out = tmp_path / "folge.mp4"
@@ -47,7 +47,8 @@ def _render(tmp_path, spec):
     try:
         r.render(audio_path=str(wav), visualizer_type="voice_line", output_path=str(out),
                  features=_dummy_features(seconds=2),
-                 postprocess={"chromatic_aberration": 0.0, "film_grain": 0.0, "vignette": 0.0},
+                 postprocess=postprocess or {"chromatic_aberration": 0.0, "film_grain": 0.0,
+                                             "vignette": 0.0},
                  episode=spec)
     finally:
         r.release()
@@ -117,3 +118,16 @@ def test_classic_render_ignores_episode_code(mock_run, mock_popen, mock_create_c
              output_path=str(tmp_path / "o.mp4"), features=mock_features,
              preview_mode=True, preview_duration=0.1)
     assert built == []
+
+
+@pytest.mark.gpu
+def test_episode_ignores_colour_grading(tmp_path, require_gpu):
+    # Review: Regler aus einem alten Projekt faerbten ueber den Lichtstrich das Bild
+    spec = _spec(tmp_path, EpisodeLookConfig(card_duration=0.5))
+    graded = {"warmth": 0.5, "brightness": 0.1, "contrast": 0.8, "film_grain": 0.3,
+              "vignette": 0.6, "chromatic_aberration": 2.0}
+    out = _render(tmp_path, spec, graded)
+    frame = _frame_at(out, 1.8, tmp_path)
+    ref = np.asarray(cover_crop(Image.open(spec.image_path).convert("RGB"), W, H)).astype(float)
+    for c in range(3):
+        assert abs(frame[30:90, :, c].mean() - ref[30:90, :, c].mean()) <= 6

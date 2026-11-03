@@ -41,6 +41,8 @@ void main() {
     vec3 sharp = texture(u_sharp, uv).rgb;
     vec3 soft = texture(u_blur, uv).rgb;
     vec3 img = mix(sharp, soft, u_stage) * mix(1.0, %(stage_b)f, u_stage);
+    // Luecke links der verschobenen Bildkante schwarz statt gestreckter Randpixel
+    img *= smoothstep(0.0, 0.005, uv.x);
     // Weicher Verlauf unten fuer lesbare Zitate
     img *= 1.0 - %(shade_s)f * smoothstep(%(shade_y)f, 1.0, v_uv.y);
     vec3 line = texture(u_overlay, v_uv).rgb * mix(1.0, %(line_dim)f, max(u_stage, u_card));

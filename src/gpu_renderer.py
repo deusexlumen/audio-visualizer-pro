@@ -29,6 +29,7 @@ from .gpu_visualizers.base import hex_to_rgb as _hex_to_rgb
 from .gpu_text_renderer import SDFFontAtlas, GPUTextRenderer
 from .quote_overlay import QuoteOverlayConfig, QuoteOverlayRenderer
 from .episode.compositor import EpisodeCompositor
+from .episode.config import episode_postprocess
 from .episode.text import EpisodeTextRenderer
 from .episode.timeline import EpisodeTimeline
 
@@ -259,6 +260,7 @@ class GPUBatchRenderer:
             background_color = "#000000"
             quotes = None
             quote_config = None
+            postprocess = episode_postprocess(postprocess)
             ep_timeline = EpisodeTimeline(episode.chapters, episode.quotes,
                                           frame_count / self.fps, episode.config)
             ep_text = EpisodeTextRenderer(ep_timeline, self.width, self.height,

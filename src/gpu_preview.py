@@ -14,6 +14,7 @@ from PIL import Image
 from .analyzer import AudioAnalyzer
 from .app_logging import get_logger
 from .episode.compositor import EpisodeCompositor
+from .episode.config import episode_postprocess
 from .episode.text import EpisodeTextRenderer
 from .episode.timeline import EpisodeTimeline
 from .gpu_renderer import GPUPreviewRenderer
@@ -91,6 +92,7 @@ def render_gpu_preview(
         background_image = None
         background_color = "#000000"
         quotes = None
+        postprocess = episode_postprocess(postprocess)
 
     temp_bg_frame = None
     bg_texture = None

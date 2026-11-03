@@ -71,8 +71,12 @@ def test_panel_marks_card_conflict(qtbot, state):
 def test_panel_title_defaults_from_audio(qtbot, state):
     panel = _panel(qtbot, state)
     state.audio_path = "C:/podcast/Das_tote_Internet.mp3"
-    assert panel.edit_title.text() == "Das tote Internet"
-    assert state.episode_title == "Das tote Internet"
+    assert panel.edit_title.placeholderText() == "Das tote Internet"
+    # Review: kein fester Titel im Zustand, sonst bleibt er bei der naechsten Folge stehen
+    assert state.episode_title == ""
+    state.audio_path = "C:/podcast/Folge_zwei.mp3"
+    assert panel.edit_title.placeholderText() == "Folge zwei"
+    assert state.episode_title == ""
 
 
 def test_panel_warns_small_image(qtbot, state, tmp_path):
@@ -139,3 +143,12 @@ def test_panel_toggle_look(qtbot, state):
     assert state.look == "episode"
     state.look = "classic"
     assert not panel.chk_enabled.isChecked()
+
+
+def test_panel_accepts_chatgpt_wide_image(qtbot, state, tmp_path):
+    # Review: 1536x1024 ist das breiteste ChatGPT-Format; der Tipp empfahl genau das
+    img = tmp_path / "breit.png"
+    Image.new("RGB", (1536, 1024)).save(img)
+    panel = _panel(qtbot, state)
+    state.background_path = str(img)
+    assert "Querformat" not in panel.lbl_hint.text()

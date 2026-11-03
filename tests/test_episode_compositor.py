@@ -109,5 +109,17 @@ def test_card_shifts_image_right(gl, tmp_path):
     Image.fromarray(img).save(path)
     out = _run(gl, path, _state(card=1.0))
     # Weisse Kante wandert um 34 % der Breite nach rechts
-    edge = int(np.argmax(out[10, :, 0] < 128))
+    # (Suche ab 40 %: links der verschobenen Kante ist die Luecke schwarz)
+    start = int(W * 0.40)
+    edge = start + int(np.argmax(out[10, start:, 0] < 128))
     assert abs(edge - int(W * 0.84)) <= 3
+
+
+@pytest.mark.gpu
+def test_card_gap_is_black_not_smeared(gl, tmp_path):
+    # Review: die Verschiebung zog die Bildkante als Streifen in die Luecke
+    path = tmp_path / "weiss.png"
+    Image.new("RGB", (W, H), (255, 255, 255)).save(path)
+    out = _run(gl, path, _state(card=1.0))
+    assert out[:72, : int(0.30 * W)].max() <= 10
+    assert out[:72, int(0.40 * W):].min() >= 245

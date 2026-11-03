@@ -574,6 +574,17 @@ class MainWindow(QMainWindow):
         if not self.state.audio_path:
             self.episode_panel.set_plan_error("Keine Audio-Datei geladen")
             return
+        if self.state.chapters or self.state.quotes:
+            answer = QMessageBox.question(
+                self, "Liste ersetzen?",
+                "Die KI ersetzt alle Kapitel, Bühnen-Sätze und Zitate in der Liste.\n"
+                "Eigene Änderungen gehen dabei verloren. Fortfahren?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.episode_panel.set_plan_busy(False)
+                return
         self._episode_plan_worker = EpisodePlanWorker(
             self.gemini, self.state.audio_path, self.state.audio_duration or None, parent=self)
         self._episode_plan_worker.plan_ready.connect(self._on_episode_plan_ready)
@@ -584,6 +595,11 @@ class MainWindow(QMainWindow):
         self._episode_plan_worker.start()
 
     def _on_episode_plan_ready(self, plan):
+        if not plan.chapters and not plan.quotes:
+            # Leeres Ergebnis darf die Liste nicht loeschen
+            self.episode_panel.set_plan_error("Die KI hat nichts Brauchbares geliefert")
+            self._set_status("KI lieferte keine Kapitel und keine Zitate.", "warn")
+            return
         self.state.chapters = list(plan.chapters)
         self.state.quotes = list(plan.quotes)
         self.state.look = "episode"

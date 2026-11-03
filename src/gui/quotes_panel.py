@@ -198,8 +198,10 @@ class QuotesPanel(QWidget):
         self.btn_extract.setEnabled(has_audio and has_features and has_gemini and not episode)
         self.btn_transcribe.setEnabled(has_audio and has_gemini)
         self.btn_snap_all.setEnabled(has_features and bool(self.state.quotes) and not episode)
+        self.btn_demo.setEnabled(not episode)
         lock_tip = "Im Folgen-Look gesperrt; Zitate im Reiter „Folge“ bearbeiten." if episode else ""
         self.btn_extract.setToolTip(lock_tip)
+        self.btn_demo.setToolTip(lock_tip)
         self.btn_snap_all.setToolTip(lock_tip or self._snap_tip)
         if not has_gemini:
             self.lbl_status.setText("KI nicht verfügbar. Prüfe API-Key.")

@@ -39,6 +39,8 @@ KIND_LABELS = {"quote": "Zitat", "stage": "Bühne"}
 CONFLICT_TIP = "Fällt in eine Kapitel-Karte; die Karte gewinnt, das Zitat ist nicht zu sehen."
 SMALL_IMAGE_TIP = ("Bild zu klein für die Ausgabe. In ChatGPT ein Querformat anfordern, "
                    "z. B. 1536×1024; Wichtiges nicht an den oberen und unteren Rand.")
+# Anteil der Zielbreite, ab dem ein Bild ohne Hinweis hochskaliert wird
+MIN_SCALE = 0.8
 _STATE_KEYS = {"chapters", "quotes", "look", "episode_title", "episode_number",
                "audio_path", "background_path", "resolution", "audio_duration"}
 
@@ -120,8 +122,6 @@ class EpisodePanel(QWidget):
     def _on_state_changed(self, key: str):
         if self._filling or key not in _STATE_KEYS:
             return
-        if key == "audio_path" and not self.state.episode_title and self.state.audio_path:
-            self._write("episode_title", default_episode_title(self.state.audio_path))
         self.refresh()
 
     def refresh(self):
@@ -222,7 +222,10 @@ class EpisodePanel(QWidget):
             try:
                 with Image.open(bg) as img:
                     size = img.size
-                if image_too_small(size, *self.state.resolution):
+                # Leichtes Hochskalieren (ChatGPT 1536x1024 -> 1080p) ist normal;
+                # nur warnen, wenn der Ausschnitt deutlich zu schmal ist
+                w, h = self.state.resolution
+                if image_too_small(size, int(w * MIN_SCALE), int(h * MIN_SCALE)):
                     parts.append(SMALL_IMAGE_TIP)
             except Exception:
                 pass  # Videos oder unlesbare Dateien: kein Hinweis
@@ -233,13 +236,15 @@ class EpisodePanel(QWidget):
 
     def set_plan_error(self, msg: str):
         self._error = msg
-        self.btn_plan.setEnabled(True)
-        self.btn_plan.setText("KI vorbereiten")
+        self.set_plan_busy(False)
         self._update_hint()
 
     def set_plan_busy(self, busy: bool):
         self.btn_plan.setEnabled(not busy)
         self.btn_plan.setText("⏳ KI arbeitet..." if busy else "KI vorbereiten")
+        # Das Ergebnis ersetzt die Liste: waehrenddessen keine Aenderungen
+        for widget in (self.table, self.btn_add_chapter, self.btn_add_quote):
+            widget.setEnabled(not busy)
         if busy:
             self._error = ""
             self._update_hint()

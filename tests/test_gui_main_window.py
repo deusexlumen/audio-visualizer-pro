@@ -329,3 +329,38 @@ def test_episode_plan_result_fills_state(qtbot, tmp_path, dummy_audio_features):
     assert [c.title for c in window.state.chapters] == ["Neu"]
     assert window.state.quotes[0].text == "x y z"
     assert window.state.visualizer_type == "voice_line"
+
+
+def test_episode_plan_asks_before_overwriting(qtbot, tmp_path, dummy_audio_features):
+    window = _episode_window(qtbot, tmp_path, dummy_audio_features)
+    window.gemini = MagicMock()
+    with patch("src.gui.workers.EpisodePlanWorker") as worker_cls, \
+         patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
+        window.episode_panel.btn_plan.click()
+    worker_cls.assert_not_called()
+    assert window.episode_panel.btn_plan.isEnabled()
+    assert window.episode_panel.table.isEnabled()
+
+    worker = MagicMock()
+    worker.isRunning.return_value = False
+    with patch("src.gui.workers.EpisodePlanWorker", return_value=worker) as worker_cls, \
+         patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+        window.episode_panel.btn_plan.click()
+    worker_cls.assert_called_once()
+    # Waehrend die KI arbeitet, sind Aenderungen an der Liste gesperrt
+    assert not window.episode_panel.table.isEnabled()
+
+
+def test_empty_episode_plan_keeps_list(qtbot, tmp_path, dummy_audio_features):
+    from src.episode.plan import EpisodePlan
+    window = _episode_window(qtbot, tmp_path, dummy_audio_features)
+    window._on_episode_plan_ready(EpisodePlan())
+    assert len(window.state.chapters) == 3 and len(window.state.quotes) == 1
+    assert window.episode_panel.table.isEnabled()
+
+
+def test_demo_quotes_locked_in_episode_mode(qtbot, tmp_path, dummy_audio_features):
+    window = _episode_window(qtbot, tmp_path, dummy_audio_features)
+    assert not window.quotes_panel.btn_demo.isEnabled()
+    window.state.look = "classic"
+    assert window.quotes_panel.btn_demo.isEnabled()
