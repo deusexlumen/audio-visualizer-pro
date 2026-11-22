@@ -33,6 +33,12 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "gpu: Test benoetigt eine echte GPU mit OpenGL 3.3+"
     )
+    config.addinivalue_line(
+        "markers", "gui: Test benoetigt Qt (laeuft headless mit QT_QPA_PLATFORM=offscreen)"
+    )
+    config.addinivalue_line(
+        "markers", "timeout(seconds): Zeitlimit pro Test (wirkt nur mit pytest-timeout)"
+    )
 
 
 def pytest_sessionstart(session):
