@@ -2,6 +2,20 @@
 
 Dieses Dokument enthält alle relevanten Informationen für KI-Code-Agents, die an diesem Projekt arbeiten.
 
+## Agent-Modi: Codeentwicklung oder Videoproduktion
+
+Dieses Repository enthält zwei getrennte Arbeitsmodi für KI-Agenten:
+
+1. **Code entwickeln, reparieren, refaktorieren:** Diese `AGENTS.md` ist maßgeblich. Für nichttriviale Architektur-/Featurearbeit zusätzlich den bestehenden Planungs-Skill in `SKILL.md` verwenden.
+2. **Audio in ein fertiges Video umsetzen:** Den Skill [Audio Visualizer Producer](.agents/skills/audio-visualizer-producer/SKILL.md) vollständig lesen und den dokumentierten Ablauf **Preflight → Analyse → Preview → Render → QA → Übergabe** ausführen. Der Produktionsauftrag ermächtigt nicht automatisch zu Änderungen am Anwendungscode.
+
+**Agenten-Startprompt für Produktionsaufträge:**
+> Nutze den Skill `.agents/skills/audio-visualizer-producer/SKILL.md`, prüfe den aktiven Checkout und die Eingabe-Audiodatei, wähle ein begründetes visuelles Konzept, rendere eine kurze Vorschau und erstelle nach Prüfung ein finales Video. Verifiziere Container, Audio/Video-Streams, Dauer und vollständige Dekodierbarkeit. Berichte belegte Resultate und Blocker; behaupte kein Ergebnis, das nicht existiert.
+
+Die ergänzende GitHub-Copilot-Konfiguration steht in [`.github/copilot-instructions.md`](.github/copilot-instructions.md). Diese Einträge sind **Anweisungen für Agenten** und keine automatische Installation oder Ausführung.
+
+---
+
 ## Projekt-Übersicht
 
 **Audio Visualizer Pro** ist ein modulares, KI-optimiertes Audio-Visualisierungs-System für professionelle Musikvideos, Podcast-Visuals und kreative Projekte.
