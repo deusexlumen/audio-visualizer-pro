@@ -400,3 +400,12 @@ Spec: `docs/superpowers/specs/2026-11-02-podcast-folgen-look-design.md`, Plan: `
 **Fix (PR #8, Branch `fix/ci-fonttools-test-dependency`):** `fonttools>=4.0.0` in `pyproject.toml` (dev-Extras), `fonttools==4.68.0` in `requirements.lock`. CI gruen: 599 passed, 3 skipped (Ubuntu + Windows). Nicht gemergt.
 
 **Offen (bewusst nicht angefasst):** Marker `timeout`/`gui` nicht registriert; `audioread` nutzt `aifc`/`audioop`/`sunau` (weg in Py 3.13); Pillow-Parameter `mode` in `src/studio/mask_service.py:132` (weg in Pillow 13); Node-20-Deprecation von `checkout@v4`/`setup-python@v5`; `pytest-qt` steht im Lock, aber nicht in den dev-Extras.
+
+## 2026-11-22 – CI-Warnungen bereinigt (PR fix/ci-warnings)
+
+- Marker `gui` und `timeout` in `tests/conftest.py` registriert (`timeout` wirkt weiter nur mit `pytest-timeout`, das nicht installiert ist).
+- `audioread`-Deprecation (`aifc`/`audioop`/`sunau`) per `filterwarnings` in `pyproject.toml` ausgeblendet (Drittpaket, nicht behebbar).
+- Pillow: `mode="F"` in `src/studio/mask_service.py` entfernt (Modus wird aus float32 abgeleitet).
+- Actions auf `checkout@v7` / `setup-python@v7` (Node 24).
+- `pytest-qt` in dev-Extras ergaenzt.
+- Offen: pipx-Versionskonflikte auf dem Windows-Runner (Runner-Umgebung, kein Repo-Problem).
