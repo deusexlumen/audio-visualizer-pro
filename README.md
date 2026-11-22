@@ -262,6 +262,31 @@ stehen als Kommentare in `build/avp.spec`.
 
 ---
 
+## 🤖 Mit KI-Agenten arbeiten
+
+Dieses Repository enthält Anweisungen für **zwei unterschiedliche Agenten-Aufgaben**:
+
+- **Anwendung entwickeln:** [`AGENTS.md`](AGENTS.md) beschreibt Architektur, Tests und Regeln für Coding-Agenten. Für größere Entwicklungsaufträge existiert zusätzlich der Planungs-Skill [`SKILL.md`](SKILL.md).
+- **Musikvideo/Podcast-Visual produzieren:** Der [Audio Visualizer Producer Skill](.agents/skills/audio-visualizer-producer/SKILL.md) führt Agenten durch Audioanalyse, visuelles Konzept, Preview, Rendering, technische Qualitätsprüfung und Übergabe.
+- **GitHub Copilot:** [`.github/copilot-instructions.md`](.github/copilot-instructions.md) verweist auf die passenden Projektregeln.
+
+**Prompt zum Kopieren** (im Agenten mit Zugriff auf dieses Repository und eine Audiodatei):
+
+```text
+Nutze den Skill .agents/skills/audio-visualizer-producer/SKILL.md.
+Analysiere die bereitgestellte Audiodatei und prüfe den aktuellen
+Audio-Visualizer-Pro-Checkout. Wähle einen zum Track passenden,
+tatsächlich verfügbaren Visualizer. Erstelle zuerst eine Preview,
+prüfe sie und rendere danach das finale 16:9-MP4 in 1080p/30fps.
+Verifiziere Audio- und Videostream, Laufzeit und vollständige
+Dekodierbarkeit. Gib nur echte Dateien und belegte Testergebnisse aus.
+Ändere die Engine nicht ohne konkreten Bedarf.
+```
+
+Der Skill ist eine **Arbeitsanweisung**, kein eigenständiger Renderer. Er benötigt das lauffähige Projekt, die Audiodatei und die entsprechenden lokalen Werkzeuge.
+
+---
+
 ## 🤝 Mitwirken
 
 ```bash
