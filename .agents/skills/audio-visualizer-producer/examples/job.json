@@ -1,0 +1,10 @@
+{
+  "task": "render-audio-visualizer",
+  "audio": "inputs/song.mp3",
+  "visualizer_repo": "C:/projects/audio-visualizer-pro",
+  "output": "outputs/song_visual.mp4",
+  "target": {"resolution": "1920x1080", "fps": 30, "codec": "h264", "quality": "high"},
+  "intent": {"mood": "energisch, kontrastreich, kontrolliert", "text_overlay": false, "logo": false, "collage": false},
+  "workflow": ["preflight", "analyze", "choose-visual", "preview", "review", "render", "verify", "handover"],
+  "approval_for_publish": false
+}
