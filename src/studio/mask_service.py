@@ -129,7 +129,7 @@ def resize_mask(mask: np.ndarray, target_w: int, target_h: int) -> np.ndarray:
     danach Clamp auf [0, 1] — keine LANCZOS-Überschwinger an Maskenkanten
     (Spec §6.2).
     """
-    img = Image.fromarray(mask.astype(np.float32), mode="F")
+    img = Image.fromarray(mask.astype(np.float32))
     downscale = target_w < mask.shape[1] or target_h < mask.shape[0]
     kernel = Image.Resampling.BOX if downscale else Image.Resampling.BILINEAR
     out = np.asarray(img.resize((target_w, target_h), kernel), dtype=np.float32)

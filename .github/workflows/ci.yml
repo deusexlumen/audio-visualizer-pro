@@ -17,9 +17,9 @@ jobs:
       # Headless-CI: Qt ohne Display, GPU-Tests werden per Marker uebersprungen
       QT_QPA_PLATFORM: offscreen
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip

@@ -392,3 +392,20 @@ Spec: `docs/superpowers/specs/2026-11-02-podcast-folgen-look-design.md`, Plan: `
 - **Offene Minors**: Intro-Versatz doppelt in der Längenprüfung des letzten Kapitels; CLI `--preview` staucht die Kamerafahrt; Video-Hintergrund im Folgen-Look scheitert erst beim Render; ohne Kapitel kein Hinweis auf fehlenden Kapiteltext.
 - **Tests**: 691 grün.
 - **Nachbesserung (Branch `feature/folge-nachbesserung`)**: Bühnen-Sätze nur als ganzer Satz (Satzanfang bis Satzzeichen, höchstens 20 Wörter) und nie unter einer Kapitel-Karte. Grading- und Hintergrund-Regler sind im Folgen-Look gesperrt (Tooltip erklärt warum).
+
+## 2026-11-22 – CI-Fix: fonttools als Testabhaengigkeit
+
+**Problem:** Pytest-Collection scheitert auf Ubuntu und Windows mit `ModuleNotFoundError: No module named 'fontTools'` (Run 45030514027). Nur `tests/test_episode_text.py` importiert es.
+
+**Fix (PR #8, Branch `fix/ci-fonttools-test-dependency`):** `fonttools>=4.0.0` in `pyproject.toml` (dev-Extras), `fonttools==4.68.0` in `requirements.lock`. CI gruen: 599 passed, 3 skipped (Ubuntu + Windows). Nicht gemergt.
+
+**Offen (bewusst nicht angefasst):** Marker `timeout`/`gui` nicht registriert; `audioread` nutzt `aifc`/`audioop`/`sunau` (weg in Py 3.13); Pillow-Parameter `mode` in `src/studio/mask_service.py:132` (weg in Pillow 13); Node-20-Deprecation von `checkout@v4`/`setup-python@v5`; `pytest-qt` steht im Lock, aber nicht in den dev-Extras.
+
+## 2026-11-22 – CI-Warnungen bereinigt (PR fix/ci-warnings)
+
+- Marker `gui` und `timeout` in `tests/conftest.py` registriert (`timeout` wirkt weiter nur mit `pytest-timeout`, das nicht installiert ist).
+- `audioread`-Deprecation (`aifc`/`audioop`/`sunau`) per `filterwarnings` in `pyproject.toml` ausgeblendet (Drittpaket, nicht behebbar).
+- Pillow: `mode="F"` in `src/studio/mask_service.py` entfernt (Modus wird aus float32 abgeleitet).
+- Actions auf `checkout@v7` / `setup-python@v7` (Node 24).
+- `pytest-qt` in dev-Extras ergaenzt.
+- Offen: pipx-Versionskonflikte auf dem Windows-Runner (Runner-Umgebung, kein Repo-Problem).
